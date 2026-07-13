@@ -1,0 +1,4 @@
+interface:
+  display_name: "Babysit"
+  short_description: "Supervised background runner with resource caps"
+  default_prompt: "Use $babysit to run this long job in the background under memory and CPU caps."

@@ -1,0 +1,4 @@
+interface:
+  display_name: "Archibate C++ OOP"
+  short_description: "Apply abstract-class-or-data-class C++ design."
+  default_prompt: "Apply the Archibate C++ OOP style while working on this C++ task."

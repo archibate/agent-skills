@@ -1,0 +1,4 @@
+interface:
+  display_name: "C++ HPC Optimization"
+  short_description: "Design and optimize measured C++ hot paths."
+  default_prompt: "Use $cpp-hpc-optimization to profile and redesign this computation-intensive C++ kernel."

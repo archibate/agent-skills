@@ -1,0 +1,9 @@
+/config.toml
+/skills/.system/
+/.agents/
+/.codex/
+/.remember/
+/.ruff_cache/
+**/__pycache__/
+*.py[cod]
+.DS_Store
