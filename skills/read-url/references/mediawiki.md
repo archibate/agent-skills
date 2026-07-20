@@ -63,7 +63,7 @@ curl -sL '<wiki>/api.php?action=query&list=search&srsearch=<q>&srprop=snippet&sr
 
 Covered by this reference — the URL/API patterns are all the same, just vary in which step (1 / 2 / 3) works best:
 
-- **Fandom: `*.fandom.com`** — **Cloudflare-protected**, plain `curl` returns the "Just a moment..." challenge. Use `/scrapling` skill instead. Still MediaWiki under the hood, but this reference's paths don't apply.
+- **Fandom: `*.fandom.com`** — **Cloudflare-protected**, plain `curl` returns the "Just a moment..." challenge. Use `$scrapling` skill instead. Still MediaWiki under the hood, but this reference's paths don't apply.
 - Game wikis on `*.wiki.gg` (Terraria, Minecraft Legacy, many others migrated off Fandom) — step 1
 - Minecraft Wiki: `minecraft.wiki` — step 2 (api.php) needed
 - Pokémon: `bulbapedia.bulbagarden.net` — step 1

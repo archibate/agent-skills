@@ -15,9 +15,9 @@ Work down this fallback ladder in order. Each step is only tried when prior step
 3. **Docs page** → try `curl -sL <url>.md`. Mintlify and other docs platforms serve clean markdown on the `.md` route — if the response is `text/markdown`, you're done; otherwise fall through
 4. **Blog / newsletter / multi-post index** → try RSS first: `curl -sL <url>/feed` (also `/rss`, `/feed.xml`, `/atom.xml`, `/index.xml`). Most static-site generators and CMS platforms expose one; RSS gives you clean `<content:encoded>` or `<summary>` bodies without chrome
 5. **Generic site** (articles, docs, tech blogs, unknown) → `npx defuddle parse <url> --markdown` — see `references/defuddle.md`
-6. **JS-rendered page** (defuddle returns empty / skeleton-only content) → `/agent-browser` skill
-7. **Cloudflare / anti-bot protection** (Turnstile, blocked responses, 403/503) → `/scrapling` skill
-8. **Still blocked and genuinely need this page** → ask the user to open it and paste the content, or offer the `/chrome-cdp` skill (requires explicit user approval first). Otherwise, give up and report the failure.
+6. **JS-rendered page** (defuddle returns empty / skeleton-only content) → `$agent-browser` skill
+7. **Cloudflare / anti-bot protection** (Turnstile, blocked responses, 403/503) → `$scrapling` skill
+8. **Still blocked and genuinely need this page** → ask the user to open it and paste the content, or offer the `$chrome-cdp` skill (requires explicit user approval first). Otherwise, give up and report the failure.
 
 ## Routing table
 
@@ -27,17 +27,17 @@ Step 2 — URLs matching a known domain:
 |---|---|
 | `github.com` / `gist.github.com` | File via `raw.githubusercontent.com`; issue/PR via `gh issue view` / `gh pr view`; search: `api.github.com/search/{code,issues,repositories}?q=` (anonymous) — see `references/github.md` |
 | `x.com` / `twitter.com` / `t.co` | `curl -sL https://api.fxtwitter.com/<user>/status/<id> \| jq` |
-| `bilibili.com` | `/bilibili-api` skill — fetches video title, description, comments |
+| `bilibili.com` | `bilibili-api` — fetches video title, description, comments |
 | `youtube.com` / `youtu.be` | `yt-dlp --dump-json --skip-download` for title/description/metadata; `yt-dlp --write-auto-sub --sub-lang en --skip-download` for transcript |
-| `arxiv.org` / `ssrn.com` | `/jina-ai` skill |
-| `mp.weixin.qq.com` (微信公众号) | `/scrapling` skill — `scrapling extract get <url>` works without a browser |
+| `arxiv.org` / `ssrn.com` | `$jina-ai` skill |
+| `mp.weixin.qq.com` (微信公众号) | `$scrapling` skill — `scrapling extract get <url>` works without a browser |
 | `www.cnblogs.com` (博客园) | Plain defuddle works — server-rendered HTML with the article body inline. For a user's post index: `curl -sL 'https://www.cnblogs.com/<user>/rss'` (Atom feed) |
-| `blog.csdn.net` (CSDN) | `/scrapling` skill — plain `curl` returns a JS-skeleton (content is JS-loaded) and defuddle hits 404 anti-bot. For a summary-only index: `curl -sL 'https://blog.csdn.net/<user>/rss/list'` returns RSS with 摘要 (not full bodies) |
+| `blog.csdn.net` (CSDN) | `$scrapling` skill — plain `curl` returns a JS-skeleton (content is JS-loaded) and defuddle hits 404 anti-bot. For a summary-only index: `curl -sL 'https://blog.csdn.net/<user>/rss/list'` returns RSS with 摘要 (not full bodies) |
 | `zhihu.com` / `zhuanlan.zhihu.com` (知乎) | `scripts/fetch_zhihu.py <url>` — see `references/zhihu.md` |
-| `juejin.cn` (掘金) | `/scrapling` skill — Nuxt SPA; escalate to `/chrome-cdp` if stealthy-fetch returns only shell |
-| `segmentfault.com` (思否) | `/scrapling` skill — custom HTTP 468 anti-bot; escalate to `/chrome-cdp` if stealthy-fetch fails |
-| `weibo.com` (微博) | `/scrapling` skill — JS-rendered status pages; escalate to `/chrome-cdp` if stealthy-fetch returns only chrome |
-| `xiaohongshu.com` (小红书) | `/scrapling` skill — aggressive anti-bot; escalate to `/chrome-cdp` if stealthy-fetch fails |
+| `juejin.cn` (掘金) | `$scrapling` skill — Nuxt SPA; escalate to `/chrome-cdp` if stealthy-fetch returns only shell |
+| `segmentfault.com` (思否) | `$scrapling` skill — custom HTTP 468 anti-bot; escalate to `/chrome-cdp` if stealthy-fetch fails |
+| `weibo.com` (微博) | `$scrapling` skill — JS-rendered status pages; escalate to `/chrome-cdp` if stealthy-fetch returns only chrome |
+| `xiaohongshu.com` (小红书) | `$scrapling` skill — aggressive anti-bot; escalate to `/chrome-cdp` if stealthy-fetch fails |
 | `douban.com` / `movie.douban.com` (豆瓣) | Desktop returns an anti-bot `载入中…` shell. Use the mobile host with an iPhone UA: `curl -sL -A 'Mozilla/5.0 (iPhone; CPU iPhone OS 16_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.0 Mobile/15E148 Safari/604.1' 'https://m.douban.com/movie/subject/<id>/' \| defuddle parse --markdown` — full server-rendered body (评分, 简介, 影评). Fall back to `/scrapling` if blocked |
 | `y.qq.com` (QQ 音乐) | Hard — `stealthy-fetch` returns the homepage shell instead of song data. Use `/chrome-cdp` with the user's logged-in session, or ask them to paste |
 | `music.163.com` (网易云音乐) | Plain defuddle for basic info — `<title>` has song + artist. For lyrics / comments / playlists use the community-maintained `NeteaseCloudMusicApi` (self-hosted Node proxy over the internal API) |
@@ -47,7 +47,7 @@ Step 2 — URLs matching a known domain:
 | `instagram.com` | `instaloader` CLI |
 | `reddit.com` | Hard — `.json` endpoints are blocked since the 2023 API changes, and scrapling's `stealthy-fetch` gets a captcha page. Use the official OAuth API (PRAW / snoowrap) with credentials, or `/chrome-cdp` with the user's logged-in session |
 | `stackoverflow.com` / `*.stackexchange.com` / `superuser.com` / `serverfault.com` / `askubuntu.com` | Stack Exchange API; search: `/2.3/search/advanced?intitle=<q>` or `?q=<q>` — see `references/stackexchange.md` |
-| `*.fandom.com` | `/scrapling` skill — Fandom sits behind Cloudflare, plain `curl` returns the "Just a moment..." challenge regardless of path or User-Agent |
+| `*.fandom.com` | `$scrapling` skill — Fandom sits behind Cloudflare, plain `curl` returns the "Just a moment..." challenge regardless of path or User-Agent |
 | Any other MediaWiki site — Wikipedia, Arch Wiki, cppreference, `*.wiki.gg`, etc. | Wikimedia-run wikis use the REST API + `prop=extracts`; third-party wikis use `?action=raw` or `api.php?action=parse`; search: `api.php?action=query&list=search&srsearch=<q>` (or `action=opensearch`) — see `references/mediawiki.md` |
 | `www.rfc-editor.org` / any RFC | `curl -sL 'https://www.rfc-editor.org/rfc/rfc<N>.txt'` — canonical plaintext, no chrome. `.html` and `.json` also available (the JSON has metadata like obsoleted-by, authors, status) |
 | `peps.python.org` | Individual PEP: `curl -sL 'https://peps.python.org/pep-<N>/'` (clean HTML). All PEPs indexed: `curl -sL 'https://peps.python.org/api/peps.json' \| jq` — number, title, status, authors, created date |
@@ -75,7 +75,7 @@ Step 2 — URLs matching a known domain:
 | `openlibrary.org` | `curl -sL 'https://openlibrary.org/works/OL<id>W.json' \| jq` for works; `/isbn/<isbn>.json` for ISBN lookup; `/authors/OL<id>A.json` for authors. Note: `.description` is sometimes a string, sometimes `{type, value}` — handle both |
 | `gutenberg.org` (Project Gutenberg) | `curl -sL 'https://www.gutenberg.org/cache/epub/<id>/pg<id>.txt'` — full plaintext of out-of-copyright books |
 
-> Rows tagged `search:` expose a dedicated search API for when you have a topic, not a URL. Otherwise run WebSearch or `/jina-ai` skill with a `site:` filter, then fetch the result URL via this ladder.
+> Rows tagged `search:` expose a dedicated search API for when you have a topic, not a URL. Otherwise run WebSearch or `$jina-ai` skill with a `site:` filter, then fetch the result URL via this ladder.
 
 ## Bulk discovery
 
@@ -88,4 +88,4 @@ This skill returns full page text (markdown), parsed locally — no summarizatio
 ## When to bypass the ladder
 
 - Need a **quick AI summary** → built-in WebFetch
-- No specific URL yet, need to **search** → built-in WebSearch or `/jina-ai` skill
+- No specific URL yet, need to **search** → built-in WebSearch or `$jina-ai` skill
