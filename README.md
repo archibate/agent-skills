@@ -20,8 +20,17 @@ or API credentials that are not included here.
 Do not copy `skills/.system`; Codex installs and updates its built-in skills
 itself, and this repository intentionally excludes them.
 
+## Agent guidance
+
+[`AGENTS.md`](AGENTS.md) is a standalone engineering discipline for agents:
+evidence-first investigation, explicit decision-making, first-principles design,
+and honest validation. Copy or adapt it at a repository root when you want
+these cross-cutting behaviors alongside the task-specific skills.
+
 ## Highlights
 
+- [`AGENTS.md`](AGENTS.md) — evidence-first agent behavior and engineering
+  discipline for repository work.
 - `cpp-hpc-optimization` — evidence-driven C++ HPC design, profiling, data
   layout, numerics, SIMD, multicore, and accelerator optimization, with a
   curated Parallel101 teaching corpus.
