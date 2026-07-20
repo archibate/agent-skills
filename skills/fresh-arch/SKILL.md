@@ -5,8 +5,6 @@ metadata:
   argument-hint: "[plan or topic to design architecture on]"
 ---
 
-$ARGUMENTS
-
 Design an architecture for the topic above by reasoning forward from requirements. If a codebase exists, you may Read/Grep it — but only as evidence to evaluate, not as a frame to fit the new design into.
 
 **Mindset**
