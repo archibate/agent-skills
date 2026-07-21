@@ -1,8 +1,6 @@
 ---
 name: fresh-arch
 description: Architecture design reasoned forward from requirements. Use when the user wants a fresh-mind design pass — "design an architecture for", "how would you build", "redesign from scratch" — or when repeated follow-up patches accumulate on the same module. Repeated follow-up patches landing on the same module (~3rd) → stop patching, invoke this skill to re-derive from the full requirement set.
-metadata:
-  argument-hint: "[plan or topic to design architecture on]"
 ---
 
 Design an architecture for the topic above by reasoning forward from requirements. If a codebase exists, you may Read/Grep it — but only as evidence to evaluate, not as a frame to fit the new design into.
