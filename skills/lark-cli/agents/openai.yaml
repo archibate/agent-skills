@@ -1,0 +1,4 @@
+interface:
+  display_name: "Lark / Feishu CLI"
+  short_description: "Work with Lark and Feishu messages and documents."
+  default_prompt: "Use $lark-cli to handle this Lark or Feishu task."

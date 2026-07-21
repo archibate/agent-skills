@@ -34,3 +34,8 @@ Optionally read the references docs mentioned in SKILL.md on demand:
 ```bash
 lark-cli skills read lark-im/references/lark-im-chat-list.md
 ```
+
+## Pitfalls
+
+- If `lark-cli` is not available, fallback to `npx -y @larksuite/cli`.
+- Never run `npx skills add larksuite/cli -g -y`.

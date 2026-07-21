@@ -1,0 +1,4 @@
+interface:
+  display_name: "Agent Browser"
+  short_description: "Automate and inspect pages in a headless browser."
+  default_prompt: "Use $agent-browser to inspect and test this page in a headless browser."

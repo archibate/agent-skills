@@ -1,0 +1,4 @@
+interface:
+  display_name: "Fresh Architecture"
+  short_description: "Design architecture forward from requirements."
+  default_prompt: "Use $fresh-arch to redesign this system from its requirements."

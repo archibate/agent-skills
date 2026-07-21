@@ -1,0 +1,4 @@
+interface:
+  display_name: "Context7"
+  short_description: "Fetch current third-party library documentation."
+  default_prompt: "Use $context7 to fetch current documentation and examples for this library."

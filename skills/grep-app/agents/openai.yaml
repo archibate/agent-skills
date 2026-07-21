@@ -1,0 +1,4 @@
+interface:
+  display_name: "grep.app Code Search"
+  short_description: "Search public GitHub code for real-world usage."
+  default_prompt: "Use $grep-app to find real-world examples of this code or API."

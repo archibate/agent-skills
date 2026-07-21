@@ -1,0 +1,4 @@
+interface:
+  display_name: "Chrome CDP"
+  short_description: "Control the user's visible, logged-in Chrome."
+  default_prompt: "Use $chrome-cdp to inspect this page in my logged-in Chrome."
