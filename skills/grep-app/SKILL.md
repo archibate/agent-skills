@@ -23,23 +23,23 @@ Find real-world code examples by searching for **literal code patterns** (like g
 ### Basic usage
 
 ```bash
-uv run scripts/mcpcall.py searchGitHub query:"useState("
-uv run scripts/mcpcall.py searchGitHub query:"getServerSession" --args '{"language": ["TypeScript", "TSX"]}'
-uv run scripts/mcpcall.py searchGitHub query:"CORS(" matchCase:true --args '{"language": ["Python"]}'
+uv run --script scripts/mcpcall.py searchGitHub query:"useState("
+uv run --script scripts/mcpcall.py searchGitHub query:"getServerSession" --args '{"language": ["TypeScript", "TSX"]}'
+uv run --script scripts/mcpcall.py searchGitHub query:"CORS(" matchCase:true --args '{"language": ["Python"]}'
 ```
 
 ### Filter by repo or path
 
 ```bash
-uv run scripts/mcpcall.py searchGitHub query:"createContext" repo:"facebook/react"
-uv run scripts/mcpcall.py searchGitHub query:"export default" path:"/route.ts" --args '{"language": ["TypeScript"]}'
+uv run --script scripts/mcpcall.py searchGitHub query:"createContext" repo:"facebook/react"
+uv run --script scripts/mcpcall.py searchGitHub query:"export default" path:"/route.ts" --args '{"language": ["TypeScript"]}'
 ```
 
 ### Regex patterns
 
 ```bash
-uv run scripts/mcpcall.py searchGitHub query:"(?s)useEffect\\(\\(\\) => \\{.*removeEventListener" useRegexp:true
-uv run scripts/mcpcall.py searchGitHub query:"(?s)try \\{.*await" useRegexp:true --args '{"language": ["TypeScript"]}'
+uv run --script scripts/mcpcall.py searchGitHub query:"(?s)useEffect\\(\\(\\) => \\{.*removeEventListener" useRegexp:true
+uv run --script scripts/mcpcall.py searchGitHub query:"(?s)try \\{.*await" useRegexp:true --args '{"language": ["TypeScript"]}'
 ```
 
 ## Tips

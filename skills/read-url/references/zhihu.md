@@ -1,10 +1,10 @@
 # Zhihu
 
-Use for any `zhihu.com` / `zhuanlan.zhihu.com` article — the one "Hard" site where plain `curl`, `defuddle`, and `/scrapling` all fail.
+Use for any `zhihu.com` / `zhuanlan.zhihu.com` article — the one "Hard" site where plain `curl`, `defuddle`, and `$scrapling` all fail.
 
 ## Why the generic tools fail
 
-Zhihu serves anonymous `curl` a bot-challenge page, and 403s its JSON API on any non-browser TLS fingerprint. The `d_c0` device cookie that unlocks content is only issued to a real browser that runs the homepage JS challenge — so `curl` (no JS) and `/scrapling`'s stealthy-fetch (fetches the target URL directly, no warmup) both land on the challenge. The API also rejects browser-acquired cookies passed via `requests`/`curl` — it checks the TLS + `x-zse-*` signature fingerprint too.
+Zhihu serves anonymous `curl` a bot-challenge page, and 403s its JSON API on any non-browser TLS fingerprint. The `d_c0` device cookie that unlocks content is only issued to a real browser that runs the homepage JS challenge — so `curl` (no JS) and `$scrapling`'s stealthy-fetch (fetches the target URL directly, no warmup) both land on the challenge. The API also rejects browser-acquired cookies passed via `requests`/`curl` — it checks the TLS + `x-zse-*` signature fingerprint too.
 
 ## Usage
 
@@ -18,4 +18,4 @@ It launches a headless Chromium with anti-detection tweaks, warms up on the zhih
 
 ## Limits
 
-Public articles and answers only. Login-gated content — collections (收藏夹), paywalled pieces, anything showing "登录后查看" — returns empty; escalate to `/chrome-cdp` with the user's logged-in session.
+Public articles and answers only. Login-gated content — collections (收藏夹), paywalled pieces, anything showing "登录后查看" — returns empty; escalate to `$chrome-cdp` with the user's logged-in session.

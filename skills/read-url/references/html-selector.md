@@ -2,7 +2,7 @@
 
 Use when `curl -sL <url>` returns full HTML but defuddle's output is partial or wrong — typically Q&A pages, multi-post threads, or any layout where defuddle's "main article" heuristic drops sibling content.
 
-Not for JS-rendered SPAs (`curl` returns skeletal HTML) — use `/agent-browser` for those.
+Not for JS-rendered SPAs (`curl` returns skeletal HTML) — use `$agent-browser` for those.
 
 ## Find the selector
 
@@ -27,4 +27,4 @@ The script's shebang uses `uv run --script` with PEP 723 inline deps, so `beauti
 
 ## Still not working?
 
-If `curl` returns HTML but selector extraction finds nothing useful, the server may be serving a different page to `curl` than a browser (anti-bot, Cloudflare challenge, user-agent sniffing). Fall back to `/scrapling`, which fetches with a real browser fingerprint.
+If `curl` returns HTML but selector extraction finds nothing useful, the server may be serving a different page to `curl` than a browser (anti-bot, Cloudflare challenge, user-agent sniffing). Fall back to `$scrapling`, which fetches with a real browser fingerprint.
