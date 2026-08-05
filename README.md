@@ -24,7 +24,7 @@
 
 本技能不仅可以用于写出高质量代码，也能审查现有代码，随时调用一位虚拟小彭老师监督你。
 
-> 安装方法：拷贝 [`skills/cpp-oop-style`](skills/cpp-oop-style) 文件夹到 `~/.agents/skills/` (OpenCode, Codex) 或 `~/.claude/skills` (Claude Code) 即可应用。
+> 安装方法：拷贝 [`skills/cpp-oop-style`](skills/cpp-oop-style) 文件夹到 `~/.agents/skills/` (OpenCode, Codex) 或 `~/.claude/skills/` (Claude Code) 即可应用。
 
 ### `cpp-hpc-optimization` 🚤
 
@@ -39,7 +39,7 @@
 - 性能：优化前后分别做性能测试，找到瓶颈部位下手，**不盲目优化**，完成后确保性能提升，变成数据你看得见。
 - 正确性：完善单元测试，覆盖边缘情况，确保优化前后**代码功能不变**，误差在浮点精度内。
 
-> 安装方法：拷贝 [`skills/cpp-hpc-optimization`](skills/cpp-hpc-optimization) 文件夹到 `~/.agents/skills/` (OpenCode, Codex) 或 `~/.claude/skills` (Claude Code) 即可应用。
+> 安装方法：拷贝 [`skills/cpp-hpc-optimization`](skills/cpp-hpc-optimization) 文件夹到 `~/.agents/skills/` (OpenCode, Codex) 或 `~/.claude/skills/` (Claude Code) 即可应用。
 
 ### `AGENTS.md` 🤵‍♂️
 
