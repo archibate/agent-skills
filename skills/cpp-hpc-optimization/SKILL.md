@@ -120,6 +120,9 @@ Load the relevant references before choosing:
 
 - `references/data-layout-and-memory.md` — DOD, AoS/SoA/AoSoA, packing,
   sparse data, locality, tiling, fusion, and Morton order.
+- `references/allocation-and-memory-resources.md` — measured allocation
+  bottlenecks, preallocation, PMR, arenas, pools, TLS scratch, general-purpose
+  allocators, NUMA, and allocator benchmarks.
 - `references/ragged-topology.md` — flattened variable-length arrays, offset
   encodings, sidecar topology, packed sparse sets, polygon-corner topology,
   aligned attributes, and scan-built output.

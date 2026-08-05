@@ -150,6 +150,8 @@ TLS scratch avoids repeated allocation but has costs:
 
 Prefer explicit task/arena scratch when task identity matters. Clear logical
 contents without necessarily discarding reusable capacity, and benchmark both.
+Read `allocation-and-memory-resources.md` before choosing a reusable buffer,
+PMR resource, arena, pool, or process allocator.
 
 `parallel101/course/07/05_malloc/15` and `16` show local scratch allocation
 versus `static thread_local` capacity reuse. The example can retain roughly

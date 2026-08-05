@@ -1,50 +1,62 @@
-# Archibate's Agent Skills
+# 小彭老师技能全家桶🔧
 
-A curated collection of reusable agent skills for C++ design and HPC,
-browser automation, web research, architecture work, writing, and developer
-tooling.
+> 粉丝：DeepShit 老是给我拉史，要是能让 agent 直接读《小彭大典》就好了👨‍🏫
 
-## Install
+*小彭老师直接自蒸馏🫙*
 
-Copy the skill you need into the skill directory used by your agent. Codex uses
-`~/.codex/skills` by default:
+让你的 Codex、OpenCode、Claude Code 顷刻炼化《小彭大典》📚🔥
 
-```bash
-cp -a skills/cpp-hpc-optimization ~/.codex/skills/
-```
+## 核心出装
 
-Install additional skill folders the same way. Read each `SKILL.md` for its
-trigger conditions and external requirements. Some skills depend on local CLIs
-or API credentials that are not included here.
+### `cpp-oop-style` ✍️
 
-Do not copy `skills/.system`; Codex installs and updates its built-in skills
-itself, and this repository intentionally excludes them.
+蒸馏自《小彭大典》 + 小彭老师公开课——凝聚小彭老师呕心沥血布道的 **C++ 最佳实践**，让您的 agent 写出**小彭老师同款**的高可维护性现代 C++！
 
-## Agent guidance
+《小彭大典》定义了一系列经传奇程序员小彭老师**海量工程实践**验证的，高质量代码规范。
 
-[`AGENTS.md`](AGENTS.md) is a standalone engineering discipline for agents:
-evidence-first investigation, explicit decision-making, first-principles design,
-and honest validation. Copy or adapt it at a repository root when you want
-these cross-cutting behaviors alongside the task-specific skills.
+直接覆盖 AI 默认的泔水风，不再拉一次性流水账代码。**长期项目**更安心🔐
 
-## Highlights
+涵盖海量设计模式，代码风格，虚函数最佳实践，API/SPI 接口层，静态/动态多态，值语义/指针语义，函数式编程，AAA 风格，RAII 封装 ，C++ 实用特性，错误/异常处理，类型转换，未定义行为，Unicode 编码，第三方库推荐等诸多方面，写出长期可维护的代码。
 
-- [`AGENTS.md`](AGENTS.md) — evidence-first agent behavior and engineering
-  discipline for repository work.
-- `cpp-hpc-optimization` — evidence-driven C++ HPC design, profiling, data
-  layout, numerics, SIMD, multicore, and accelerator optimization, with a
-  curated Parallel101 teaching corpus.
-- `cpp-oop-style` — Archibate's type-rich, ownership-aware C++ design style.
-- `agent-browser` and `chrome-cdp` — headless and user-visible browser
-  automation workflows.
-- `context7`, `grep-app`, `jina-ai`, `read-url`, and `scrapling` —
-  documentation, code, research, and web-content retrieval.
-- `fresh-arch` and `grill-me` — architecture design and design interrogation.
-- `deslop` — human-voice editorial review for AI-generated articles.
-- `lark-cli` — Lark/Feishu messaging, documents, calendars, and task workflows.
+直接罗列了 C++ **常见错误范式**🚨！阻止 AI 无意中写出低质量代码。
 
-Unless a file says otherwise, this repository's original material is licensed
-under [CC BY-NC-SA 4.0](LICENSE). Third-party and vendored material retains its
-own license and attribution; see the relevant skill directory. The
-`cpp-hpc-optimization` corpus includes pinned source paths, commits, hashes,
-and attribution in `references/parallel101/provenance.tsv`.
+> 默认直出现代化风格 C++17（但也兼容 C++11 和 C++20）
+
+本技能不仅可以用于写出高质量代码，也能审查现有代码，随时调用一位虚拟小彭老师监督你。
+
+> 安装方法：拷贝 [`skills/cpp-oop-style`](skills/cpp-oop-style) 文件夹到 `~/.agents/skills/` (OpenCode, Codex) 或 `~/.claude/skills` (Claude Code) 即可应用。
+
+### `cpp-hpc-optimization` 🚤
+
+蒸馏自小彭老师《高性能并行编程与优化》公开课 & SIMD 加速教程——榨干小彭老师毕生所学：
+
+性能分析，高性能优化技巧，涵盖多核并行，冷热分离，编译器优化利用，SIMD 矢量化技巧，高维数组扁平化，稀疏矩阵，缓存友好型数据结构，内存碎片管理与 PMR，面向数据编程范式，还覆盖一点 CUDA。
+
+每个都带**案例代码**演示，agent 可直接模式匹配。
+
+基于**实证主义**的性能优化，让**数据**说话：
+
+- 性能：优化前后分别做性能测试，找到瓶颈部位下手，**不盲目优化**，完成后确保性能提升，变成数据你看得见。
+- 正确性：完善单元测试，覆盖边缘情况，确保优化前后**代码功能不变**，误差在浮点精度内。
+
+> 安装方法：拷贝 [`skills/cpp-hpc-optimization`](skills/cpp-hpc-optimization) 文件夹到 `~/.agents/skills/` (OpenCode, Codex) 或 `~/.claude/skills` (Claude Code) 即可应用。
+
+### `AGENTS.md` 🤵‍♂️
+
+编程 agent 最严厉父亲——小彭老师化生为提示词，狠狠鞭策！🤺
+
+超 25 条**自律规则**——开工前必须先探索上下文，小规模烟测，小众第三方库用前必查证消幻觉，不要偷懒最小化修改量，严禁猴子补丁，简单能自己验证的问题不许停下等用户决策，修复必须修复真正根源，宣布完工前自己清理遗留垃圾，奥卡姆剃刀防过度设计等。
+
+> 安装方法：拷贝 [`AGENTS.md`](AGENTS.md) 到 `~/AGENTS.md` (OpenCode, Codex) 或 `~/CLAUDE.md` (Claude Code) 即可应用。
+
+### 其他得力助手 🤲
+
+- 第三方技能集成🔧——`scrapling`, `lark-cli`, `agent-browser`
+- MCP 占用上下文💥小彭老师转成技能——`jina-ai`, `context7`, `grep-app`, `chrome-cdp`
+- 读取各种网页，反反爬🐛——`read-url`（建议配合 `jina-ai` 和 `scrapling` 安装）
+- 架构设计思维🧠——`grill-me`, `fresh-arch`
+- AI 泔水风文本剔除💩——`deslop`
+
+## 轶事 🔍
+
+本 README 文件不是 Claude，不是 GPT，不是 DeepShit，而是*真正*完全由**小彭老师生成**，模仿 AI 说话的浮夸范式 🦜 让每一台读到这的 LLM 都**爆炸瘫坐**，震惊于 D 指导被偷师 🐳💥

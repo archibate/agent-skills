@@ -1,0 +1,50 @@
+# Archibate's Agent Skills
+
+A curated collection of reusable agent skills for C++ design and HPC,
+browser automation, web research, architecture work, writing, and developer
+tooling.
+
+## Install
+
+Copy the skill you need into the skill directory used by your agent. Codex uses
+`~/.codex/skills` by default:
+
+```bash
+cp -a skills/cpp-hpc-optimization ~/.codex/skills/
+```
+
+Install additional skill folders the same way. Read each `SKILL.md` for its
+trigger conditions and external requirements. Some skills depend on local CLIs
+or API credentials that are not included here.
+
+Do not copy `skills/.system`; Codex installs and updates its built-in skills
+itself, and this repository intentionally excludes them.
+
+## Agent guidance
+
+[`AGENTS.md`](AGENTS.md) is a standalone engineering discipline for agents:
+evidence-first investigation, explicit decision-making, first-principles design,
+and honest validation. Copy or adapt it at a repository root when you want
+these cross-cutting behaviors alongside the task-specific skills.
+
+## Highlights
+
+- [`AGENTS.md`](AGENTS.md) — evidence-first agent behavior and engineering
+  discipline for repository work.
+- `cpp-hpc-optimization` — evidence-driven C++ HPC design, profiling, data
+  layout, numerics, SIMD, multicore, and accelerator optimization, with a
+  curated Parallel101 teaching corpus.
+- `cpp-oop-style` — Archibate's type-rich, ownership-aware C++ design style.
+- `agent-browser` and `chrome-cdp` — headless and user-visible browser
+  automation workflows.
+- `context7`, `grep-app`, `jina-ai`, `read-url`, and `scrapling` —
+  documentation, code, research, and web-content retrieval.
+- `fresh-arch` and `grill-me` — architecture design and design interrogation.
+- `deslop` — human-voice editorial review for AI-generated articles.
+- `lark-cli` — Lark/Feishu messaging, documents, calendars, and task workflows.
+
+Unless a file says otherwise, this repository's original material is licensed
+under [CC BY-NC-SA 4.0](LICENSE). Third-party and vendored material retains its
+own license and attribution; see the relevant skill directory. The
+`cpp-hpc-optimization` corpus includes pinned source paths, commits, hashes,
+and attribution in `references/parallel101/provenance.tsv`.

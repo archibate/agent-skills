@@ -14,6 +14,7 @@
 - [Recompute cheap values instead of loading them](#recompute-cheap-values-instead-of-loading-them)
 - [Specialize structured sparse operators](#specialize-structured-sparse-operators)
 - [Choose sparse representations](#choose-sparse-representations)
+- [Choose associative lookup representations](#choose-associative-lookup-representations)
 - [Regularize sparse traversal](#regularize-sparse-traversal)
 - [Transform loops for locality](#transform-loops-for-locality)
 - [Flatten pointer trees and follow the stride vector](#flatten-pointer-trees-and-follow-the-stride-vector)
@@ -341,6 +342,40 @@ Model value bytes, index bytes, row/block metadata, occupancy, construction cost
 lookup pattern, and load balance. Compact or reorder sparse work into homogeneous
 batches when it reduces divergence and improves locality. Read
 `ragged-topology.md` for variable-length adjacency, mesh faces, and flat buckets.
+
+## Choose associative lookup representations
+
+Do not treat `std::unordered_map` as universally slow or universally optimal. Its
+average-complexity contract does not predict realized latency, and the standard
+does not prescribe a bucket layout or hash mixing. Some standard-library integer
+hashes are identity-like, but that implementation detail is neither a portable
+performance result nor collision resistance. Inspect the deployed implementation
+and test the production key distribution, especially for untrusted keys.
+
+Choose the representation from the lookup contract and update pattern:
+
+- use a vector or array indexed by `key - base` for a compact integer domain;
+  account for holes, presence state, bounds, and the full key-range footprint;
+- use a sorted vector plus binary search for small, immutable, or build-once maps;
+  use a compile-time container such as `frozen::map` or `frozen::unordered_map`
+  only when the key set and compile-time cost fit that contract;
+- use `std::map` or a cache-denser B-tree such as `absl::btree_map` for ordered
+  traversal and range queries; verify iterator/reference stability because B-tree
+  mutation can relocate elements;
+- use a flat/open-addressed table such as `absl::flat_hash_map`,
+  `ankerl::unordered_dense::map`, or `tsl::robin_map` when dense slot storage and
+  lookup throughput matter more than stable element addresses;
+- use a node-based table such as `std::unordered_map` or `absl::node_hash_map`
+  when its stability or migration contract is required and its allocation,
+  pointer-chasing, and footprint costs are acceptable.
+
+Benchmark candidates with the target compiler, standard library, allocator, and
+hardware. Sweep small, crossover, and production sizes; successful and failed
+lookups; realistic and adversarial key distributions; construction, reserve,
+insertion, erasure, iteration, and steady-state mixes. Measure latency
+distribution, throughput, allocations, and peak and steady memory. Preserve
+ordering, determinism, heterogeneous lookup, invalidation, and exception
+requirements before accepting a faster result.
 
 ## Regularize sparse traversal
 
