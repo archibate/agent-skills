@@ -24,6 +24,19 @@ assert_dir() {
     [ -d "$1" ] || fail "expected directory: $1"
 }
 
+assert_link() {
+    [ -L "$1" ] || fail "expected symbolic link: $1"
+}
+
+assert_not_link() {
+    [ ! -L "$1" ] || fail "expected copied content, found symbolic link: $1"
+}
+
+assert_link_target() {
+    assert_link "$1"
+    [ "$(readlink "$1")" = "$2" ] || fail "expected $1 to link to $2"
+}
+
 assert_contains() {
     awk -v needle="$2" 'index($0, needle) { found = 1 } END { exit !found }' "$1" ||
         fail "expected '$2' in $1"
@@ -53,6 +66,8 @@ assert_file "$CASE_HOME/.claude/skills/cpp-oop-style/SKILL.md"
 assert_file "$CASE_HOME/.claude/skills/cpp-hpc-optimization/SKILL.md"
 assert_file "$CASE_HOME/.codex/AGENTS.md"
 assert_file "$CASE_HOME/.claude/CLAUDE.md"
+assert_link_target "$CASE_HOME/.agents/skills/cpp-oop-style" "$ROOT/skills/cpp-oop-style"
+assert_link_target "$CASE_HOME/.claude/skills/cpp-hpc-optimization" "$ROOT/skills/cpp-hpc-optimization"
 assert_contains "$CASE_HOME/.codex/AGENTS.md" '<!-- archibate/agent-skills:begin -->'
 assert_contains "$CASE_HOME/.codex/AGENTS.md" '<!-- archibate/agent-skills:end -->'
 
@@ -77,9 +92,10 @@ after=$(cksum "$CASE_HOME/.codex/AGENTS.md")
 
 printf '5. modified skill backup\n'
 new_case backup
-run_installer --skills cpp-oop-style --targets codex --yes --skip-deps >/dev/null
+run_installer --skills cpp-oop-style --targets codex --yes --skip-deps --install-mode copy >/dev/null
+assert_not_link "$CASE_HOME/.agents/skills/cpp-oop-style"
 printf '%s\n' 'local user edit' >> "$CASE_HOME/.agents/skills/cpp-oop-style/SKILL.md"
-run_installer --skills cpp-oop-style --targets codex --yes --skip-deps >/dev/null
+run_installer --skills cpp-oop-style --targets codex --yes --skip-deps --install-mode copy >/dev/null
 if awk 'index($0, "local user edit") { found = 1 } END { exit !found }' \
     "$CASE_HOME/.agents/skills/cpp-oop-style/SKILL.md"; then
     fail "updated skill retained a local edit instead of restoring source content"
@@ -145,5 +161,37 @@ HOME="$CASE_HOME" XDG_STATE_HOME="$CASE_STATE" NO_COLOR=1 \
     AGENT_SKILLS_ARCHIVE_URL="file://$archive" \
     bash -s -- --skills cpp-oop-style --targets codex --yes --skip-deps < "$ROOT/install.sh" >/dev/null
 assert_file "$CASE_HOME/.agents/skills/cpp-oop-style/SKILL.md"
+assert_not_link "$CASE_HOME/.agents/skills/cpp-oop-style"
+
+printf '11. archive sources cannot create disposable links\n'
+new_case archive-link
+set +e
+HOME="$CASE_HOME" XDG_STATE_HOME="$CASE_STATE" NO_COLOR=1 \
+    AGENT_SKILLS_ARCHIVE_URL="file://$archive" \
+    bash -s -- --skills cpp-oop-style --targets codex --yes --skip-deps \
+    --install-mode link < "$ROOT/install.sh" >/dev/null 2>&1
+status=$?
+set -e
+[ "$status" -eq 1 ] || fail "archive link mode returned $status instead of 1"
+[ ! -e "$CASE_HOME/.agents/skills/cpp-oop-style" ] || fail "archive link mode installed content"
+
+printf '12. local install.sh reuses the checkout\n'
+new_case local-checkout
+HOME="$CASE_HOME" XDG_STATE_HOME="$CASE_STATE" NO_COLOR=1 \
+    "$ROOT/install.sh" --skills cpp-oop-style --targets codex --yes --skip-deps >/dev/null
+assert_link_target "$CASE_HOME/.agents/skills/cpp-oop-style" "$ROOT/skills/cpp-oop-style"
+
+printf '13. rollback restores a pre-existing checkout link\n'
+new_case link-rollback
+run_installer --skills cpp-oop-style --targets codex --yes --skip-deps >/dev/null
+mkdir -p "$CASE_HOME/.claude"
+printf '%s\n' 'blocking path' > "$CASE_HOME/.claude/skills"
+set +e
+run_installer --skills cpp-oop-style --targets codex,claude --yes --skip-deps \
+    --install-mode copy >/dev/null 2>&1
+status=$?
+set -e
+[ "$status" -eq 1 ] || fail "link rollback run returned $status instead of 1"
+assert_link_target "$CASE_HOME/.agents/skills/cpp-oop-style" "$ROOT/skills/cpp-oop-style"
 
 printf 'All installer tests passed.\n'

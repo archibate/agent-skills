@@ -12,6 +12,11 @@ Use the interactive installer for Codex, OpenCode, or Claude Code:
 ./install.sh
 ```
 
+Running from a complete Git checkout links selected skills back to this repository
+by default, so `git pull` updates them in place. Keep the checkout at a stable path,
+or pass `--install-mode copy` for independent copies. Piped archive installations
+copy automatically because their source directory is temporary.
+
 Codex and OpenCode discover personal skills under `~/.agents/skills`; Claude
 Code uses `~/.claude/skills`. The installer resolves skill dependencies, checks
 external requirements, and merges `AGENTS.md` into each selected agent's global

@@ -7,6 +7,9 @@ BEGIN_MARKER="<!-- archibate/agent-skills:begin -->"
 END_MARKER="<!-- archibate/agent-skills:end -->"
 
 SOURCE_ROOT=""
+SOURCE_KIND="archive"
+INSTALL_MODE="auto"
+EFFECTIVE_INSTALL_MODE="copy"
 PROFILE=""
 TARGET_ARG=""
 SKILL_ARG=""
@@ -41,7 +44,6 @@ RUNTIME_MESSAGES=()
 CHANGE_DESTINATIONS=()
 CHANGE_BACKUPS=()
 CHANGE_ORIGINALS=()
-CHANGE_KINDS=()
 
 MENU_TITLE=""
 MENU_HINT=""
@@ -68,6 +70,7 @@ Options:
   --profile core|all              Initial skill selection
   --targets codex,opencode,claude Target agents
   --skills ID,ID                  Explicit skill/guidance selection
+  --install-mode auto|link|copy   Reuse a Git checkout or copy skill files
   --ref REF                       Git branch, tag, or commit (bootstrap option)
   --skip-deps                     Do not offer runtime dependency installation
   --dry-run                       Show actions without changing files
@@ -80,6 +83,8 @@ Examples:
   curl -fsSL https://raw.githubusercontent.com/archibate/agent-skills/master/install.sh | bash
   curl -fsSL https://raw.githubusercontent.com/archibate/agent-skills/master/install.sh | \
     bash -s -- --profile core --targets codex,opencode --yes
+  git clone --depth 1 https://github.com/archibate/agent-skills.git && \
+    cd agent-skills && ./install.sh
 EOF
 }
 
@@ -175,6 +180,12 @@ parse_args() {
                 shift 2
                 ;;
             --skills=*) SKILL_ARG=${1#--skills=}; shift ;;
+            --install-mode)
+                [ "$#" -ge 2 ] || die "--install-mode requires a value"
+                INSTALL_MODE=$2
+                shift 2
+                ;;
+            --install-mode=*) INSTALL_MODE=${1#--install-mode=}; shift ;;
             --ref)
                 [ "$#" -ge 2 ] || die "--ref requires a value"
                 shift 2
@@ -304,6 +315,34 @@ validate_catalog() {
         basename_value=${skill_dir##*/}
         item_index "$basename_value" >/dev/null || die "skill missing from catalog: $basename_value"
     done
+}
+
+detect_source_kind() {
+    local worktree_root
+    SOURCE_KIND=archive
+    [ -e "$SOURCE_ROOT/.git" ] || return 0
+    command -v git >/dev/null 2>&1 || return 0
+    worktree_root=$(git -C "$SOURCE_ROOT" rev-parse --show-toplevel 2>/dev/null) || return 0
+    worktree_root=$(CDPATH='' cd -- "$worktree_root" && pwd -P) || return 0
+    [ "$worktree_root" = "$SOURCE_ROOT" ] && SOURCE_KIND=checkout
+}
+
+resolve_install_mode() {
+    case "$INSTALL_MODE" in
+        auto)
+            if [ "$SOURCE_KIND" = checkout ]; then
+                EFFECTIVE_INSTALL_MODE=link
+            else
+                EFFECTIVE_INSTALL_MODE=copy
+            fi
+            ;;
+        link)
+            [ "$SOURCE_KIND" = checkout ] || die "--install-mode link requires a complete Git checkout"
+            EFFECTIVE_INSTALL_MODE=link
+            ;;
+        copy) EFFECTIVE_INSTALL_MODE=copy ;;
+        *) die "invalid install mode: $INSTALL_MODE (expected auto, link, or copy)" ;;
+    esac
 }
 
 open_tty() {
@@ -758,6 +797,12 @@ print_preview() {
         [ "${SELECTED[$idx]}" -eq 0 ] || printf '    %s %s\n' '•' "${ITEM_IDS[$idx]}"
         idx=$((idx + 1))
     done
+    printf '  Source: %s (%s)\n' "$SOURCE_ROOT" "$SOURCE_KIND"
+    if [ "$EFFECTIVE_INSTALL_MODE" = link ]; then
+        printf '  Skill files: link to source checkout\n'
+    else
+        printf '  Skill files: copy into agent directories\n'
+    fi
     if [ "${#RUNTIME_IDS[@]}" -gt 0 ]; then
         printf '  Runtime setup:\n'
         idx=0
@@ -792,7 +837,18 @@ record_change() {
     CHANGE_DESTINATIONS[${#CHANGE_DESTINATIONS[@]}]=$1
     CHANGE_BACKUPS[${#CHANGE_BACKUPS[@]}]=$2
     CHANGE_ORIGINALS[${#CHANGE_ORIGINALS[@]}]=$3
-    CHANGE_KINDS[${#CHANGE_KINDS[@]}]=$4
+}
+
+copy_path() {
+    local source=$1
+    local destination=$2
+    if [ -L "$source" ]; then
+        cp -P "$source" "$destination"
+    elif [ -d "$source" ]; then
+        cp -R "$source" "$destination"
+    else
+        cp "$source" "$destination"
+    fi
 }
 
 remove_managed_path() {
@@ -816,59 +872,102 @@ rollback_content() {
         destination=${CHANGE_DESTINATIONS[$idx]}
         backup=${CHANGE_BACKUPS[$idx]}
         original=${CHANGE_ORIGINALS[$idx]}
-        kind=${CHANGE_KINDS[$idx]}
         remove_managed_path "$destination" || true
         if [ "$original" -eq 1 ]; then
-            if [ "$kind" = directory ]; then
-                cp -R "$backup" "$destination" || warn "could not restore $destination"
-            else
-                cp "$backup" "$destination" || warn "could not restore $destination"
-            fi
+            copy_path "$backup" "$destination" || warn "could not restore $destination"
         fi
         idx=$((idx - 1))
     done
 }
 
+install_staged_path() {
+    local stage=$1
+    local destination=$2
+    local parent=${destination%/*}
+    local backup_name backup_path old original
+    [ "$parent" != "$destination" ] || parent=.
+    backup_name=$(printf '%s' "$destination" | tr '/' '_')
+    mkdir -p "$BACKUP_ROOT"
+    backup_path=""
+    original=0
+
+    if [ -e "$destination" ] || [ -L "$destination" ]; then
+        original=1
+        backup_path="$BACKUP_ROOT/$backup_name"
+        copy_path "$destination" "$backup_path" || return 1
+        old="$parent/.agent-skills-old.$$.$backup_name"
+        mv "$destination" "$old" || return 1
+        if mv "$stage" "$destination"; then
+            if [ -d "$old" ] && [ ! -L "$old" ]; then rm -rf -- "$old"; else rm -f -- "$old"; fi
+        else
+            mv "$old" "$destination" || true
+            return 1
+        fi
+    else
+        mv "$stage" "$destination" || return 1
+    fi
+    record_change "$destination" "$backup_path" "$original"
+}
+
 copy_directory() {
-    source=$1
-    destination=$2
-    parent=${destination%/*}
+    local source=$1
+    local destination=$2
+    local parent=${destination%/*}
+    local stage
     [ "$parent" != "$destination" ] || parent=.
     mkdir -p "$parent"
+
+    if [ -d "$destination" ] && [ ! -L "$destination" ] && diff -qr "$source" "$destination" >/dev/null 2>&1; then
+        printf 'skip\t%s\n' "$destination"
+        return 0
+    fi
+
     stage=$(mktemp -d "$parent/.agent-skills-stage.XXXXXX") || return 1
     if ! cp -R "$source"/. "$stage"/; then
         rm -rf -- "$stage"
         return 1
     fi
+    install_staged_path "$stage" "$destination" || { rm -rf -- "$stage"; return 1; }
+    printf 'install\t%s\n' "$destination"
+}
 
-    if [ -d "$destination" ] && diff -qr "$source" "$destination" >/dev/null 2>&1; then
-        rm -rf -- "$stage"
-        printf 'skip\t%s\n' "$destination"
+link_directory() {
+    local source=$1
+    local destination=$2
+    local parent=${destination%/*}
+    local stage_root stage
+    [ "$parent" != "$destination" ] || parent=.
+    mkdir -p "$parent"
+
+    if [ -L "$destination" ] && same_directory "$source" "$destination"; then
+        printf 'skip\t%s (linked to source checkout)\n' "$destination"
         return 0
     fi
 
-    backup_name=$(printf '%s' "$destination" | tr '/' '_')
-    mkdir -p "$BACKUP_ROOT"
-    backup_path=""
-    original=0
-    if [ -e "$destination" ] || [ -L "$destination" ]; then
-        original=1
-        backup_path="$BACKUP_ROOT/$backup_name"
-        cp -R "$destination" "$backup_path" || { rm -rf -- "$stage"; return 1; }
-        old="$parent/.agent-skills-old.$$.$backup_name"
-        mv "$destination" "$old" || { rm -rf -- "$stage"; return 1; }
-        if mv "$stage" "$destination"; then
-            rm -rf -- "$old"
-        else
-            mv "$old" "$destination" || true
-            rm -rf -- "$stage"
-            return 1
-        fi
-    else
-        mv "$stage" "$destination" || { rm -rf -- "$stage"; return 1; }
+    stage_root=$(mktemp -d "$parent/.agent-skills-stage.XXXXXX") || return 1
+    stage="$stage_root/skill"
+    if ! ln -s "$source" "$stage"; then
+        rm -rf -- "$stage_root"
+        return 1
     fi
-    record_change "$destination" "$backup_path" "$original" directory
-    printf 'install\t%s\n' "$destination"
+    if ! install_staged_path "$stage" "$destination"; then
+        rm -rf -- "$stage_root"
+        return 1
+    fi
+    rmdir "$stage_root" || return 1
+    printf 'link\t%s -> %s\n' "$destination" "$source"
+}
+
+materialize_skill() {
+    local source=$1
+    local destination=$2
+    if [ ! -L "$destination" ] && same_directory "$source" "$destination"; then
+        printf 'skip\t%s (source checkout)\n' "$destination"
+    elif [ "$EFFECTIVE_INSTALL_MODE" = link ]; then
+        link_directory "$source" "$destination"
+    else
+        copy_directory "$source" "$destination"
+    fi
 }
 
 build_guidance_file() {
@@ -945,17 +1044,7 @@ install_guidance() {
         return 0
     fi
 
-    backup_name=$(printf '%s' "$destination" | tr '/' '_')
-    mkdir -p "$BACKUP_ROOT"
-    backup_path=""
-    original=0
-    if [ -e "$destination" ] || [ -L "$destination" ]; then
-        original=1
-        backup_path="$BACKUP_ROOT/$backup_name"
-        cp -R "$destination" "$backup_path" || { rm -f -- "$stage"; return 1; }
-    fi
-    mv "$stage" "$destination" || { rm -f -- "$stage"; return 1; }
-    record_change "$destination" "$backup_path" "$original" file
+    install_staged_path "$stage" "$destination" || { rm -f -- "$stage"; return 1; }
     printf 'install\t%s\n' "$destination"
 }
 
@@ -978,19 +1067,11 @@ install_content() {
             source="$SOURCE_ROOT/${ITEM_SOURCES[$idx]}"
             if [ "$shared_skills" -eq 1 ]; then
                 destination="$HOME/.agents/skills/${ITEM_IDS[$idx]}"
-                if same_directory "$source" "$destination"; then
-                    printf 'skip\t%s (source checkout)\n' "$destination"
-                else
-                    copy_directory "$source" "$destination" || return 1
-                fi
+                materialize_skill "$source" "$destination" || return 1
             fi
             if [ "${TARGET_SELECTED[2]}" -eq 1 ]; then
                 destination="$HOME/.claude/skills/${ITEM_IDS[$idx]}"
-                if same_directory "$source" "$destination"; then
-                    printf 'skip\t%s (source checkout)\n' "$destination"
-                else
-                    copy_directory "$source" "$destination" || return 1
-                fi
+                materialize_skill "$source" "$destination" || return 1
             fi
         fi
         idx=$((idx + 1))
@@ -1091,6 +1172,8 @@ main() {
         printf 'catalog valid: %s items\n' "${#ITEM_IDS[@]}"
         return 0
     fi
+    detect_source_kind
+    resolve_install_mode
 
     BACKUP_ROOT="${XDG_STATE_HOME:-$HOME/.local/state}/archibate-agent-skills/backups/$(date '+%Y%m%dT%H%M%S')-$$"
     detect_targets

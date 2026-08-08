@@ -10,6 +10,14 @@
 curl -fsSL https://raw.githubusercontent.com/archibate/agent-skills/master/install.sh | bash
 ```
 
+`raw.githubusercontent.com` 抽风时，走 Git 安装：
+
+```bash
+git clone --depth 1 https://github.com/archibate/agent-skills.git
+cd agent-skills
+./install.sh
+```
+
 ## 核心出装
 
 ### `cpp-oop-style` ✍️
@@ -70,6 +78,8 @@ curl -fsSL https://raw.githubusercontent.com/archibate/agent-skills/master/insta
 可选 Codex、OpenCode、Claude Code，默认勾选两大 C++ 技能和 `AGENTS.md` 三件核心套装；其余得力助手按需选配。
 
 安装器会自动补齐技能依赖，检查 CLI、浏览器、API Key 等运行条件，并在执行任何用户级依赖安装前亮出完整命令。**不碰 `sudo`，不偷存密钥**。已有技能和全局规则会先备份，`AGENTS.md` 只更新安装器管理的区块，不会一把扬了你的私人配置。
+
+从完整 Git 仓库运行时，安装器默认把所选技能链接到当前仓库；以后在仓库中 `git pull`，各 agent 立即吃到更新。请勿移动或删除这个仓库。若想安装独立副本，可传 `--install-mode copy`。`curl | bash` 下载的临时源码则始终默认复制，脚本退出后不会留下断链。
 
 非交互式安装：
 
