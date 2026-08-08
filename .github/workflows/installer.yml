@@ -1,0 +1,40 @@
+name: Installer
+
+on:
+  push:
+    paths:
+      - "install.sh"
+      - "installer/**"
+      - "tests/installer_test.sh"
+      - ".github/workflows/installer.yml"
+  pull_request:
+    paths:
+      - "install.sh"
+      - "installer/**"
+      - "tests/installer_test.sh"
+      - ".github/workflows/installer.yml"
+
+jobs:
+  test:
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check Bash syntax
+        run: |
+          bash -n install.sh
+          bash -n installer/main.sh
+          bash -n tests/installer_test.sh
+      - name: Run installer tests
+        run: tests/installer_test.sh
+
+  shellcheck:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install ShellCheck
+        run: sudo apt-get update && sudo apt-get install --yes shellcheck
+      - name: Run ShellCheck
+        run: shellcheck install.sh installer/main.sh tests/installer_test.sh

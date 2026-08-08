@@ -6,16 +6,22 @@ tooling.
 
 ## Install
 
-Copy the skill you need into the skill directory used by your agent. Codex uses
-`~/.codex/skills` by default:
+Use the interactive installer for Codex, OpenCode, or Claude Code:
 
 ```bash
-cp -a skills/cpp-hpc-optimization ~/.codex/skills/
+./install.sh
 ```
 
-Install additional skill folders the same way. Read each `SKILL.md` for its
-trigger conditions and external requirements. Some skills depend on local CLIs
-or API credentials that are not included here.
+Codex and OpenCode discover personal skills under `~/.agents/skills`; Claude
+Code uses `~/.claude/skills`. The installer resolves skill dependencies, checks
+external requirements, and merges `AGENTS.md` into each selected agent's global
+guidance without replacing unrelated user content.
+
+For a noninteractive core installation:
+
+```bash
+./install.sh --profile core --targets codex,opencode --yes
+```
 
 Do not copy `skills/.system`; Codex installs and updates its built-in skills
 itself, and this repository intentionally excludes them.

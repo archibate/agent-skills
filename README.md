@@ -6,6 +6,10 @@
 
 让你的 Codex、OpenCode、Claude Code 顷刻炼化《小彭大典》📚🔥
 
+```bash
+curl -fsSL https://raw.githubusercontent.com/archibate/agent-skills/master/install.sh | bash
+```
+
 ## 核心出装
 
 ### `cpp-oop-style` ✍️
@@ -24,7 +28,7 @@
 
 本技能不仅可以用于写出高质量代码，也能审查现有代码，随时调用一位虚拟小彭老师监督你。
 
-> 安装方法：拷贝 [`skills/cpp-oop-style`](skills/cpp-oop-style) 文件夹到 `~/.agents/skills/` (OpenCode, Codex) 或 `~/.claude/skills/` (Claude Code) 即可应用。
+> 一键安装器默认勾选。手动安装时，拷贝 [`skills/cpp-oop-style`](skills/cpp-oop-style) 到 `~/.agents/skills/`（Codex、OpenCode）或 `~/.claude/skills/`（Claude Code）。
 
 ### `cpp-hpc-optimization` 🚤
 
@@ -39,7 +43,7 @@
 - 性能：优化前后分别做性能测试，找到瓶颈部位下手，**不盲目优化**，完成后确保性能提升，变成数据你看得见。
 - 正确性：完善单元测试，覆盖边缘情况，确保优化前后**代码功能不变**，误差在浮点精度内。
 
-> 安装方法：拷贝 [`skills/cpp-hpc-optimization`](skills/cpp-hpc-optimization) 文件夹到 `~/.agents/skills/` (OpenCode, Codex) 或 `~/.claude/skills/` (Claude Code) 即可应用。
+> 一键安装器默认勾选，并会自动带上 `cpp-oop-style` 依赖。
 
 ### `AGENTS.md` 🤵‍♂️
 
@@ -47,7 +51,7 @@
 
 超 25 条**自律规则**——开工前必须先探索上下文，小规模烟测，小众第三方库用前必查证消幻觉，不要偷懒最小化修改量，严禁猴子补丁，简单能自己验证的问题不许停下等用户决策，修复必须修复真正根源，宣布完工前自己清理遗留垃圾，奥卡姆剃刀防过度设计等。
 
-> 安装方法：拷贝 [`AGENTS.md`](AGENTS.md) 到 `~/.codex/AGENTS.md` (Codex)、`~/.config/opencode/AGENTS.md` (OpenCode) 或 `~/.claude/CLAUDE.md` (Claude Code) 即可应用。
+> 一键安装器默认勾选，并会安全合并到 Codex、OpenCode 或 Claude Code 对应的全局规则文件。
 
 ### 其他得力助手 🤲
 
@@ -56,6 +60,36 @@
 - 读取各种网页，反反爬🐛——`read-url`（建议配合 `jina-ai` 和 `scrapling` 安装）
 - 架构设计思维🧠——`grill-me`, `fresh-arch`
 - AI 泔水风文本剔除💩——`deslop`
+
+## 一键安装 🧰
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/archibate/agent-skills/master/install.sh | bash
+```
+
+可选 Codex、OpenCode、Claude Code，默认勾选两大 C++ 技能和 `AGENTS.md` 三件核心套装；其余得力助手按需选配。
+
+安装器会自动补齐技能依赖，检查 CLI、浏览器、API Key 等运行条件，并在执行任何用户级依赖安装前亮出完整命令。**不碰 `sudo`，不偷存密钥**。已有技能和全局规则会先备份，`AGENTS.md` 只更新安装器管理的区块，不会一把扬了你的私人配置。
+
+非交互式安装：
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/archibate/agent-skills/master/install.sh |
+  bash -s -- --profile core --targets codex,opencode --yes
+```
+
+### 扩展出装 🧩
+
+所有技能、默认选项、硬依赖、推荐关系和运行时检查都集中在 [`installer/catalog.tsv`](installer/catalog.tsv)。以后新增或移除技能，通常只需改技能目录和一行清单；若引入全新的外部工具，再给 [`installer/main.sh`](installer/main.sh) 增加一个显式处理器，杜绝把任意 shell 命令塞进数据文件里偷偷执行。
+
+提交前验证清单、依赖图和安装流程：
+
+```bash
+installer/main.sh --source-root . --validate
+tests/installer_test.sh
+```
+
+从清单移除技能只会让它不再出现在新安装中，不会静默删除用户机器上已经安装的副本。
 
 ## 轶事 🔍
 
