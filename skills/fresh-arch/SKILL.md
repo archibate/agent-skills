@@ -17,10 +17,13 @@ Catch yourself in any of these and stop — they are migration concerns smuggled
 
 If a current pattern survives, it survives on merit — because it is the right answer when reasoned forward from requirements — not because it is already there.
 
-**Output**
-1. **Problem** — 1-3 lines, what the system must do (not how).
-2. **Components** — 3-7 boxes, each with a one-sentence responsibility. Justify why these and not fewer/more.
-3. **Contracts** — interfaces / message shapes between components.
-4. **Data & state** — what's stored where, consistency model, lifecycle.
-5. **Rejected alternatives** — at least one different shape you considered and why this one wins.
-6. **Critique of the current design** *(if a codebase exists)* — judged against the design above. What the current system gets wrong, what it accidentally gets right, what is load-bearing vs. incidental. Not a migration plan; migration is a separate problem.
+**Checklist**
+
+Think through these points mentally:
+
+- [ ] **Problem** — 1-3 lines, what the system must do (not how).
+- [ ] **Components** — 3-7 boxes, each with a one-sentence responsibility. Justify why these and not fewer/more.
+- [ ] **Contracts** — interfaces / message shapes between components.
+- [ ] **Data & state** — what's stored where, consistency model, lifecycle.
+- [ ] **Rejected alternatives** — at least one different shape you considered and why this one wins.
+- [ ] **Critique of the current design** *(if a codebase exists)* — judged against the design above. What the current system gets wrong, what it accidentally gets right, what is load-bearing vs. incidental. Not a migration plan; migration is a separate problem.
