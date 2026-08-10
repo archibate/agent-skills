@@ -66,6 +66,8 @@ ALL-CAPS or bold formatting raises an instruction's priority. When the instructi
 
 Size balancing: important or information-dense instructions justify a long top-level document; niche rules do not. Do not waste too much of the budget on minor items that are unlikely to be reused. If you cannot cut further, split the prompt; see `references/progressive-disclosure.md`.
 
+**Why:** despite a flagship model may offer 300 instructions, a pushy skill occupying 100 instructions can shrink the budget available to other skills and user context.
+
 ## When to use negative hedge
 
 Reserve a negative hedge for cases in which the negative branch is relevant or would be a common mistake unless stated explicitly. For example:
