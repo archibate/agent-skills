@@ -1,23 +1,23 @@
 # Testing Prompts
 
-Testing LLM prompts in a unit test flavor. The pass rate is only honest while the prompt stays independent of the samples it is scored on.
+Test LLM prompts with a unit-test-style workflow. A pass rate is honest only while the prompt remains independent of the samples on which it is scored.
 
-## 1. NEVER hard-code incidents in prompts
+## 1. NEVER hard-code individual cases into prompts
 
-Do not hard-code an incident shape just to make a test case pass: over-fitting risk is far more dangerous than a single sample failure.
+Do not hard-code the shape of a specific incident just to make one test case pass: the risk of overfitting is far more dangerous than a single sample failure.
 
-Accept the fact that LLM tests can never reach 100% pass rate - it's typically not the responsibility of your prompt skill, but the model capability. Even flagship model can't do everything, not to say weak models. Upgrade model if test cases keep failing instead of over-fitting prompts.
+Accept that LLM tests can never reach a 100% pass rate. Failures are typically a limitation of the model's capabilities rather than the prompt skill: even flagship models cannot do everything, let alone weaker models. If test cases keep failing, upgrade the model instead of overfitting the prompt.
 
-Spare prompt tuning only if it improves many test cases across multiple clusters.
+Tune the prompt only when doing so improves many test cases across multiple clusters.
 
-## 2. Split test cases into eval/test set (no data leaking)
+## 2. Split test cases into evaluation and test sets (no data leakage)
 
-If you decide to tune your prompt to pursuit better pass rate: tune *only for eval-set*, NEVER for test-set. You are allowed to maximizing eval-set pass rate, NEVER test-set pass rate.
+If you decide to tune your prompt to pursue a better pass rate, tune *only on the evaluation set*, NEVER on the test set. You may maximize the evaluation-set pass rate, NEVER the test-set pass rate.
 
-**Why:** Test-set pass rate MUST remain an honest mirror, not for benchmaxxing - that would cause severe *over-fitting* risk. If you deplete both eval/test-set for benchmaxxing, no way to evaluate if the high pass rate is over-fit or genuine prompt skill.
+**Why:** The test set MUST remain held out so that its pass rate stays an honest measure, not a benchmaxxing target—that would create a severe risk of *overfitting*. If you exhaust both the evaluation and test sets through benchmaxxing, there is no way to determine whether a high pass rate reflects overfitting or genuine prompt quality.
 
-A severe pass rate drop from eval-set to test-set is a signal of over-fit -> re-derive your prompt from first-principles to minimal, instead of benchmaxxing prompt tune.
+A severe drop in pass rate from the evaluation set to the test set signals overfitting → re-derive a minimal prompt from first principles instead of benchmaxxing through prompt tuning.
 
-## 3. Avoid sample clustering acrossing eval and test
+## 3. Avoid clustering similar samples across evaluation and test sets
 
-E.g.: "Order a bottle of tea" and "Buy a cup of tea" are clustering samples. This would incur test-set benchmaxxing risk. If you fit the "Order a bottle of tea" sample in eval-set by hard-coding "tea" into prompt, this would make the "Buy a cup of tea" sample in test-set pass, dilutes the honesty of test-set.
+For example, "Order a bottle of tea" and "Buy a cup of tea" are clustered samples. This creates a risk of benchmaxxing the test set. If you fit the evaluation-set sample "Order a bottle of tea" by hard-coding "tea" into the prompt, you may also make the test-set sample "Buy a cup of tea" pass, compromising the integrity of the test set.
