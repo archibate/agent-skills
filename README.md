@@ -67,6 +67,7 @@ cd agent-skills
 - MCP 占用上下文💥——小彭老师转成技能：`jina-ai`, `context7`, `grep-app`, `chrome-cdp`
 - 读取各种网页，反反爬🐛——`read-url`（建议配合 `jina-ai` 和 `scrapling` 安装）
 - 架构设计思维🧠——`grill-me`, `fresh-arch`
+- 面向现代模型的提示词规范🤖——`writing-prompt`
 - AI 泔水风文本剔除💩——`deslop`
 
 ## 一键安装 🧰
