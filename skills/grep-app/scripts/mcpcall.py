@@ -1,7 +1,7 @@
 #!/usr/bin/env -S uv run --script
 # /// script
 # requires-python = ">=3.10"
-# dependencies = ["mcp>=1.25", "anyio", "httpx", "httpx-sse"]
+# dependencies = ["mcp>=2,<3", "anyio"]
 # ///
 """grep.app MCP tool caller.
 
@@ -18,7 +18,7 @@ from functools import partial
 import anyio
 
 from mcp.client.session import ClientSession
-from mcp.client.streamable_http import streamablehttp_client
+from mcp.client.streamable_http import streamable_http_client
 
 SERVER_URL = "https://mcp.grep.app"
 
@@ -46,7 +46,7 @@ def parse_kv_args(args: list[str]) -> dict:
 
 
 async def call_tool(tool_name: str, arguments: dict) -> bool:
-    async with streamablehttp_client(SERVER_URL, timeout=15) as (rs, ws, _):
+    async with streamable_http_client(SERVER_URL) as (rs, ws):
         async with ClientSession(rs, ws) as session:
             await session.initialize()
             result = await session.call_tool(tool_name, arguments)
@@ -54,14 +54,14 @@ async def call_tool(tool_name: str, arguments: dict) -> bool:
                 if hasattr(item, "text"):
                     print(item.text)
                 elif hasattr(item, "data"):
-                    print(f"[binary: {item.mimeType}, {len(item.data)} bytes]")
+                    print(f"[binary: {item.mime_type}, {len(item.data)} bytes]")
                 else:
                     print(item)
-            return result.isError or False
+            return result.is_error or False
 
 
 async def list_tools():
-    async with streamablehttp_client(SERVER_URL, timeout=15) as (rs, ws, _):
+    async with streamable_http_client(SERVER_URL) as (rs, ws):
         async with ClientSession(rs, ws) as session:
             await session.initialize()
             result = await session.list_tools()

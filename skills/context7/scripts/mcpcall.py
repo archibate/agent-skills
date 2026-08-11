@@ -1,7 +1,7 @@
 #!/usr/bin/env -S uv run --script
 # /// script
 # requires-python = ">=3.10"
-# dependencies = ["mcp>=1.25", "anyio", "httpx", "httpx-sse"]
+# dependencies = ["mcp>=2,<3", "anyio", "httpx2"]
 # ///
 """Context7 MCP tool caller.
 
@@ -19,9 +19,10 @@ import sys
 from functools import partial
 
 import anyio
+import httpx2
 
 from mcp.client.session import ClientSession
-from mcp.client.streamable_http import streamablehttp_client
+from mcp.client.streamable_http import streamable_http_client
 
 # === EDIT THESE ===
 SERVER_URL = "https://mcp.context7.com/mcp"
@@ -36,6 +37,14 @@ def get_headers() -> dict[str, str]:
         print(f"  export {ENV_VAR}=<key>", file=sys.stderr)
         sys.exit(1)
     return {"Authorization": f"Bearer {key}"}
+
+
+def create_http_client(headers: dict[str, str]) -> httpx2.AsyncClient:
+    return httpx2.AsyncClient(
+        headers=headers,
+        follow_redirects=True,
+        timeout=httpx2.Timeout(30, read=300),
+    )
 
 
 def parse_kv_args(args: list[str]) -> dict:
@@ -61,28 +70,34 @@ def parse_kv_args(args: list[str]) -> dict:
 
 
 async def call_tool(headers: dict, tool_name: str, arguments: dict) -> bool:
-    async with streamablehttp_client(SERVER_URL, headers=headers, timeout=15) as (rs, ws, _):
-        async with ClientSession(rs, ws) as session:
-            await session.initialize()
-            result = await session.call_tool(tool_name, arguments)
-            for item in result.content:
-                if hasattr(item, "text"):
-                    print(item.text)
-                elif hasattr(item, "data"):
-                    print(f"[binary: {item.mimeType}, {len(item.data)} bytes]")
-                else:
-                    print(item)
-            return result.isError or False
+    async with create_http_client(headers) as http_client:
+        async with streamable_http_client(
+            SERVER_URL, http_client=http_client
+        ) as (rs, ws):
+            async with ClientSession(rs, ws) as session:
+                await session.initialize()
+                result = await session.call_tool(tool_name, arguments)
+                for item in result.content:
+                    if hasattr(item, "text"):
+                        print(item.text)
+                    elif hasattr(item, "data"):
+                        print(f"[binary: {item.mime_type}, {len(item.data)} bytes]")
+                    else:
+                        print(item)
+                return result.is_error or False
 
 
 async def list_tools(headers: dict):
-    async with streamablehttp_client(SERVER_URL, headers=headers, timeout=15) as (rs, ws, _):
-        async with ClientSession(rs, ws) as session:
-            await session.initialize()
-            result = await session.list_tools()
-            for tool in result.tools:
-                desc = (tool.description or "")[:60]
-                print(f"  {tool.name:30s} {desc}")
+    async with create_http_client(headers) as http_client:
+        async with streamable_http_client(
+            SERVER_URL, http_client=http_client
+        ) as (rs, ws):
+            async with ClientSession(rs, ws) as session:
+                await session.initialize()
+                result = await session.list_tools()
+                for tool in result.tools:
+                    desc = (tool.description or "")[:60]
+                    print(f"  {tool.name:30s} {desc}")
 
 
 def main():

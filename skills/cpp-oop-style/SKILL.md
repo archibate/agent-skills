@@ -405,6 +405,9 @@ compiler is your reviewer.
 - **Almost Always Const:** write `auto const value = makeValue();` unless the
   binding must later be reassigned or moved from. Mutation should be deliberate
   and visible at the declaration.
+- **Declare every pass-by-value parameter `const`:** spell it `T const`,
+  `std::span<T> const`, or `T const *const`. Top-level `const` freezes the local
+  parameter binding; element or pointee constness remains a separate choice.
 - **Prefer new `const` variables over of reuse:** declare new local variables
   for logically different variable instead of re-assigning existing ones. Only
   reuse when a loop or iteration involves iterative update of a same variable.
