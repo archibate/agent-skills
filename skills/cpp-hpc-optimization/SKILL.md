@@ -103,7 +103,25 @@ Classify the current regime as memory-bandwidth, cache-capacity/latency,
 compute/issue, dependency-latency, synchronization, task-granularity, launch, or
 transfer bound. A kernel can move between regimes after each optimization.
 
-### 5. Apply transformations in economic order
+### 5. Evaluate change scope and ROI
+
+Record the currently authorized edit boundary, but do not mistake it for the
+root-cause boundary. When evidence places the limiting work upstream or in data
+representation, ownership, or construction, compare:
+
+- the best optimization inside the current boundary;
+- the smallest upstream, layout, index, or API change that removes the cause;
+- the practical blank-slate design, to expose the ceiling of both candidates.
+
+For each candidate, estimate end-to-end speedup, complexity and crossover,
+memory, implementation and migration work, write amplification, invariant and
+test surface, and ongoing maintenance. If wider scope has credible net value,
+present the evidence and obtain user approval before expanding it. Keep the
+experiment reversible, measure the representative full workflow, and retain the
+wider change only when its observed performance and complexity benefits repay
+its lifecycle cost; otherwise revert it.
+
+### 6. Apply transformations in economic order
 
 Prefer the first measured transformation that attacks the current limit:
 
@@ -137,7 +155,7 @@ Load the relevant references before choosing:
 - `references/hotpath-polymorphism.md` — hot/cold boundaries, abstraction cost,
   and data-oriented polymorphism.
 
-### 6. Validate and integrate
+### 7. Validate and integrate
 
 - Compare every output with the reference under the declared error metric.
 - Run sanitizers and boundary tests before trusting benchmark results.

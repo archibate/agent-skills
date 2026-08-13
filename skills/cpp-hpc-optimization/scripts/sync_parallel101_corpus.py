@@ -153,6 +153,16 @@ SELECTIONS = [
     ),
     *select(
         "course",
+        [
+            "18/00.cpp",
+            "18/01.cpp",
+            "18/benchmark.hpp",
+        ],
+        "case-study",
+        "Power-of-two row-stride cache conflicts and controlled padding experiment",
+    ),
+    *select(
+        "course",
         ["07/10_rbgs/01/main.cpp"],
         "reference",
         "Matrix-free red-black Gauss-Seidel stencil and phase dependencies",

@@ -99,6 +99,11 @@ or devices.
 - **Progression:** `07/02_cache/01` sweeps working set, `02` sweeps stride, and
   `03`/`04` compare layouts while changing which fields are consumed. This is
   the strongest local proof that layout follows access pattern.
+- **Case study:** `18/00.cpp` reveals a sharp slowdown near a 1024-integer row
+  stride, but changes logical work with the stride. `18/01.cpp` is the controlled
+  experiment: it fixes a 128x1024 matrix and varies only row padding. Use the
+  scalar oracle, distributional timing, assembly, and PMU counters together to
+  distinguish cache-set conflicts from SIMD or DRAM bandwidth.
 - **Counterintuitive progression:** `07/03_prefetch/01` through `07` culminates
   in a 512 MiB write stream far beyond the noted 12 MiB L3. Ordinary cached
   overwrite can pay an RFO read plus dirty writeback, while full-line streaming

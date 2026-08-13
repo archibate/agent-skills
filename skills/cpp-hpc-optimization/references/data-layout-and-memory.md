@@ -3,6 +3,7 @@
 ## Contents
 
 - [Design around transformations](#design-around-transformations)
+- [Trace repeated queries to their producer](#trace-repeated-queries-to-their-producer)
 - [Choose AoS, SoA, or AoSoA](#choose-aos-soa-or-aosoa)
 - [Vectorize across records, not components](#vectorize-across-records-not-components)
 - [Encapsulate SoA column invariants](#encapsulate-soa-column-invariants)
@@ -10,6 +11,8 @@
 - [Split hot and cold data](#split-hot-and-cold-data)
 - [Choose the minimum sufficient representation](#choose-the-minimum-sufficient-representation)
 - [Pack and align deliberately](#pack-and-align-deliberately)
+- [Break cache-set resonance](#break-cache-set-resonance)
+- [Prepack reused data](#prepack-reused-data)
 - [Reduce footprint](#reduce-footprint)
 - [Recompute cheap values instead of loading them](#recompute-cheap-values-instead-of-loading-them)
 - [Specialize structured sparse operators](#specialize-structured-sparse-operators)
@@ -38,6 +41,28 @@ Data-oriented design begins with the operations performed over many elements:
 Draw the dataflow before choosing types. Optimize the bytes and dependency graph
 needed by the dominant transformation, while keeping conversion at cold
 boundaries where possible.
+
+## Trace repeated queries to their producer
+
+When a hot read repeatedly derives the same summary, trace data construction and
+every mutation path before optimizing only the leaf scan. Compare three levels:
+
+1. keep fixed storage and improve traversal, batching, or SIMD;
+2. reorder or tile owned storage around the dominant query;
+3. maintain a derived summary or index during construction and mutation when
+   query savings repay build cost, write amplification, memory, and complexity.
+
+For `present[j] = any_i(matrix[i, j])`, candidates include a layout that makes
+the measured traversal contiguous, a per-`j` nonzero count for presence, or a
+density-appropriate bitset or position set when callers also need locations. A
+cached Boolean alone cannot handle clearing the last set entry without more
+state or a rescan.
+
+Give one value/resource owner authority over both matrix and index. Expose
+read-only views plus controlled mutation or a batch build/finalize operation
+that updates, invalidates, or rebuilds derived state as one invariant. Validate
+every write path and benchmark the full read/write workload, including index
+construction and maintenance.
 
 ## Choose AoS, SoA, or AoSoA
 
@@ -237,6 +262,52 @@ destructive-interference size when available or a measured/configured value.
 
 Never parse packed external bytes by casting them to a C++ structure. Alignment,
 object lifetime, aliasing, padding, and endianness still apply.
+
+## Break cache-set resonance
+
+Nominal cache capacity is insufficient evidence of locality. A power-of-two
+leading dimension can map too many simultaneously useful lines to too few sets
+and exceed associativity even when the active lines would fit by total bytes.
+
+The bundled `parallel101/course/18/00.cpp` is a discovery sweep: column-major
+traversal slows sharply near a 1024-`int` row stride, but the sweep also changes
+logical matrix size. `18/01.cpp` isolates the variable by fixing a 128x1024
+matrix and varying only padding. On an Intel Core i7-9750H, compiled with GCC
+`-O3 -march=native`, the 4096-byte stride took about three times as long as a
+4160-byte stride. Generated assembly for the measured sum remained scalar.
+Equal-work PMU runs reported about 16 times as many L1 load misses and 21 times
+as many L2 load misses at 4096 bytes, while almost every L2 miss hit L3. The
+reported useful GiB/s therefore measured cacheline amplification, not DRAM
+bandwidth.
+
+On that CPU, a 64-byte line and 64-set, 8-way L1D make the mechanism explicit:
+4096 bytes is 64 lines, so every row begins in the same L1 set and 128 live row
+lines exceed its eight ways. Padding to 4160 bytes makes the step 65 lines, so
+successive rows rotate across sets. Treat those numbers as target evidence, not
+portable constants. L2 and LLC selection involves physical-address bits, and
+Intel's sliced LLC uses [complex addressing](https://www.eurecom.eu/en/publication/4671),
+so confirm deeper-cache behavior with counters instead of extrapolating the L1
+formula.
+
+Sweep leading dimension and base alignment when a regular stride approaches a
+power-of-two cache geometry. Prefer loop interchange or blocking when adjacent
+columns can consume each fetched line; otherwise test small leading-dimension
+padding, skewing, or a reused prepack. This is a recurring HPC problem in
+multidimensional arrays: research covers systematic
+[array padding](https://repository.lsu.edu/eecs_pubs/1567/) and a measured
+[3D MRI reconstruction](https://pmc.ncbi.nlm.nih.gov/articles/PMC3172979/)
+where padding removed cache conflicts. SIMD alone cannot recover lines evicted
+before their neighboring elements are consumed.
+
+## Prepack reused data
+
+Consider a one-time or panel-wise prepack when a hot kernel repeatedly consumes
+dense data in an order that would require strided loads, gathers, shuffles, or
+poor cache reuse. A kernel-friendly contiguous or tiled copy can improve SIMD
+loads and cache residency when reuse amortizes its read/write traffic, workspace,
+and setup. Include packing in end-to-end benchmarks, measure the crossover, and
+retain a direct path for shapes or reuse counts that cannot repay it. Packing
+changes realized data movement and compute throughput, not arithmetic complexity.
 
 ## Reduce footprint
 
