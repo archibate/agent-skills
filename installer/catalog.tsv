@@ -4,6 +4,7 @@ cpp-oop-style	skill	skills/cpp-oop-style	core	yes	-	cpp-hpc-optimization	-	C++ O
 cpp-hpc-optimization	skill	skills/cpp-hpc-optimization	core	yes	cpp-oop-style	-	-	C++ HPC optimization
 agent-browser	skill	skills/agent-browser	browser	no	-	-	agent-browser-cli,agent-browser-runtime	Headless browser automation
 chrome-cdp	skill	skills/chrome-cdp	browser	no	-	-	node22,chrome-browser,chrome-debug	Visible Chrome automation
+visual-qa	skill	skills/visual-qa	browser	no	-	agent-browser	-	Visual quality assurance
 context7	skill	skills/context7	web	no	-	-	uv,context7-key	Current library documentation
 grep-app	skill	skills/grep-app	web	no	-	-	uv	Public GitHub code search
 jina-ai	skill	skills/jina-ai	web	no	-	read-url	uv,jina-cli,jina-key	Jina search and extraction
