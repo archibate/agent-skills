@@ -62,14 +62,18 @@ new_case core
 run_installer --profile core --targets codex,claude --yes --skip-deps >/dev/null
 assert_file "$CASE_HOME/.agents/skills/cpp-oop-style/SKILL.md"
 assert_file "$CASE_HOME/.agents/skills/cpp-hpc-optimization/SKILL.md"
+assert_file "$CASE_HOME/.agents/skills/artifact-restraint/SKILL.md"
 assert_file "$CASE_HOME/.claude/skills/cpp-oop-style/SKILL.md"
 assert_file "$CASE_HOME/.claude/skills/cpp-hpc-optimization/SKILL.md"
+assert_file "$CASE_HOME/.claude/skills/artifact-restraint/SKILL.md"
 assert_file "$CASE_HOME/.codex/AGENTS.md"
 assert_file "$CASE_HOME/.claude/CLAUDE.md"
 assert_link_target "$CASE_HOME/.agents/skills/cpp-oop-style" "$ROOT/skills/cpp-oop-style"
 assert_link_target "$CASE_HOME/.claude/skills/cpp-hpc-optimization" "$ROOT/skills/cpp-hpc-optimization"
+assert_link_target "$CASE_HOME/.agents/skills/artifact-restraint" "$ROOT/skills/artifact-restraint"
 assert_contains "$CASE_HOME/.codex/AGENTS.md" '<!-- archibate/agent-skills:begin -->'
 assert_contains "$CASE_HOME/.codex/AGENTS.md" '<!-- archibate/agent-skills:end -->'
+assert_contains "$CASE_HOME/.codex/AGENTS.md" '$artifact-restraint'
 
 printf '3. hard dependency closure\n'
 new_case closure
@@ -193,5 +197,19 @@ status=$?
 set -e
 [ "$status" -eq 1 ] || fail "link rollback run returned $status instead of 1"
 assert_link_target "$CASE_HOME/.agents/skills/cpp-oop-style" "$ROOT/skills/cpp-oop-style"
+
+printf '14. target-specific skills install only for compatible agents\n'
+new_case target-compatibility
+run_installer --skills opus-advisor --targets codex,claude --yes --skip-deps >/dev/null
+assert_file "$CASE_HOME/.agents/skills/opus-advisor/SKILL.md"
+[ ! -e "$CASE_HOME/.claude/skills/opus-advisor" ] || fail 'Codex-only skill was installed for Claude'
+
+new_case unsupported-target
+set +e
+run_installer --skills opus-advisor --targets claude --yes --skip-deps >/dev/null 2>&1
+status=$?
+set -e
+[ "$status" -eq 1 ] || fail "unsupported target returned $status instead of 1"
+[ ! -e "$CASE_HOME/.claude/skills/opus-advisor" ] || fail 'unsupported target installed opus-advisor'
 
 printf 'All installer tests passed.\n'

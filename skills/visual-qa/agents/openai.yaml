@@ -1,4 +1,4 @@
 interface:
   display_name: "Visual QA"
-  short_description: "Inspect rendered geometry, typography, and balance."
-  default_prompt: "Use $visual-qa to render and inspect this visual artifact, fix visible defects, and verify the final output."
+  short_description: "Inspect rendered visuals for correctness and polish."
+  default_prompt: "Use $visual-qa to render and inspect this visual artifact, verify its content and geometry, fix visible defects, and check the final output."

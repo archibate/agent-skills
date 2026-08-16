@@ -1,0 +1,4 @@
+interface:
+  display_name: "Artifact Restraint"
+  short_description: "Keep artifacts sparse, grounded, and purpose-bound"
+  default_prompt: "Use $artifact-restraint to create the smallest artifact that fulfills the stated purpose."

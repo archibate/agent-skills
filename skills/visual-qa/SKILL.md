@@ -1,6 +1,6 @@
 ---
 name: visual-qa
-description: Render-first visual quality assurance for frontends, slides, diagrams, SVG/canvas, PDFs, and other visual artifacts. Use whenever Codex creates or changes a visual interface or is asked to review alignment, spacing, typography, connectors, clipping, responsive layout, font fallback, export fidelity, or visual polish. Inspect the actual rendered artifact, measure suspicious geometry, fix visible defects, and re-render before completion.
+description: Render-first visual quality assurance for frontends, slides, diagrams, SVG/canvas, PDFs, generative-AI images, and other visual artifacts. Use after creating or changing a visual artifact, including with image generation, or when asked to review alignment, spacing, typography, connectors, clipping, factual correctness, responsive layout, font fallback, export fidelity, or visual polish. Inspect the actual rendered artifact, verify generated content against its source data and constraints, measure suspicious geometry, fix visible defects, and render again before completion.
 ---
 
 # Visual QA
@@ -31,6 +31,8 @@ Use visual inspection and measurements together:
 
 Treat automated warnings as leads. Shadows, transforms, and pseudo-elements can create harmless overflow reports, while a page with no reported overflow can still look wrong.
 
+For generative-AI images, compare the visible result with the prompt and source data. Check exact text, numbers and arithmetic, object counts, ordering, labels, color semantics, spatial relationships, omissions, and invented details. For engineering diagrams, validate structure and facts independently of visual plausibility. Make a targeted edit or regenerate, then inspect the new result before handoff.
+
 ## Repair hierarchy
 
 Prefer solutions in this order:
@@ -39,7 +41,7 @@ Prefer solutions in this order:
 2. Derive underlines, badges, boxes, and simple decoration from their owning element with borders, backgrounds, or pseudo-elements.
 3. Use SVG for genuine vector geometry, charts, and connectors. Derive coordinates from data, anchors, or rendered bounding boxes; use a graph or connector library when routing is non-trivial.
 4. Use canvas for high-volume drawing when retained DOM/SVG structure is unsuitable.
-5. Use `$imagegen` for raster or illustrative assets. Keep critical text, labels, boxes, and connectors deterministic and code-native; text-rich structural diagrams are not a routine image-generation fallback.
+5. Use `$imagegen` for raster and illustrative assets, and consider it for engineering diagrams when a raster deliverable is acceptable. An image model's native visual capability can produce strong composition, alignment, and diagram layout, sometimes better than LLM-authored SVG or TypeScript. Treat the result as visually synthesized rather than deterministically correct: specify exact data, labels, and relationships, then sanity-check every visible fact. Prefer code-native geometry when the deliverable requires exact editability, machine readability, reproducibility, accessibility, or automated data binding.
 
 Hard-coded coordinates are legitimate inside stable plots and deliberate vector artwork. They become a defect risk when they duplicate layout facts owned elsewhere. Render and inspect every coordinate-based primitive at its target sizes, and replace fragile coordinates when the shape does not survive that test.
 

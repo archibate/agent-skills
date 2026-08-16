@@ -31,6 +31,7 @@ ITEM_DEFAULTS=()
 ITEM_REQUIRES=()
 ITEM_RECOMMENDS=()
 ITEM_RUNTIMES=()
+ITEM_TARGETS=()
 ITEM_LABELS=()
 SELECTED=()
 TARGET_IDS=("codex" "opencode" "claude")
@@ -149,7 +150,7 @@ target_index() {
 
 runtime_known() {
     case "$1" in
-        curl|uv|node-npx|node22|chrome-browser|chrome-debug|context7-key|jina-cli|jina-key|agent-browser-cli|agent-browser-runtime|lark-auth|scrapling-cli|scrapling-runtime) return 0 ;;
+        curl|uv|node-npx|node22|chrome-browser|chrome-debug|context7-key|jina-cli|jina-key|agent-browser-cli|agent-browser-runtime|lark-auth|scrapling-cli|scrapling-runtime|claude-cli|jq) return 0 ;;
         *) return 1 ;;
     esac
 }
@@ -220,7 +221,7 @@ load_catalog() {
     [ -f "$catalog" ] || die "missing catalog: $catalog"
 
     tab=$(printf '\t')
-    while IFS="$tab" read -r id kind source group default requires recommends runtimes label extra; do
+    while IFS="$tab" read -r id kind source group default requires recommends runtimes targets label extra; do
         case "$id" in
             ""|'#'*) continue ;;
         esac
@@ -234,6 +235,7 @@ load_catalog() {
         ITEM_REQUIRES[${#ITEM_REQUIRES[@]}]=$requires
         ITEM_RECOMMENDS[${#ITEM_RECOMMENDS[@]}]=$recommends
         ITEM_RUNTIMES[${#ITEM_RUNTIMES[@]}]=$runtimes
+        ITEM_TARGETS[${#ITEM_TARGETS[@]}]=$targets
         ITEM_LABELS[${#ITEM_LABELS[@]}]=$label
         SELECTED[${#SELECTED[@]}]=0
     done < "$catalog"
@@ -250,6 +252,37 @@ validate_id_list() {
     for value in "${parts[@]}"; do
         item_index "$value" >/dev/null || die "$owner has unknown $relation: $value"
     done
+}
+
+validate_target_list() {
+    local owner=$1
+    local values=$2
+    local value
+    local parts=()
+    [ "$values" != "-" ] || return 0
+    IFS=, read -r -a parts <<< "$values"
+    for value in "${parts[@]}"; do
+        target_index "$value" >/dev/null || die "$owner has unknown target: $value"
+    done
+}
+
+item_supports_target() {
+    local idx=$1
+    local target=$2
+    local supported=${ITEM_TARGETS[$idx]}
+    [ "$supported" = "-" ] || contains_csv "$target" "$supported"
+}
+
+item_has_selected_target() {
+    local idx=$1
+    local target_idx=0
+    while [ "$target_idx" -lt "${#TARGET_IDS[@]}" ]; do
+        if [ "${TARGET_SELECTED[$target_idx]}" -eq 1 ] && item_supports_target "$idx" "${TARGET_IDS[$target_idx]}"; then
+            return 0
+        fi
+        target_idx=$((target_idx + 1))
+    done
+    return 1
 }
 
 visit_required() {
@@ -293,12 +326,30 @@ validate_catalog() {
         fi
         validate_id_list "$id" "dependency" "${ITEM_REQUIRES[$idx]}"
         validate_id_list "$id" "recommendation" "${ITEM_RECOMMENDS[$idx]}"
+        validate_target_list "$id" "${ITEM_TARGETS[$idx]}"
         runtimes=${ITEM_RUNTIMES[$idx]}
         if [ "$runtimes" != "-" ]; then
             runtime_parts=()
             IFS=, read -r -a runtime_parts <<< "$runtimes"
             for runtime in "${runtime_parts[@]}"; do
                 runtime_known "$runtime" || die "$id has unknown runtime check: $runtime"
+            done
+        fi
+        idx=$((idx + 1))
+    done
+
+    idx=0
+    while [ "$idx" -lt "${#ITEM_IDS[@]}" ]; do
+        if [ "${ITEM_REQUIRES[$idx]}" != "-" ]; then
+            required_parts=()
+            IFS=, read -r -a required_parts <<< "${ITEM_REQUIRES[$idx]}"
+            for dep in "${required_parts[@]}"; do
+                dep_idx=$(item_index "$dep")
+                for target in "${TARGET_IDS[@]}"; do
+                    if item_supports_target "$idx" "$target" && ! item_supports_target "$dep_idx" "$target"; then
+                        die "${ITEM_IDS[$idx]} requires $dep but $dep does not support target $target"
+                    fi
+                done
             done
         fi
         idx=$((idx + 1))
@@ -487,20 +538,43 @@ resolve_required() {
     done
 }
 
+prune_incompatible_selection() {
+    idx=0
+    while [ "$idx" -lt "${#ITEM_IDS[@]}" ]; do
+        if [ "${SELECTED[$idx]}" -eq 1 ] && ! item_has_selected_target "$idx"; then
+            if [ -n "$SKILL_ARG" ] && contains_csv "${ITEM_IDS[$idx]}" "$SKILL_ARG"; then
+                die "${ITEM_IDS[$idx]} does not support the selected target agents"
+            fi
+            SELECTED[idx]=0
+        fi
+        idx=$((idx + 1))
+    done
+}
+
 select_items_interactively() {
     MENU_TITLE="Choose your loadout"
     MENU_HINT="Core items are preselected · hard dependencies are restored automatically"
     MENU_ALLOW_EMPTY=0
     MENU_LABELS=()
     MENU_SELECTED=()
+    menu_item_indexes=()
     idx=0
     while [ "$idx" -lt "${#ITEM_IDS[@]}" ]; do
-        MENU_LABELS[${#MENU_LABELS[@]}]="${ITEM_LABELS[$idx]}  ${DIM}${ITEM_IDS[$idx]}${RESET}"
-        MENU_SELECTED[${#MENU_SELECTED[@]}]=${SELECTED[$idx]}
+        if item_has_selected_target "$idx"; then
+            menu_item_indexes[${#menu_item_indexes[@]}]=$idx
+            MENU_LABELS[${#MENU_LABELS[@]}]="${ITEM_LABELS[$idx]}  ${DIM}${ITEM_IDS[$idx]}${RESET}"
+            MENU_SELECTED[${#MENU_SELECTED[@]}]=${SELECTED[$idx]}
+        else
+            SELECTED[idx]=0
+        fi
         idx=$((idx + 1))
     done
     if ! menu_run; then die "installation cancelled"; fi
-    SELECTED=("${MENU_SELECTED[@]}")
+    menu_idx=0
+    while [ "$menu_idx" -lt "${#menu_item_indexes[@]}" ]; do
+        SELECTED[${menu_item_indexes[$menu_idx]}]=${MENU_SELECTED[$menu_idx]}
+        menu_idx=$((menu_idx + 1))
+    done
     resolve_required
 }
 
@@ -513,7 +587,8 @@ select_recommendations_interactively() {
             IFS=, read -r -a recommendation_parts <<< "${ITEM_RECOMMENDS[$idx]}"
             for rec in "${recommendation_parts[@]}"; do
                 rec_idx=$(item_index "$rec") || continue
-                if [ "${SELECTED[$rec_idx]}" -eq 0 ] && ! contains_csv "$rec" "$(IFS=,; printf '%s' "${REC_IDS[*]:-}")"; then
+                if item_has_selected_target "$rec_idx" && [ "${SELECTED[$rec_idx]}" -eq 0 ] &&
+                    ! contains_csv "$rec" "$(IFS=,; printf '%s' "${REC_IDS[*]:-}")"; then
                     REC_IDS[${#REC_IDS[@]}]=$rec
                 fi
             done
@@ -656,6 +731,14 @@ runtime_probe() {
             RUNTIME_PROBE_INSTALLABLE=1
             RUNTIME_PROBE_HEAVY=1
             RUNTIME_PROBE_MESSAGE="Download Scrapling browser dependencies"
+            ;;
+        claude-cli)
+            command -v claude >/dev/null 2>&1 && return 0
+            RUNTIME_PROBE_MESSAGE="Claude Code is required for the Opus advisor"
+            ;;
+        jq)
+            command -v jq >/dev/null 2>&1 && return 0
+            RUNTIME_PROBE_MESSAGE="jq is required to build the Opus sandbox settings"
             ;;
     esac
     return 1
@@ -1057,19 +1140,18 @@ guidance_destination() {
 }
 
 install_content() {
-    shared_skills=0
-    [ "${TARGET_SELECTED[0]}" -eq 1 ] && shared_skills=1
-    [ "${TARGET_SELECTED[1]}" -eq 1 ] && shared_skills=1
-
     idx=0
     while [ "$idx" -lt "${#ITEM_IDS[@]}" ]; do
         if [ "${SELECTED[$idx]}" -eq 1 ] && [ "${ITEM_KINDS[$idx]}" = skill ]; then
             source="$SOURCE_ROOT/${ITEM_SOURCES[$idx]}"
+            shared_skills=0
+            if [ "${TARGET_SELECTED[0]}" -eq 1 ] && item_supports_target "$idx" codex; then shared_skills=1; fi
+            if [ "${TARGET_SELECTED[1]}" -eq 1 ] && item_supports_target "$idx" opencode; then shared_skills=1; fi
             if [ "$shared_skills" -eq 1 ]; then
                 destination="$HOME/.agents/skills/${ITEM_IDS[$idx]}"
                 materialize_skill "$source" "$destination" || return 1
             fi
-            if [ "${TARGET_SELECTED[2]}" -eq 1 ]; then
+            if [ "${TARGET_SELECTED[2]}" -eq 1 ] && item_supports_target "$idx" claude; then
                 destination="$HOME/.claude/skills/${ITEM_IDS[$idx]}"
                 materialize_skill "$source" "$destination" || return 1
             fi
@@ -1082,7 +1164,8 @@ install_content() {
         source="$SOURCE_ROOT/${ITEM_SOURCES[$rules_idx]}"
         target_idx=0
         while [ "$target_idx" -lt "${#TARGET_IDS[@]}" ]; do
-            if [ "${TARGET_SELECTED[$target_idx]}" -eq 1 ]; then
+            if [ "${TARGET_SELECTED[$target_idx]}" -eq 1 ] &&
+                item_supports_target "$rules_idx" "${TARGET_IDS[$target_idx]}"; then
                 destination=$(guidance_destination "${TARGET_IDS[$target_idx]}")
                 install_guidance "$source" "$destination" || return 1
             fi
@@ -1183,11 +1266,13 @@ main() {
     if [ "$ASSUME_YES" -eq 0 ]; then
         open_tty || die "interactive mode requires /dev/tty; pass --yes with --targets and a profile or skill list"
         [ -n "$TARGET_ARG" ] || select_targets_interactively
+        prune_incompatible_selection
         [ -n "$SKILL_ARG" ] || select_items_interactively
         select_recommendations_interactively
     fi
 
     [ "$(selected_target_count)" -gt 0 ] || die "select at least one target agent"
+    prune_incompatible_selection
     [ "$(selected_item_count)" -gt 0 ] || die "select at least one skill or guidance item"
     if [ "$ASSUME_YES" -eq 1 ] && [ -z "$TARGET_ARG" ] && [ "$(selected_target_count)" -eq 0 ]; then
         die "--yes requires --targets when no supported agent is detected"

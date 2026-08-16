@@ -1,17 +1,19 @@
-# id	kind	source	group	default	requires	recommends	runtime_checks	label
-agent-rules	guidance	AGENTS.md	core	yes	-	-	-	Agent behavior rules
-cpp-oop-style	skill	skills/cpp-oop-style	core	yes	-	cpp-hpc-optimization	-	C++ OOP style
-cpp-hpc-optimization	skill	skills/cpp-hpc-optimization	core	yes	cpp-oop-style	-	-	C++ HPC optimization
-agent-browser	skill	skills/agent-browser	browser	no	-	-	agent-browser-cli,agent-browser-runtime	Headless browser automation
-chrome-cdp	skill	skills/chrome-cdp	browser	no	-	-	node22,chrome-browser,chrome-debug	Visible Chrome automation
-visual-qa	skill	skills/visual-qa	browser	no	-	agent-browser	-	Visual quality assurance
-context7	skill	skills/context7	web	no	-	-	uv,context7-key	Current library documentation
-grep-app	skill	skills/grep-app	web	no	-	-	uv	Public GitHub code search
-jina-ai	skill	skills/jina-ai	web	no	-	read-url	uv,jina-cli,jina-key	Jina search and extraction
-read-url	skill	skills/read-url	web	no	-	jina-ai,scrapling,agent-browser,chrome-cdp	curl,node-npx	Resilient URL reader
-scrapling	skill	skills/scrapling	web	no	-	-	uv,scrapling-cli,scrapling-runtime	Anti-bot web scraping
-lark-cli	skill	skills/lark-cli	integration	no	-	-	node-npx,lark-auth	Lark and Feishu CLI
-fresh-arch	skill	skills/fresh-arch	thinking	no	-	grill-me	-	Fresh architecture design
-grill-me	skill	skills/grill-me	thinking	no	-	fresh-arch	-	Design interview
-writing-prompt	skill	skills/writing-prompt	writing	no	-	-	-	Modern prompt engineering
-writing-as-human	skill	skills/writing-as-human	writing	no	-	-	-	Context-aware human voice writing
+# id	kind	source	group	default	requires	recommends	runtime_checks	targets	label
+agent-rules	guidance	AGENTS.md	core	yes	-	-	-	-	Agent behavior rules
+cpp-oop-style	skill	skills/cpp-oop-style	core	yes	-	cpp-hpc-optimization	-	-	C++ OOP style
+cpp-hpc-optimization	skill	skills/cpp-hpc-optimization	core	yes	cpp-oop-style	-	-	-	C++ HPC optimization
+agent-browser	skill	skills/agent-browser	browser	no	-	-	agent-browser-cli,agent-browser-runtime	-	Headless browser automation
+chrome-cdp	skill	skills/chrome-cdp	browser	no	-	-	node22,chrome-browser,chrome-debug	-	Visible Chrome automation
+visual-qa	skill	skills/visual-qa	browser	no	-	agent-browser	-	-	Visual quality assurance
+artifact-restraint	skill	skills/artifact-restraint	writing	yes	-	-	-	-	Artifact restraint
+context7	skill	skills/context7	web	no	-	-	uv,context7-key	-	Current library documentation
+grep-app	skill	skills/grep-app	web	no	-	-	uv	-	Public GitHub code search
+jina-ai	skill	skills/jina-ai	web	no	-	read-url	uv,jina-cli,jina-key	-	Jina search and extraction
+read-url	skill	skills/read-url	web	no	-	jina-ai,scrapling,agent-browser,chrome-cdp	curl,node-npx	-	Resilient URL reader
+scrapling	skill	skills/scrapling	web	no	-	-	uv,scrapling-cli,scrapling-runtime	-	Anti-bot web scraping
+lark-cli	skill	skills/lark-cli	integration	no	-	-	node-npx,lark-auth	-	Lark and Feishu CLI
+fresh-arch	skill	skills/fresh-arch	thinking	no	-	grill-me	-	-	Fresh architecture design
+grill-me	skill	skills/grill-me	thinking	no	-	fresh-arch	-	-	Design interview
+opus-advisor	skill	skills/opus-advisor	thinking	no	-	-	claude-cli,jq	codex	Independent Opus advisor
+writing-prompt	skill	skills/writing-prompt	writing	no	-	-	-	-	Modern prompt engineering
+writing-as-human	skill	skills/writing-as-human	writing	no	-	-	-	-	Context-aware human voice writing
