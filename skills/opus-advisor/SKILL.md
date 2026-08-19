@@ -1,7 +1,15 @@
 ---
 name: opus-advisor
 description: >
-  Consult an independent read-only Claude Opus advisor when the consequence of being wrong and the remaining uncertainty make a second judgment worthwhile, including before committing to a material decision or completion claim. Opus challenges Codex's reasoning and evidence; Codex retains responsibility for edits and the final judgment.
+  Consult an independent read-only Claude Opus advisor when a decision can affect
+  security, privacy, money, data loss, deployment, or public API compatibility;
+  when investigation leaves two plausible directions with materially different
+  consequences; or when a consequential completion claim depends on an
+  unverified assumption or critical behavior that normal tests cannot cover.
+  Also use when the user requests an independent or Opus review. Skip routine
+  edits and uncertainty that local inspection, documentation, or tests can
+  resolve cheaply. Opus challenges Codex's reasoning and evidence; Codex retains
+  responsibility for edits and the final judgment.
 ---
 
 # Opus Advisor
@@ -23,6 +31,12 @@ Run the launcher from the project under review:
 ```bash
 <skill-directory>/scripts/ask-opus <consult|review|gate> '<request>'
 ```
+
+Run `ask-opus` outside any active Codex sandbox; request escalated execution for
+the launcher command. Outer escalation lets the Claude CLI use the host network
+and configured proxy. It does not replace or relax the launcher's own read-only
+sandbox for Opus tools. If policy denies outer escalation, report the advisor as
+unavailable.
 
 Resolve `<skill-directory>` from this loaded `SKILL.md`; do not assume the skill is inside the current project.
 

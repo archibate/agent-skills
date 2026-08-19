@@ -233,10 +233,6 @@ if [[ -e "$advisor_timeout_marker" ]]; then
     printf 'opus-advisor: Claude exceeded the %s-second timeout\n' "$advisor_timeout" >&2
     exit 124
 fi
-if (( advisor_status != 0 )); then
-    printf 'opus-advisor: Claude exited with status %s\n' "$advisor_status" >&2
-    exit "$advisor_status"
-fi
 if (( advisor_stream_status != 0 )); then
     if (( advisor_stream_status == 124 )); then
         printf 'opus-advisor: response stream did not close within 30 seconds\n' >&2
@@ -246,8 +242,34 @@ if (( advisor_stream_status != 0 )); then
     exit "$advisor_stream_status"
 fi
 
-if ! jq -s 'map(select(.type == "result")) | last // error("missing result event")' \
+advisor_has_result=0
+if jq -s 'map(select(.type == "result")) | last // error("missing result event")' \
     "$advisor_stream_file" >"$advisor_response_file" 2>/dev/null; then
+    advisor_has_result=1
+fi
+
+if (( advisor_status != 0 )); then
+    advisor_error=
+    if (( advisor_has_result )); then
+        advisor_error=$(jq -r 'if (.result | type) == "string" then .result else "" end' \
+            "$advisor_response_file" 2>/dev/null || true)
+    fi
+    if [[ -n "$advisor_error" ]]; then
+        printf 'opus-advisor: Claude error: %s\n' "$advisor_error" >&2
+        case "$advisor_error" in
+            *"Can't reach the API server"*|*"Connection refused"*|*"No internet route"*|\
+                *"Couldn't connect through your proxy"*|*"Unable to connect to API"*|\
+                *FailedToOpenSocket*|*ECONNREFUSED*|*ConnectionRefused*)
+                printf '%s\n' \
+                    'opus-advisor: Run ask-opus outside any active Codex sandbox so the Claude CLI can reach the API or configured proxy.' >&2
+                ;;
+        esac
+    fi
+    printf 'opus-advisor: Claude exited with status %s\n' "$advisor_status" >&2
+    exit "$advisor_status"
+fi
+
+if (( ! advisor_has_result )); then
     printf 'opus-advisor: invalid Claude response stream\n' >&2
     exit 1
 fi
