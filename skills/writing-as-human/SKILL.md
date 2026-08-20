@@ -4,9 +4,8 @@ description: >-
   Write or rewrite English and Chinese prose as situated human expression shaped
   by its speaker, audience, relationship, medium, purpose, and moment. Use when
   the user asks to sound human, natural, casual, personal, less AI, less
-  polished, or to deslop chats, comments, posts, articles, READMEs, status
-  updates, and other prose. Follow supplied author samples and content
-  constraints.
+  polished, or to draft text for chats, comments, posts, articles, READMEs, status
+  updates, and other prose.
 ---
 
 # Writing as situated action
@@ -48,6 +47,15 @@ put different demands on the same person. Use as much structure and polish as
 that situation calls for.
 
 ## Keep the world intact
+
+Keep the world exact; compress its description. Never add unsupported facts,
+causes, judgments, or certainty. Treat source material as evidence rather than a
+checklist: omit defaults and redundant confirmations the listener can infer,
+and replace measurements with grounded qualitative summaries when exact values
+do not change what the listener understands or does. Keep exact numbers and
+identifiers only when they are anomalous, threshold-bearing, requested, disputed,
+or needed for action, reproduction, or audit; preserve the full inventory only when
+the user explicitly requires it.
 
 Honor the user's factual and content boundaries. When writing from research,
 code, logs, or tool use, ground claims in the observed state and keep observation,

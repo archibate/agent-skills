@@ -28,13 +28,15 @@ Clarify what you want to accomplish. Derive a minimal prompt from first principl
 
 **Why:** Keeping prompts minimal improves *interpretability* and reduces the risk of *overfitting*. Lengthy prompts also dilute attention and waste tokens.
 
-Pushy prompt smell:
+Pushy prompts:
 
-- ALL-CAPS: `ALWAYS use X.` → `Use X.`
-- Bold: `**Use X**.` → `Use X.`
-- Negative: `Use X, not Y.` → `Use X.`
-- Only: `Use X only if C.` → `Use X if C.`
-- Justifying: `Use X (the correct form).` → `Use X.`
+- ALL-CAPS: `ALWAYS use X.` → `Always use X.` (90%)
+- Bold: `**Use X**.` → `Use X.` (70%)
+- Negative: `Use X, not Y.` → `Use X.` (50%)
+- Only: `Use X only if C.` → `Use X if C.` (30%)
+- Justifying: `Use X (the correct form).` → `Use X.` (30%)
+
+The precentage (%) shows calibration threshold above which pushy prompts becomes legitimate.
 
 Default to rational prompts. Reserve pushy wording for cases in which a rational prompt would clearly fail because of missing context, ambiguity, or limited model capability, or when an instruction must survive budget pressure (see *Instruction budget*). Escalate gradually to pushier wording only after observing a failure.
 
