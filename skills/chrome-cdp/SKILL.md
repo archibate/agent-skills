@@ -82,4 +82,5 @@ CSS px = screenshot image px / DPR
 
 - Prefer `snap --compact` over `html` for page structure.
 - Use `type` (not eval) to enter text in cross-origin iframes — `click`/`clickxy` to focus first, then `type`.
+- Follow the startup error literally: the CLI distinguishes a network-disabled Codex sandbox, an unreachable DevTools port, a rejected WebSocket, and a pending Chrome "Allow debugging" prompt. Do not infer an Allow prompt from other failures.
 - Chrome shows an "Allow debugging" modal **once per hub lifetime** (not per command, not per tab). A single background hub holds one WebSocket to Chrome; every command — `list`, `open`, and per-tab ops — routes through it. The hub auto-exits after 8 hours of inactivity or when Chrome disconnects. `stop <target>` detaches one tab's session; `stop` with no args ends the hub.

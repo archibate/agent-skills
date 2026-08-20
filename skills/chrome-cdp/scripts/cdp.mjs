@@ -17,6 +17,8 @@ import net from 'net';
 
 const TIMEOUT = 15000;
 const NAVIGATION_TIMEOUT = 30000;
+const WEBSOCKET_CONNECT_TIMEOUT = 60000;
+const TCP_CONNECT_TIMEOUT = 1500;
 const IDLE_TIMEOUT = 8 * 60 * 60 * 1000;
 const DAEMON_CONNECT_RETRIES = 20;
 const DAEMON_CONNECT_DELAY = 300;
@@ -88,6 +90,44 @@ function getWsUrl() {
 
 const sleep = (ms) => new Promise(r => setTimeout(r, ms));
 
+function getEndpoint(wsUrl) {
+  const url = new URL(wsUrl);
+  const port = Number(url.port || (url.protocol === 'wss:' ? 443 : 80));
+  const host = url.hostname.replace(/^\[|\]$/g, '');
+  return { host, port, label: `${url.hostname}:${port}` };
+}
+
+function formatNetworkError(error) {
+  const message = error?.message || String(error);
+  return error?.code && !message.includes(error.code)
+    ? `${error.code}: ${message}`
+    : message;
+}
+
+function probeTcpEndpoint(wsUrl, timeoutMs = TCP_CONNECT_TIMEOUT) {
+  const { host, port } = getEndpoint(wsUrl);
+  return new Promise((resolve, reject) => {
+    const socket = net.connect({ host, port });
+    let settled = false;
+
+    const finish = (error) => {
+      if (settled) return;
+      settled = true;
+      socket.destroy();
+      if (error) reject(error);
+      else resolve();
+    };
+
+    socket.setTimeout(timeoutMs, () => {
+      const error = new Error(`connection timed out after ${timeoutMs} ms`);
+      error.code = 'ETIMEDOUT';
+      finish(error);
+    });
+    socket.once('connect', () => finish());
+    socket.once('error', finish);
+  });
+}
+
 
 function resolvePrefix(prefix, candidates, noun = 'target', missingHint = '') {
   const upper = prefix.toUpperCase();
@@ -119,12 +159,32 @@ function getDisplayPrefixLength(targetIds) {
 class CDP {
   #ws; #id = 0; #pending = new Map(); #eventHandlers = new Map(); #closeHandlers = [];
 
-  async connect(wsUrl) {
+  async connect(wsUrl, timeoutMs = WEBSOCKET_CONNECT_TIMEOUT) {
     return new Promise((res, rej) => {
-      this.#ws = new WebSocket(wsUrl);
-      this.#ws.onopen = () => res();
-      this.#ws.onerror = (e) => rej(new Error('WebSocket error: ' + (e.message || e.type)));
-      this.#ws.onclose = () => this.#closeHandlers.forEach(h => h());
+      let settled = false;
+      const finish = (callback, value) => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timer);
+        callback(value);
+      };
+      const timer = setTimeout(() => {
+        finish(rej, new Error(`WebSocket handshake timed out after ${timeoutMs} ms`));
+        try { this.#ws?.close(); } catch {}
+      }, timeoutMs);
+
+      try {
+        this.#ws = new WebSocket(wsUrl);
+      } catch (error) {
+        finish(rej, error);
+        return;
+      }
+      this.#ws.onopen = () => finish(res);
+      this.#ws.onerror = (e) => finish(rej, new Error('WebSocket error: ' + (e.message || e.type)));
+      this.#ws.onclose = () => {
+        finish(rej, new Error('WebSocket closed before opening'));
+        this.#closeHandlers.forEach(h => h());
+      };
       this.#ws.onmessage = (ev) => {
         const msg = JSON.parse(ev.data);
         if (msg.id && this.#pending.has(msg.id)) {
@@ -482,11 +542,26 @@ async function evalRawStr(cdp, sid, method, paramsJson) {
 // Hub daemon — one WS to Chrome, lazy per-target attach
 // ---------------------------------------------------------------------------
 
-async function runHub() {
+function reportHubStartup(status, error) {
+  return new Promise((resolveReport) => {
+    if (typeof process.send !== 'function' || !process.connected) {
+      resolveReport();
+      return;
+    }
+    try {
+      process.send({ type: 'hub-startup', status, error }, () => resolveReport());
+    } catch {
+      resolveReport();
+    }
+  });
+}
+
+async function runHub(wsUrl = getWsUrl()) {
   const cdp = new CDP();
   try {
-    await cdp.connect(getWsUrl());
+    await cdp.connect(wsUrl);
   } catch (e) {
+    await reportHubStartup('error', e.message);
     process.stderr.write(`Hub: cannot connect to Chrome: ${e.message}\n`);
     process.exit(1);
   }
@@ -616,12 +691,14 @@ async function runHub() {
   });
 
   server.on('error', (e) => {
-    process.stderr.write(`Hub server listen failed: ${e.message}\n`);
-    process.exit(1);
+    void reportHubStartup('error', `Hub server listen failed: ${e.message}`).then(() => {
+      process.stderr.write(`Hub server listen failed: ${e.message}\n`);
+      process.exit(1);
+    });
   });
 
   if (!IS_WINDOWS) try { unlinkSync(HUB_SOCK); } catch {}
-  server.listen(HUB_SOCK);
+  server.listen(HUB_SOCK, () => { void reportHubStartup('ready'); });
 }
 
 // ---------------------------------------------------------------------------
@@ -643,19 +720,65 @@ async function getOrStartHub() {
   // Clean stale socket
   if (!IS_WINDOWS) try { unlinkSync(HUB_SOCK); } catch {}
 
+  const wsUrl = getWsUrl();
+  const endpoint = getEndpoint(wsUrl);
+  if (process.env.CODEX_SANDBOX_NETWORK_DISABLED === '1') {
+    throw new Error(
+      `Chrome CDP cannot reach ${endpoint.label} because this Codex process is running ` +
+      'with network access disabled (CODEX_SANDBOX_NETWORK_DISABLED=1). ' +
+      'Re-run this command outside the sandbox; do not ask the user to click Chrome "Allow".'
+    );
+  }
+
+  try {
+    await probeTcpEndpoint(wsUrl);
+  } catch (error) {
+    throw new Error(
+      `Cannot reach Chrome DevTools at ${endpoint.label} (${formatNetworkError(error)}). ` +
+      'The browser may be closed, remote debugging may be off, or DevToolsActivePort may be stale. ' +
+      'This failure happened before the WebSocket handshake, so Chrome "Allow" is not the issue.'
+    );
+  }
+
   // Spawn hub
-  const child = spawn(process.execPath, [process.argv[1], '_hub'], {
+  const child = spawn(process.execPath, [process.argv[1], '_hub', wsUrl], {
     detached: true,
-    stdio: 'ignore',
+    stdio: ['ignore', 'ignore', 'ignore', 'ipc'],
+  });
+  let startupError;
+  let exitDescription;
+  child.on('message', (message) => {
+    if (message?.type === 'hub-startup' && message.status === 'error') {
+      startupError = message.error || 'unknown startup error';
+    }
+  });
+  child.on('error', (error) => { startupError = error.message; });
+  child.on('exit', (code, signal) => {
+    exitDescription = signal ? `signal ${signal}` : `status ${code}`;
   });
   child.unref();
 
-  // Wait for socket (includes time for user to click Allow)
+  // Wait briefly for a ready socket or a precise child startup error.
   for (let i = 0; i < DAEMON_CONNECT_RETRIES; i++) {
     await sleep(DAEMON_CONNECT_DELAY);
-    try { return await connectToSocket(HUB_SOCK); } catch {}
+    if (startupError || exitDescription) break;
+    try {
+      const conn = await connectToSocket(HUB_SOCK);
+      if (child.connected) child.disconnect();
+      return conn;
+    } catch {}
   }
-  throw new Error('Hub failed to start — did you click Allow in Chrome?');
+
+  if (child.connected) child.disconnect();
+  if (startupError) throw new Error(`Chrome CDP hub failed to start: ${startupError}`);
+  if (exitDescription) throw new Error(`Chrome CDP hub exited with ${exitDescription} before its socket was ready.`);
+
+  const waitMs = DAEMON_CONNECT_RETRIES * DAEMON_CONNECT_DELAY;
+  throw new Error(
+    `Chrome DevTools accepted TCP at ${endpoint.label}, but the CDP WebSocket handshake ` +
+    `did not complete within ${waitMs} ms. Check Chrome for an "Allow debugging" prompt; ` +
+    'if present, click Allow and rerun this command.'
+  );
 }
 
 function sendCommand(conn, req) {
@@ -803,7 +926,7 @@ async function main() {
   const [cmd, ...args] = process.argv.slice(2);
 
   // Hub mode (internal)
-  if (cmd === '_hub') { await runHub(); return; }
+  if (cmd === '_hub') { await runHub(args[0]); return; }
 
   if (!cmd || cmd === 'help' || cmd === '--help' || cmd === '-h') {
     console.log(USAGE); process.exit(0);
@@ -892,4 +1015,7 @@ async function main() {
   }
 }
 
-main().catch(e => { console.error(e.message); process.exit(1); });
+main().catch(e => {
+  console.error(e.message);
+  process.exitCode = 1;
+});
