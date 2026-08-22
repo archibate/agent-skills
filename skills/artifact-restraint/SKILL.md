@@ -7,7 +7,7 @@ description: >-
   Prevent content bloat, repeated or unsupported claims, narrative padding,
   template-derived sections, and decorative entities. Apply for artifacts by
   default unless the user explicitly requests detailed or comprehensive
-  treatment. Apply to one-off deliverables, not to long-term coding projects.
+  treatment.
 ---
 
 # Artifact restraint

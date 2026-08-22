@@ -30,6 +30,19 @@ ENV_VAR = "CONTEXT7_API_KEY"
 # ==================
 
 
+def check_sandbox_network() -> None:
+    if os.environ.get("CODEX_SANDBOX_NETWORK_DISABLED") != "1":
+        return
+    print("error: network access is disabled by the Codex sandbox", file=sys.stderr)
+    print(f"  required outbound HTTPS: {SERVER_URL}", file=sys.stderr)
+    print(
+        "  network justification: query Context7 MCP; sends "
+        f"${ENV_VAR} to mcp.context7.com for authentication",
+        file=sys.stderr,
+    )
+    sys.exit(1)
+
+
 def get_headers() -> dict[str, str]:
     key = os.environ.get(ENV_VAR)
     if not key:
@@ -107,6 +120,9 @@ def main():
     parser.add_argument("--args", dest="json_args", help="JSON arguments string")
     parser.add_argument("--list", action="store_true", help="List available tools")
     args = parser.parse_args()
+
+    if args.list or args.tool:
+        check_sandbox_network()
 
     headers = get_headers()
 
