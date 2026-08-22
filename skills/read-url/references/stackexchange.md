@@ -46,7 +46,7 @@ curl -sL "https://api.stackexchange.com/2.3/questions/<id>/answers?site=<site>&f
 The markdown still contains HTML entities (`&quot;`, `&#39;`, `&amp;`). Unescape with the companion script:
 
 ```bash
-... | ~/.claude/skills/read-url/scripts/html-unescape.py
+... | scripts/html-unescape.py
 ```
 
 ## Fetch question body too

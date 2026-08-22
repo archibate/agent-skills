@@ -20,7 +20,7 @@ If the user can name the selector (e.g. from browser devtools), use that directl
 ## Extract
 
 ```bash
-curl -sL <url> | ~/.claude/skills/read-url/scripts/html-select.py '<css selector>'
+curl -sL <url> | scripts/html-select.py '<css selector>'
 ```
 
 The script's shebang uses `uv run --script` with PEP 723 inline deps, so `beautifulsoup4` is fetched into an ephemeral env on first run — no pollution of the user's global Python.
