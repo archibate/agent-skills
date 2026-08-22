@@ -9,6 +9,7 @@ The spider system uses three class attributes to control how aggressively it cra
 | `concurrent_requests`            | `4`     | Maximum number of requests being processed at the same time      |
 | `concurrent_requests_per_domain` | `0`     | Maximum concurrent requests per domain (0 = no per-domain limit) |
 | `download_delay`                 | `0.0`   | Seconds to wait before each request                              |
+| `robots_txt_obey`               | `False` | Respect robots.txt rules (Disallow, Crawl-delay, Request-rate)   |
 
 ```python
 class PoliteSpider(Spider):
@@ -24,9 +25,68 @@ class PoliteSpider(Spider):
         yield {"title": response.css("title::text").get("")}
 ```
 
-When `concurrent_requests_per_domain` is set, each domain gets its own concurrency limiter in addition to the global limit. This is useful when crawling multiple domains simultaneously — you can allow high global concurrency while being polite to each individual domain.
+When `concurrent_requests_per_domain` is set, each domain gets its own concurrency limiter in addition to the global limit. This is useful when crawling multiple domains simultaneously - you can allow high global concurrency while being polite to each individual domain.
 
 **Tip:** The `download_delay` parameter adds a fixed wait before every request, regardless of the domain. Use it for simple rate limiting.
+
+## AutoThrottle
+
+A fixed `download_delay` is a guess: too low and you get banned, too high and the crawl takes all night. AutoThrottle replaces the guess by watching how fast the website actually answers, then adjusting the delay of each domain on its own, so it speeds up on fast servers and backs off on slow or hostile ones.
+
+| Attribute                          | Default | Description                                                       |
+|------------------------------------|---------|-------------------------------------------------------------------|
+| `autothrottle_enabled`             | `False` | Turn the adaptive delay on                                        |
+| `autothrottle_start_delay`         | `5.0`   | The delay used for the first request to a domain                  |
+| `autothrottle_max_delay`           | `60.0`  | The highest delay the throttle is allowed to reach                |
+| `autothrottle_target_concurrency`  | `None`  | How many requests to aim for per domain (see below)               |
+| `autothrottle_block_backoff`       | `True`  | Double the delay of a domain every time it blocks you             |
+
+```python
+class AdaptiveSpider(Spider):
+    name = "adaptive"
+    start_urls = ["https://example.com"]
+
+    concurrent_requests = 8
+    concurrent_requests_per_domain = 1
+
+    autothrottle_enabled = True
+    autothrottle_start_delay = 2.0
+    autothrottle_max_delay = 30.0
+
+    async def parse(self, response: Response):
+        yield {"title": response.css("title::text").get("")}
+```
+
+After every response, the delay moves toward the time the server itself took to answer, so a site responding in 0.5 seconds settles around a 0.5-second delay, which is roughly one request in flight at a time. How many requests it aims for per domain is resolved in this order: `autothrottle_target_concurrency` when you set it, otherwise `concurrent_requests_per_domain`, otherwise 1. So you usually don't set it at all, since the per-domain limit you already configured is used as the target, and the delay is divided by it. Latency spikes apply immediately instead of being averaged in, so the spider backs off the moment a server starts struggling and only speeds up gradually.
+
+### Backing off when blocked
+
+Latency alone can't see rate limiting. A `429`, a `403`, or a captcha page usually comes back *faster* than real content, which on latency alone looks like an invitation to go quicker. So anything that isn't a healthy response, meaning a non-2xx status or a response your `is_blocked()` flags, **doubles** that domain's delay instead:
+
+```
+0.5s -> 1s -> 2s -> 4s -> 8s ...   (up to autothrottle_max_delay)
+```
+
+The spider keeps slowing down for as long as the website keeps refusing it, and once healthy responses come back the normal averaging walks the delay down again toward the server's real speed, so it recovers on its own without you restarting anything.
+
+When the website says exactly how long to wait with a `Retry-After` header, on either a `429` or a `503`, that value is used instead of the doubling. Both the numeric form (`Retry-After: 120`) and the HTTP-date form are understood.
+
+Set `autothrottle_block_backoff = False` to turn this off and go back to plain latency-driven throttling, where a block can only stop the spider from speeding up.
+
+The final delay per domain is available in the stats:
+
+```python
+result = AdaptiveSpider().start()
+print(result.stats.autothrottle_delays)  # {'example.com': 0.62}
+```
+
+**Notes:**
+
+- `download_delay` and any `Crawl-delay` from robots.txt act as a floor. AutoThrottle only ever adjusts the delay above them, so politeness settings are never undercut.
+- `concurrent_requests_per_domain` does double duty here: it caps how many requests may be in flight to a domain and doubles as AutoThrottle's target, so there's usually no separate target to configure. Setting it is recommended, because while a throttled domain sleeps it holds a slot of the global limiter, and leaving the per-domain limit unlimited means those sleeping slots come out of the budget shared with every other domain.
+- The measured latency is the full fetch, so it includes any internal retries and, for browser sessions, the page render time.
+- `autothrottle_max_delay` caps everything, including `Retry-After`. If a website asks for longer than your ceiling, raise `autothrottle_max_delay` to honor it.
+- The learned delays are not checkpointed. After a pause and resume, each domain starts again from `autothrottle_start_delay`.
 
 ### Using uvloop
 
@@ -56,7 +116,7 @@ else:
 
 1. **Pausing**: Press `Ctrl+C` during a crawl. The spider waits for all in-flight requests to finish, saves a checkpoint (pending requests + a set of seen request fingerprints), and then exits.
 2. **Force stopping**: Press `Ctrl+C` a second time to stop immediately without waiting for active tasks.
-3. **Resuming**: Run the spider again with the same `crawldir`. It detects the checkpoint, restores the queue and seen set, and continues from where it left off — skipping `start_requests()`.
+3. **Resuming**: Run the spider again with the same `crawldir`. It detects the checkpoint, restores the queue and seen set, and continues from where it left off, skipping `start_requests()`.
 4. **Cleanup**: When a crawl completes normally (not paused), the checkpoint files are deleted automatically.
 
 **Checkpoints are also saved periodically during the crawl (every 5 minutes by default).** 
@@ -83,6 +143,49 @@ async def on_start(self, resuming: bool = False):
     else:
         self.logger.info("Starting fresh crawl")
 ```
+
+## Development Mode
+
+When you're iterating on a spider's `parse()` logic, re-hitting the target servers on every run is slow and noisy. Development mode caches every response to disk on the first run and replays them from disk on subsequent runs, so you can tweak your selectors and re-run the spider as many times as you want without making a single network request.
+
+Enable it by setting `development_mode = True` on your spider:
+
+```python
+class MySpider(Spider):
+    name = "my_spider"
+    start_urls = ["https://example.com"]
+    development_mode = True
+
+    async def parse(self, response: Response):
+        yield {"title": response.css("title::text").get("")}
+```
+
+The first run fetches normally and stores each response on disk. Every subsequent run serves the same requests from the cache, skipping the network entirely.
+
+### Cache Location
+
+By default, responses are cached in `.scrapling_cache/{spider.name}/` relative to the current working directory (where you ran the spider from, **not** where the spider script lives). You can override the location with `development_cache_dir`:
+
+```python
+class MySpider(Spider):
+    name = "my_spider"
+    start_urls = ["https://example.com"]
+    development_mode = True
+    development_cache_dir = "/tmp/my_spider_cache"
+```
+
+### How It Works
+
+1. **Cache key**: Each response is keyed by the request's fingerprint, so any change to fingerprint-affecting attributes (`fp_include_kwargs`, `fp_include_headers`, `fp_keep_fragments`) will produce a fresh fetch.
+2. **Storage format**: One JSON file per response, named `{fingerprint_hex}.json`. The body is base64-encoded so binary content is preserved exactly. Writes are atomic (temp file + rename).
+3. **Replay**: On a cache hit, the engine skips the network entirely, including `download_delay`, rate limiting, and the `is_blocked()` retry path. The cached response goes straight to your callback.
+4. **Stats**: Cached requests still count toward `requests_count`, `response_bytes`, and the per-status counters, so your stat output looks the same as a normal crawl. Two extra counters, `cache_hits` and `cache_misses`, let you see how the cache performed.
+
+### Clearing the Cache
+
+There's no automatic expiration. To force a fresh crawl, delete the cache directory or call the manager's `clear()` method directly.
+
+**Warning:** Development mode is meant for development, not production. Cached responses never expire, and replay bypasses rate limiting and blocked-request retries. Don't ship a spider with `development_mode = True`.
 
 ## Streaming
 
@@ -218,6 +321,9 @@ print(f"Requests: {stats.requests_count}")
 print(f"Failed: {stats.failed_requests_count}")
 print(f"Blocked: {stats.blocked_requests_count}")
 print(f"Offsite filtered: {stats.offsite_requests_count}")
+print(f"Robots.txt disallowed: {stats.robots_disallowed_count}")
+print(f"Cache hits: {stats.cache_hits}")
+print(f"Cache misses: {stats.cache_misses}")
 print(f"Items scraped: {stats.items_scraped}")
 print(f"Items dropped: {stats.items_dropped}")
 print(f"Response bytes: {stats.response_bytes}")
@@ -260,6 +366,10 @@ print(stats.download_delay)   # The download delay used (seconds)
 # Concurrency settings used
 print(stats.concurrent_requests)             # Global concurrency limit
 print(stats.concurrent_requests_per_domain)  # Per-domain concurrency limit
+
+# AutoThrottle
+print(stats.autothrottle_enabled)  # Whether the adaptive delay was on
+print(stats.autothrottle_delays)   # Final delay per domain, {'example.com': 0.62}
 
 # Custom stats (set by your spider code)
 print(stats.custom_stats)

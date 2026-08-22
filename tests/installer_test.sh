@@ -212,4 +212,53 @@ set -e
 [ "$status" -eq 1 ] || fail "unsupported target returned $status instead of 1"
 [ ! -e "$CASE_HOME/.claude/skills/opus-advisor" ] || fail 'unsupported target installed opus-advisor'
 
+printf '15. Scrapling installs with only the uv runtime\n'
+scrapling_runtimes=$(awk -F '\t' '$1 == "scrapling" { print $8 }' "$ROOT/installer/catalog.tsv")
+[ "$scrapling_runtimes" = uv ] || fail "expected Scrapling runtime checks to be uv, found: $scrapling_runtimes"
+new_case scrapling-install
+run_installer --skills scrapling --targets codex --yes --skip-deps --install-mode copy >/dev/null
+assert_file "$CASE_HOME/.agents/skills/scrapling/scripts/scrapling"
+[ -x "$CASE_HOME/.agents/skills/scrapling/scripts/scrapling" ] || fail 'Scrapling launcher is not executable'
+
+printf '16. Scrapling launcher delegates to uvx\n'
+new_case scrapling-launcher
+mock_bin="$CASE_ROOT/bin"
+mock_log="$CASE_ROOT/uvx"
+mkdir -p "$mock_bin"
+cat > "$mock_bin/uvx" <<'EOF'
+#!/usr/bin/env bash
+printf '%s\n' "${UV_TOOL_DIR-}" > "$MOCK_UVX_LOG.tool-dir"
+printf '%s\n' "$@" > "$MOCK_UVX_LOG.args"
+exit "${MOCK_UVX_EXIT:-0}"
+EOF
+chmod +x "$mock_bin/uvx"
+
+HOME="$CASE_HOME" XDG_CACHE_HOME="$CASE_ROOT/cache" UV_CACHE_DIR= UV_TOOL_DIR= \
+    MOCK_UVX_LOG="$mock_log" PATH="$mock_bin:$PATH" \
+    "$ROOT/skills/scrapling/scripts/scrapling" extract get https://example.com page.md
+[ "$(< "$mock_log.tool-dir")" = "$CASE_ROOT/cache/uv/tools" ] || fail 'Scrapling launcher chose the wrong default UV_TOOL_DIR'
+expected_args=$(printf '%s\n' --from 'scrapling[all]>=0.4.14' scrapling extract get https://example.com page.md)
+[ "$(< "$mock_log.args")" = "$expected_args" ] || fail 'Scrapling launcher changed forwarded arguments'
+
+custom_tool_dir="$CASE_ROOT/custom-tools"
+HOME="$CASE_HOME" UV_TOOL_DIR="$custom_tool_dir" MOCK_UVX_LOG="$mock_log" PATH="$mock_bin:$PATH" \
+    "$ROOT/skills/scrapling/scripts/scrapling" browser-install
+[ "$(< "$mock_log.tool-dir")" = "$custom_tool_dir" ] || fail 'Scrapling launcher replaced an explicit UV_TOOL_DIR'
+expected_args=$(printf '%s\n' --from 'scrapling[all]>=0.4.14' playwright install chromium)
+[ "$(< "$mock_log.args")" = "$expected_args" ] || fail 'browser-install invoked the wrong uvx command'
+
+set +e
+HOME="$CASE_HOME" MOCK_UVX_EXIT=23 MOCK_UVX_LOG="$mock_log" PATH="$mock_bin:$PATH" \
+    "$ROOT/skills/scrapling/scripts/scrapling" --version >/dev/null 2>&1
+status=$?
+set -e
+[ "$status" -eq 23 ] || fail "Scrapling launcher returned $status instead of uvx status 23"
+
+set +e
+HOME="$CASE_HOME" MOCK_UVX_LOG="$mock_log" PATH="$mock_bin:$PATH" \
+    "$ROOT/skills/scrapling/scripts/scrapling" browser-install extra >/dev/null 2>&1
+status=$?
+set -e
+[ "$status" -eq 2 ] || fail "browser-install with extra arguments returned $status instead of 2"
+
 printf 'All installer tests passed.\n'

@@ -61,7 +61,7 @@ def configure_sessions(self, manager):
 
 ## Custom Rotation Strategies
 
-By default, `ProxyRotator` uses cyclic rotation — it iterates through proxies sequentially, wrapping around at the end.
+By default, `ProxyRotator` uses cyclic rotation - it iterates through proxies sequentially, wrapping around at the end.
 
 You can provide a custom strategy function to change this behavior, but it has to match the below signature:
 

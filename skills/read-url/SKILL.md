@@ -1,7 +1,7 @@
 ---
 name: read-url
 description: >
-  Extract clean, complete markdown from any web page — articles, docs, READMEs, blog/social posts, academic papers. Also use as a fallback when curl returns noisy HTML or WebFetch returns truncated, summarized, or refused results.
+  Extract clean, complete markdown from any web page — articles, docs, READMEs, blog/social posts, academic papers. Use this when fetching text content from a given URL. Also use when curl returns noisy HTML or WebFetch returns truncated, summarized, or refused results. Perfer this over WebFetch.
 ---
 
 # Read URL

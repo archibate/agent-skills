@@ -1,0 +1,33 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+if ! command -v uvx >/dev/null 2>&1; then
+    printf 'scrapling: missing required command: uvx\n' >&2
+    exit 127
+fi
+
+if [[ -z ${UV_TOOL_DIR:-} ]]; then
+    if [[ -n ${UV_CACHE_DIR:-} ]]; then
+        scrapling_uv_cache=$UV_CACHE_DIR
+    elif [[ -n ${XDG_CACHE_HOME:-} ]]; then
+        scrapling_uv_cache=$XDG_CACHE_HOME/uv
+    elif [[ -n ${HOME:-} ]]; then
+        scrapling_uv_cache=$HOME/.cache/uv
+    else
+        printf 'scrapling: set UV_TOOL_DIR, UV_CACHE_DIR, XDG_CACHE_HOME, or HOME\n' >&2
+        exit 2
+    fi
+    export UV_TOOL_DIR=$scrapling_uv_cache/tools
+fi
+
+scrapling_package='scrapling[all]>=0.4.14'
+
+if [[ ${1:-} == browser-install ]]; then
+    if (( $# != 1 )); then
+        printf 'usage: %s browser-install\n' "${0##*/}" >&2
+        exit 2
+    fi
+    exec uvx --from "$scrapling_package" playwright install chromium
+fi
+
+exec uvx --from "$scrapling_package" scrapling "$@"

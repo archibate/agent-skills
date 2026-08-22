@@ -150,7 +150,7 @@ target_index() {
 
 runtime_known() {
     case "$1" in
-        curl|uv|node-npx|node22|chrome-browser|chrome-debug|context7-key|jina-cli|jina-key|agent-browser-cli|agent-browser-runtime|lark-auth|scrapling-cli|scrapling-runtime|claude-cli|jq) return 0 ;;
+        curl|uv|node-npx|node22|chrome-browser|chrome-debug|context7-key|jina-cli|jina-key|agent-browser-cli|agent-browser-runtime|lark-auth|claude-cli|jq) return 0 ;;
         *) return 1 ;;
     esac
 }
@@ -722,16 +722,6 @@ runtime_probe() {
         lark-auth)
             RUNTIME_PROBE_MESSAGE="Lark authentication must be completed manually"
             ;;
-        scrapling-cli)
-            command -v scrapling >/dev/null 2>&1 && return 0
-            RUNTIME_PROBE_INSTALLABLE=1
-            RUNTIME_PROBE_MESSAGE="Install scrapling[all] with uv"
-            ;;
-        scrapling-runtime)
-            RUNTIME_PROBE_INSTALLABLE=1
-            RUNTIME_PROBE_HEAVY=1
-            RUNTIME_PROBE_MESSAGE="Download Scrapling browser dependencies"
-            ;;
         claude-cli)
             command -v claude >/dev/null 2>&1 && return 0
             RUNTIME_PROBE_MESSAGE="Claude Code is required for the Opus advisor"
@@ -778,8 +768,6 @@ runtime_command() {
             else printf '%s' "brew install agent-browser"; fi
             ;;
         agent-browser-runtime) printf '%s' "agent-browser install" ;;
-        scrapling-cli) printf '%s' "uv tool install 'scrapling[all]>=0.4.2'" ;;
-        scrapling-runtime) printf '%s' "scrapling install --force" ;;
         *) printf '%s' "manual setup" ;;
     esac
 }
@@ -843,10 +831,7 @@ select_runtime_prerequisite() {
 
 resolve_runtime_action_dependencies() {
     select_runtime_prerequisite jina-cli uv
-    select_runtime_prerequisite scrapling-cli uv
     select_runtime_prerequisite agent-browser-runtime agent-browser-cli
-    select_runtime_prerequisite scrapling-runtime scrapling-cli
-    select_runtime_prerequisite scrapling-runtime uv
 }
 
 selected_target_count() {
@@ -1203,23 +1188,13 @@ run_runtime_action() {
             command -v agent-browser >/dev/null 2>&1 || return 1
             agent-browser install
             ;;
-        scrapling-cli)
-            refresh_user_path
-            command -v uv >/dev/null 2>&1 || return 1
-            uv tool install 'scrapling[all]>=0.4.2'
-            ;;
-        scrapling-runtime)
-            refresh_user_path
-            command -v scrapling >/dev/null 2>&1 || return 1
-            scrapling install --force
-            ;;
         *) return 1 ;;
     esac
 }
 
 install_runtime_dependencies() {
     [ "$SKIP_DEPS" -eq 0 ] || return 0
-    order="uv jina-cli agent-browser-cli agent-browser-runtime scrapling-cli scrapling-runtime"
+    order="uv jina-cli agent-browser-cli agent-browser-runtime"
     for runtime in $order; do
         idx=0
         while [ "$idx" -lt "${#RUNTIME_IDS[@]}" ]; do

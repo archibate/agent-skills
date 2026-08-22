@@ -10,11 +10,11 @@ Here's what happens step by step when you run a spider:
 
 1. The **Spider** produces the first batch of `Request` objects. By default, it creates one request for each URL in `start_urls`, but you can override `start_requests()` for custom logic.
 2. The **Scheduler** receives requests and places them in a priority queue, and creates fingerprints for them. Higher-priority requests are dequeued first.
-3. The **Crawler Engine** asks the **Scheduler** to dequeue the next request, respecting concurrency limits (global and per-domain) and download delays. Once the **Crawler Engine** receives the request, it passes it to the **Session Manager**, which routes it to the correct session based on the request's `sid` (session ID).
-4. The **session** fetches the page and returns a [Response](fetching/choosing.md#response-object) object to the **Crawler Engine**. The engine records statistics and checks for blocked responses. If the response is blocked, the engine retries the request up to `max_blocked_retries` times. Of course, the blocking detection and the retry logic for blocked requests can be customized.
-5. The **Crawler Engine** passes the [Response](fetching/choosing.md#response-object) to the request's callback. The callback either yields a dictionary, which gets treated as a scraped item, or a follow-up request, which gets sent to the scheduler for queuing.
+3. The **Crawler Engine** asks the **Scheduler** to dequeue the next request, respecting concurrency limits (global and per-domain) and download delays. If `robots_txt_obey` is enabled, the engine checks the domain's robots.txt rules before proceeding -- disallowed requests are dropped silently. Once the **Crawler Engine** receives the request, it passes it to the **Session Manager**, which routes it to the correct session based on the request's `sid` (session ID).
+4. The **session** fetches the page and returns a [Response](../fetching/choosing.md#response-object) object to the **Crawler Engine**. The engine records statistics and checks for blocked responses. If the response is blocked, the engine retries the request up to `max_blocked_retries` times. Of course, the blocking detection and the retry logic for blocked requests can be customized.
+5. The **Crawler Engine** passes the [Response](../fetching/choosing.md#response-object) to the request's callback. The callback either yields a dictionary, which gets treated as a scraped item, or a follow-up request, which gets sent to the scheduler for queuing.
 6. The cycle repeats from step 2 until the scheduler is empty and no tasks are active, or the spider is paused.
-7. If `crawldir` is set while starting the spider, the **Crawler Engine** periodically saves a checkpoint (pending requests + seen URLs set) to disk. On graceful shutdown (Ctrl+C), a final checkpoint is saved. The next time the spider runs with the same `crawldir`, it resumes from where it left off — skipping `start_requests()` and restoring the scheduler state.
+7. If `crawldir` is set while starting the spider, the **Crawler Engine** periodically saves a checkpoint (pending requests + seen URLs set) to disk. On graceful shutdown (Ctrl+C), a final checkpoint is saved. The next time the spider runs with the same `crawldir`, it resumes from where it left off, skipping `start_requests()` and restoring the scheduler state.
 
 
 ## Components
@@ -40,7 +40,7 @@ class MySpider(Spider):
 
 ### Crawler Engine
 
-The engine orchestrates the entire crawl. It manages the main loop, enforces concurrency limits, dispatches requests through the Session Manager, and processes results from callbacks. You don't interact with it directly — the `Spider.start()` and `Spider.stream()` methods handle it for you.
+The engine orchestrates the entire crawl. It manages the main loop, enforces concurrency limits, dispatches requests through the Session Manager, and processes results from callbacks. You don't interact with it directly - the `Spider.start()` and `Spider.stream()` methods handle it for you.
 
 ### Scheduler
 
@@ -50,9 +50,9 @@ A priority queue with built-in URL deduplication. Requests are fingerprinted bas
 
 Manages one or more named session instances. Each session is one of:
 
-- [FetcherSession](fetching/static.md)
-- [AsyncDynamicSession](fetching/dynamic.md)
-- [AsyncStealthySession](fetching/stealthy.md)
+- [FetcherSession](../fetching/static.md)
+- [AsyncDynamicSession](../fetching/dynamic.md)
+- [AsyncStealthySession](../fetching/stealthy.md)
 
 When a request comes in, the Session Manager routes it to the correct session based on the request's `sid` field. Sessions can be started with the spider start (default) or lazily (started on the first use).
 
@@ -60,9 +60,13 @@ When a request comes in, the Session Manager routes it to the correct session ba
 
 An optional system that, if enabled, saves the crawler's state (pending requests + seen URL fingerprints) to a pickle file on disk. Writes are atomic (temp file + rename) to prevent corruption. Checkpoints are saved periodically at a configurable interval and on graceful shutdown. Upon successful completion (not paused), checkpoint files are automatically cleaned up.
 
+### Response Cache
+
+An optional cache that, when development mode is enabled, stores every fetched response on disk and replays it on subsequent runs. Each response is keyed by request fingerprint and serialized as JSON (with the body base64-encoded so binary content survives). It's meant for iterating on `parse()` logic without re-hitting the target servers, not for production use.
+
 ### Output
 
-Scraped items are collected in an `ItemList` (a list subclass with `to_json()` and `to_jsonl()` export methods). Crawl statistics are tracked in a `CrawlStats` dataclass which contains a lot of useful info.
+Scraped items are collected in an `ItemList` (a list subclass with `to_json()`, `to_jsonl()`, `to_csv()`, and `to_xml()` export methods). Crawl statistics are tracked in a `CrawlStats` dataclass which contains a lot of useful info.
 
 
 ## Comparison with Scrapy
@@ -82,8 +86,9 @@ If you're coming from Scrapy, here's how Scrapling's spider system maps:
 | Blocked detection  | Through custom middlewares    | Built-in `is_blocked()` + `retry_blocked_request()` hooks       |
 | Concurrency        | `CONCURRENT_REQUESTS` setting | `concurrent_requests` class attribute                           |
 | Domain filtering   | `allowed_domains`             | `allowed_domains`                                               |
+| Robots.txt         | `ROBOTSTXT_OBEY` setting      | `robots_txt_obey` class attribute                               |
 | Pause/Resume       | `JOBDIR` setting              | `crawldir` constructor argument                                 |
-| Export             | Feed exports                  | `result.items.to_json()` / `to_jsonl()` or custom through hooks |
+| Export             | Feed exports                  | `result.items.to_json()` / `to_jsonl()` / `to_csv()` / `to_xml()` or custom through hooks |
 | Running            | `scrapy crawl spider_name`    | `MySpider().start()`                                            |
 | Streaming          | N/A                           | `async for item in spider.stream()`                             |
 | Multi-session      | N/A                           | Multiple sessions with different types per spider               |

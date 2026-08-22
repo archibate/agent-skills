@@ -1,24 +1,24 @@
 # Spiders sessions
 
-A spider can use multiple fetcher sessions simultaneously — for example, a fast HTTP session for simple pages and a stealth browser session for protected pages.
+A spider can use multiple fetcher sessions simultaneously. For example, a fast HTTP session for simple pages and a stealth browser session for protected pages.
 
 ## What are Sessions?
 
 A session is a pre-configured fetcher instance that stays alive for the duration of the crawl. Instead of creating a new connection or browser for every request, the spider reuses sessions, which is faster and more resource-efficient.
 
-By default, every spider creates a single [FetcherSession](fetching/static.md). You can add more sessions or swap the default by overriding the `configure_sessions()` method, but you have to use the async version of each session only, as the table shows below:
+By default, every spider creates a single [FetcherSession](../fetching/static.md). You can add more sessions or swap the default by overriding the `configure_sessions()` method, but you have to use the async version of each session only, as the table shows below:
 
 
 | Session Type                                    | Use Case                                 |
 |-------------------------------------------------|------------------------------------------|
-| [FetcherSession](fetching/static.md)         | Fast HTTP requests, no JavaScript        |
-| [AsyncDynamicSession](fetching/dynamic.md)   | Browser automation, JavaScript rendering |
-| [AsyncStealthySession](fetching/stealthy.md) | Anti-bot bypass, Cloudflare, etc.        |
+| [FetcherSession](../fetching/static.md)         | Fast HTTP requests, no JavaScript        |
+| [AsyncDynamicSession](../fetching/dynamic.md)   | Browser automation, JavaScript rendering |
+| [AsyncStealthySession](../fetching/stealthy.md) | Anti-bot bypass, Cloudflare, etc.        |
 
 
 ## Configuring Sessions
 
-Override `configure_sessions()` on your spider to set up sessions. The `manager` parameter is a `SessionManager` instance — use `manager.add()` to register sessions:
+Override `configure_sessions()` on your spider to set up sessions. The `manager` parameter is a `SessionManager` instance - use `manager.add()` to register sessions:
 
 ```python
 from scrapling.spiders import Spider, Response
@@ -90,7 +90,7 @@ class ProductSpider(Spider):
         }
 ```
 
-The key is the `sid` parameter — it tells the spider which session to use for each request. When you call `response.follow()` without `sid`, the session ID from the original request is inherited.
+The key is the `sid` parameter - it tells the spider which session to use for each request. When you call `response.follow()` without `sid`, the session ID from the original request is inherited.
 
 Sessions can also be different instances of the same class with different configurations:
 

@@ -346,8 +346,8 @@ It filters all elements in the current page/element in the following order:
 
 ### Examples
 ```python
->>> from scrapling.fetchers import Fetcher
->>> page = Fetcher.get('https://quotes.toscrape.com/')
+from scrapling.fetchers import Fetcher
+page = Fetcher.get('https://quotes.toscrape.com/')
 ```
 Find all elements with the tag name `div`.
 ```python

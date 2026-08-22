@@ -44,7 +44,7 @@ Some BeautifulSoup shortcuts have no direct Scrapling equivalent. Scrapling avoi
 
 ¹ **Note:** BS4's `find_previous`/`find_all_previous` searches all preceding elements in document order, while Scrapling's `path` only returns ancestors (the parent chain). These are not exact equivalents, but ancestor search covers the most common use case.
 
-BeautifulSoup supports modifying/manipulating the parsed DOM. Scrapling does not — it is read-only and optimized for extraction.
+BeautifulSoup supports modifying/manipulating the parsed DOM. Scrapling does not - it is read-only and optimized for extraction.
 
 ### Full Example: Extracting Links
 

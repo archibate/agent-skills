@@ -2,7 +2,7 @@
 Example 1: Python - FetcherSession (persistent HTTP session with Chrome TLS fingerprint)
 
 Scrapes all 10 pages of quotes.toscrape.com using a single HTTP session.
-No browser launched — fast and lightweight.
+No browser launched - fast and lightweight.
 
 Best for: static or semi-static sites, APIs, pages that don't require JavaScript.
 """

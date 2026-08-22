@@ -6,7 +6,7 @@
 You have one primary way to import this Fetcher, which is the same for all fetchers.
 
 ```python
->>> from scrapling.fetchers import StealthyFetcher
+from scrapling.fetchers import StealthyFetcher
 ```
 Check out how to configure the parsing options [here](choosing.md#parser-configuration-in-all-fetchers)
 
@@ -38,7 +38,8 @@ Scrapling provides many options with this fetcher and its session classes. Befor
 |      load_dom       | Enabled by default, wait for all JavaScript on page(s) to fully load and execute (wait for the `domcontentloaded` state).                                                                                                           |    ✔️    |
 |       timeout       | The timeout (milliseconds) used in all operations and waits through the page. The default is 30,000 ms (30 seconds).                                                                                                                |    ✔️    |
 |        wait         | The time (milliseconds) the fetcher will wait after everything finishes before closing the page and returning the `Response` object.                                                                                                |    ✔️    |
-|     page_action     | Added for automation. Pass a function that takes the `page` object and does the necessary automation.                                                                                                                               |    ✔️    |
+|     page_action     | Added for automation. Pass a function that takes the `page` object, runs after navigation, and does the necessary automation.                                                                                                       |    ✔️    |
+|     page_setup      | A function that takes the `page` object, runs before navigation. Use it to register event listeners or routes that must be set up before the page loads.                                                                            |    ✔️    |
 |    wait_selector    | Wait for a specific css selector to be in a specific state.                                                                                                                                                                         |    ✔️    |
 |     init_script     | An absolute path to a JavaScript file to be executed on page creation for all pages in this session.                                                                                                                                |    ✔️    |
 | wait_selector_state | Scrapling will wait for the given state to be fulfilled for the selector given with `wait_selector`. _Default state is `attached`._                                                                                                 |    ✔️    |
@@ -58,11 +59,15 @@ Scrapling provides many options with this fetcher and its session classes. Befor
 |   additional_args   | Additional arguments to be passed to Playwright's context as additional settings, and they take higher priority than Scrapling's settings.                                                                                          |    ✔️    |
 |   selector_config   | A dictionary of custom parsing arguments to be used when creating the final `Selector`/`Response` class.                                                                                                                            |    ✔️    |
 |   blocked_domains   | A set of domain names to block requests to. Subdomains are also matched (e.g., `"example.com"` blocks `"sub.example.com"` too).                                                                                                     |    ✔️    |
+|     block_ads       | Block requests to ~3,500 known ad/tracking domains. Can be combined with `blocked_domains`.                                                                                                                                         |    ✔️    |
+|   dns_over_https    | Route DNS queries through Cloudflare's DNS-over-HTTPS to prevent DNS leaks when using proxies.                                                                                                                                      |    ✔️    |
 |    proxy_rotator    | A `ProxyRotator` instance for automatic proxy rotation. Cannot be combined with `proxy`.                                                                                                                                            |    ✔️    |
 |       retries       | Number of retry attempts for failed requests. Defaults to 3.                                                                                                                                                                        |    ✔️    |
 |     retry_delay     | Seconds to wait between retry attempts. Defaults to 1.                                                                                                                                                                              |    ✔️    |
+|     capture_xhr     | Pass a regex URL pattern string to capture XHR/fetch requests matching it during page load. Captured responses are available via `response.captured_xhr`. Defaults to `None` (disabled).                                             |    ✔️    |
+|   executable_path   | Absolute path to a custom browser executable to use instead of the bundled Chromium. Useful for non-standard installations or custom browser builds.                                                                                |    ✔️    |
 
-In session classes, all these arguments can be set globally for the session. Still, you can configure each request individually by passing some of the arguments here that can be configured on the browser tab level like: `google_search`, `timeout`, `wait`, `page_action`, `extra_headers`, `disable_resources`, `wait_selector`, `wait_selector_state`, `network_idle`, `load_dom`, `solve_cloudflare`, `blocked_domains`, `proxy`, and `selector_config`.
+In session classes, all these arguments can be set globally for the session. Still, you can configure each request individually by passing some of the arguments here that can be configured on the browser tab level like: `google_search`, `timeout`, `wait`, `page_action`, `page_setup`, `extra_headers`, `disable_resources`, `wait_selector`, `wait_selector_state`, `network_idle`, `load_dom`, `solve_cloudflare`, `blocked_domains`, `proxy`, and `selector_config`.
 
 **Notes:**
 
@@ -70,6 +75,7 @@ In session classes, all these arguments can be set globally for the session. Sti
 2. The `disable_resources` option made requests ~25% faster in tests for some websites and can help save proxy usage, but be careful with it, as it can cause some websites to never finish loading.
 3. The `google_search` argument is enabled by default for all requests, setting the referer to `https://www.google.com/`. If used together with `extra_headers`, it takes priority over the referer set there.
 4. If you didn't set a user agent and enabled headless mode, the fetcher will generate a real user agent for the same browser version and use it. If you didn't set a user agent and didn't enable headless mode, the fetcher will use the browser's default user agent, which is the same as in standard browsers in the latest versions.
+5. `init_script` is registered with the browser context, so it runs when pages are created. Stealthy mode uses Patchright's isolated execution context by default; if your `page_action` needs to read globals that the script places on `window`, call `page.evaluate(..., isolated_context=False)` from the action.
 
 ## Examples
 

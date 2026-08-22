@@ -10,7 +10,7 @@ context7	skill	skills/context7	web	no	-	-	uv,context7-key	-	Current library docu
 grep-app	skill	skills/grep-app	web	no	-	-	uv	-	Public GitHub code search
 jina-ai	skill	skills/jina-ai	web	no	-	read-url	uv,jina-cli,jina-key	-	Jina search and extraction
 read-url	skill	skills/read-url	web	no	-	jina-ai,scrapling,agent-browser,chrome-cdp	curl,node-npx	-	Resilient URL reader
-scrapling	skill	skills/scrapling	web	no	-	-	uv,scrapling-cli,scrapling-runtime	-	Anti-bot web scraping
+scrapling	skill	skills/scrapling	web	no	-	-	uv	-	Anti-bot web scraping
 lark-cli	skill	skills/lark-cli	integration	no	-	-	node-npx,lark-auth	-	Lark and Feishu CLI
 fresh-arch	skill	skills/fresh-arch	thinking	no	-	grill-me	-	-	Fresh architecture design
 grill-me	skill	skills/grill-me	thinking	no	-	fresh-arch	-	-	Design interview

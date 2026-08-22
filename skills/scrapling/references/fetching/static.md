@@ -6,7 +6,7 @@ The `Fetcher` class provides rapid and lightweight HTTP requests using the high-
 Import the Fetcher (same import pattern for all fetchers):
 
 ```python
->>> from scrapling.fetchers import Fetcher
+from scrapling.fetchers import Fetcher
 ```
 Check out how to configure the parsing options [here](choosing.md#parser-configuration-in-all-fetchers)
 
@@ -15,7 +15,7 @@ All methods for making requests here share some arguments, so let's discuss them
 
 - **url**: The targeted URL
 - **stealthy_headers**: If enabled (default), it creates and adds real browser headers. It also sets a Google referer header.
-- **follow_redirects**: As the name implies, tell the fetcher to follow redirections. **Enabled by default**
+- **follow_redirects**: Controls redirect behavior. **Defaults to `"safe"`**, which follows redirects but rejects those targeting internal/private IPs (SSRF protection). Pass `True` to follow all redirects without restriction, or `False` to disable redirects entirely.
 - **timeout**: The number of seconds to wait for each request to be finished. **Defaults to 30 seconds**.
 - **retries**: The number of retries that the fetcher will do for failed requests. **Defaults to three retries**.
 - **retry_delay**: Number of seconds to wait between retry attempts. **Defaults to 1 second**.
@@ -47,41 +47,41 @@ Examples are the best way to explain this:
 > Hence: `OPTIONS` and `HEAD` methods are not supported.
 #### GET
 ```python
->>> from scrapling.fetchers import Fetcher
->>> # Basic GET
->>> page = Fetcher.get('https://example.com')
->>> page = Fetcher.get('https://scrapling.requestcatcher.com/get', stealthy_headers=True, follow_redirects=True)
->>> page = Fetcher.get('https://scrapling.requestcatcher.com/get', proxy='http://username:password@localhost:8030')
->>> # With parameters
->>> page = Fetcher.get('https://example.com/search', params={'q': 'query'})
->>>
->>> # With headers
->>> page = Fetcher.get('https://example.com', headers={'User-Agent': 'Custom/1.0'})
->>> # Basic HTTP authentication
->>> page = Fetcher.get("https://example.com", auth=("my_user", "password123"))
->>> # Browser impersonation
->>> page = Fetcher.get('https://example.com', impersonate='chrome')
->>> # HTTP/3 support
->>> page = Fetcher.get('https://example.com', http3=True)
+from scrapling.fetchers import Fetcher
+# Basic GET
+page = Fetcher.get('https://example.com')
+page = Fetcher.get('https://scrapling.requestcatcher.com/get', stealthy_headers=True)
+page = Fetcher.get('https://scrapling.requestcatcher.com/get', proxy='http://username:password@localhost:8030')
+# With parameters
+page = Fetcher.get('https://example.com/search', params={'q': 'query'})
+
+# With headers
+page = Fetcher.get('https://example.com', headers={'User-Agent': 'Custom/1.0'})
+# Basic HTTP authentication
+page = Fetcher.get("https://example.com", auth=("my_user", "password123"))
+# Browser impersonation
+page = Fetcher.get('https://example.com', impersonate='chrome')
+# HTTP/3 support
+page = Fetcher.get('https://example.com', http3=True)
 ```
 And for asynchronous requests, it's a small adjustment 
 ```python
->>> from scrapling.fetchers import AsyncFetcher
->>> # Basic GET
->>> page = await AsyncFetcher.get('https://example.com')
->>> page = await AsyncFetcher.get('https://scrapling.requestcatcher.com/get', stealthy_headers=True, follow_redirects=True)
->>> page = await AsyncFetcher.get('https://scrapling.requestcatcher.com/get', proxy='http://username:password@localhost:8030')
->>> # With parameters
->>> page = await AsyncFetcher.get('https://example.com/search', params={'q': 'query'})
->>>
->>> # With headers
->>> page = await AsyncFetcher.get('https://example.com', headers={'User-Agent': 'Custom/1.0'})
->>> # Basic HTTP authentication
->>> page = await AsyncFetcher.get("https://example.com", auth=("my_user", "password123"))
->>> # Browser impersonation
->>> page = await AsyncFetcher.get('https://example.com', impersonate='chrome110')
->>> # HTTP/3 support
->>> page = await AsyncFetcher.get('https://example.com', http3=True)
+from scrapling.fetchers import AsyncFetcher
+# Basic GET
+page = await AsyncFetcher.get('https://example.com')
+page = await AsyncFetcher.get('https://scrapling.requestcatcher.com/get', stealthy_headers=True)
+page = await AsyncFetcher.get('https://scrapling.requestcatcher.com/get', proxy='http://username:password@localhost:8030')
+# With parameters
+page = await AsyncFetcher.get('https://example.com/search', params={'q': 'query'})
+
+# With headers
+page = await AsyncFetcher.get('https://example.com', headers={'User-Agent': 'Custom/1.0'})
+# Basic HTTP authentication
+page = await AsyncFetcher.get("https://example.com", auth=("my_user", "password123"))
+# Browser impersonation
+page = await AsyncFetcher.get('https://example.com', impersonate='chrome110')
+# HTTP/3 support
+page = await AsyncFetcher.get('https://example.com', http3=True)
 ```
 The `page` object in all cases is a [Response](choosing.md#response-object) object, which is a [Selector](parsing/main_classes.md#selector), so you can use it directly
 ```python
@@ -102,62 +102,62 @@ The `page` object in all cases is a [Response](choosing.md#response-object) obje
 ```
 #### POST
 ```python
->>> from scrapling.fetchers import Fetcher
->>> # Basic POST
->>> page = Fetcher.post('https://scrapling.requestcatcher.com/post', data={'key': 'value'}, params={'q': 'query'})
->>> page = Fetcher.post('https://scrapling.requestcatcher.com/post', data={'key': 'value'}, stealthy_headers=True, follow_redirects=True)
->>> page = Fetcher.post('https://scrapling.requestcatcher.com/post', data={'key': 'value'}, proxy='http://username:password@localhost:8030', impersonate="chrome")
->>> # Another example of form-encoded data
->>> page = Fetcher.post('https://example.com/submit', data={'username': 'user', 'password': 'pass'}, http3=True)
->>> # JSON data
->>> page = Fetcher.post('https://example.com/api', json={'key': 'value'})
+from scrapling.fetchers import Fetcher
+# Basic POST
+page = Fetcher.post('https://scrapling.requestcatcher.com/post', data={'key': 'value'}, params={'q': 'query'})
+page = Fetcher.post('https://scrapling.requestcatcher.com/post', data={'key': 'value'}, stealthy_headers=True)
+page = Fetcher.post('https://scrapling.requestcatcher.com/post', data={'key': 'value'}, proxy='http://username:password@localhost:8030', impersonate="chrome")
+# Another example of form-encoded data
+page = Fetcher.post('https://example.com/submit', data={'username': 'user', 'password': 'pass'}, http3=True)
+# JSON data
+page = Fetcher.post('https://example.com/api', json={'key': 'value'})
 ```
 And for asynchronous requests, it's a small adjustment
 ```python
->>> from scrapling.fetchers import AsyncFetcher
->>> # Basic POST
->>> page = await AsyncFetcher.post('https://scrapling.requestcatcher.com/post', data={'key': 'value'})
->>> page = await AsyncFetcher.post('https://scrapling.requestcatcher.com/post', data={'key': 'value'}, stealthy_headers=True, follow_redirects=True)
->>> page = await AsyncFetcher.post('https://scrapling.requestcatcher.com/post', data={'key': 'value'}, proxy='http://username:password@localhost:8030', impersonate="chrome")
->>> # Another example of form-encoded data
->>> page = await AsyncFetcher.post('https://example.com/submit', data={'username': 'user', 'password': 'pass'}, http3=True)
->>> # JSON data
->>> page = await AsyncFetcher.post('https://example.com/api', json={'key': 'value'})
+from scrapling.fetchers import AsyncFetcher
+# Basic POST
+page = await AsyncFetcher.post('https://scrapling.requestcatcher.com/post', data={'key': 'value'})
+page = await AsyncFetcher.post('https://scrapling.requestcatcher.com/post', data={'key': 'value'}, stealthy_headers=True)
+page = await AsyncFetcher.post('https://scrapling.requestcatcher.com/post', data={'key': 'value'}, proxy='http://username:password@localhost:8030', impersonate="chrome")
+# Another example of form-encoded data
+page = await AsyncFetcher.post('https://example.com/submit', data={'username': 'user', 'password': 'pass'}, http3=True)
+# JSON data
+page = await AsyncFetcher.post('https://example.com/api', json={'key': 'value'})
 ```
 #### PUT
 ```python
->>> from scrapling.fetchers import Fetcher
->>> # Basic PUT
->>> page = Fetcher.put('https://example.com/update', data={'status': 'updated'})
->>> page = Fetcher.put('https://example.com/update', data={'status': 'updated'}, stealthy_headers=True, follow_redirects=True, impersonate="chrome")
->>> page = Fetcher.put('https://example.com/update', data={'status': 'updated'}, proxy='http://username:password@localhost:8030')
->>> # Another example of form-encoded data
->>> page = Fetcher.put("https://scrapling.requestcatcher.com/put", data={'key': ['value1', 'value2']})
+from scrapling.fetchers import Fetcher
+# Basic PUT
+page = Fetcher.put('https://example.com/update', data={'status': 'updated'})
+page = Fetcher.put('https://example.com/update', data={'status': 'updated'}, stealthy_headers=True, impersonate="chrome")
+page = Fetcher.put('https://example.com/update', data={'status': 'updated'}, proxy='http://username:password@localhost:8030')
+# Another example of form-encoded data
+page = Fetcher.put("https://scrapling.requestcatcher.com/put", data={'key': ['value1', 'value2']})
 ```
 And for asynchronous requests, it's a small adjustment
 ```python
->>> from scrapling.fetchers import AsyncFetcher
->>> # Basic PUT
->>> page = await AsyncFetcher.put('https://example.com/update', data={'status': 'updated'})
->>> page = await AsyncFetcher.put('https://example.com/update', data={'status': 'updated'}, stealthy_headers=True, follow_redirects=True, impersonate="chrome")
->>> page = await AsyncFetcher.put('https://example.com/update', data={'status': 'updated'}, proxy='http://username:password@localhost:8030')
->>> # Another example of form-encoded data
->>> page = await AsyncFetcher.put("https://scrapling.requestcatcher.com/put", data={'key': ['value1', 'value2']})
+from scrapling.fetchers import AsyncFetcher
+# Basic PUT
+page = await AsyncFetcher.put('https://example.com/update', data={'status': 'updated'})
+page = await AsyncFetcher.put('https://example.com/update', data={'status': 'updated'}, stealthy_headers=True, impersonate="chrome")
+page = await AsyncFetcher.put('https://example.com/update', data={'status': 'updated'}, proxy='http://username:password@localhost:8030')
+# Another example of form-encoded data
+page = await AsyncFetcher.put("https://scrapling.requestcatcher.com/put", data={'key': ['value1', 'value2']})
 ```
 
 #### DELETE
 ```python
->>> from scrapling.fetchers import Fetcher
->>> page = Fetcher.delete('https://example.com/resource/123')
->>> page = Fetcher.delete('https://example.com/resource/123', stealthy_headers=True, follow_redirects=True, impersonate="chrome")
->>> page = Fetcher.delete('https://example.com/resource/123', proxy='http://username:password@localhost:8030')
+from scrapling.fetchers import Fetcher
+page = Fetcher.delete('https://example.com/resource/123')
+page = Fetcher.delete('https://example.com/resource/123', stealthy_headers=True, impersonate="chrome")
+page = Fetcher.delete('https://example.com/resource/123', proxy='http://username:password@localhost:8030')
 ```
 And for asynchronous requests, it's a small adjustment
 ```python
->>> from scrapling.fetchers import AsyncFetcher
->>> page = await AsyncFetcher.delete('https://example.com/resource/123')
->>> page = await AsyncFetcher.delete('https://example.com/resource/123', stealthy_headers=True, follow_redirects=True, impersonate="chrome")
->>> page = await AsyncFetcher.delete('https://example.com/resource/123', proxy='http://username:password@localhost:8030')
+from scrapling.fetchers import AsyncFetcher
+page = await AsyncFetcher.delete('https://example.com/resource/123')
+page = await AsyncFetcher.delete('https://example.com/resource/123', stealthy_headers=True, impersonate="chrome")
+page = await AsyncFetcher.delete('https://example.com/resource/123', proxy='http://username:password@localhost:8030')
 ```
 
 ## Session Management
@@ -301,7 +301,7 @@ def scrape_products():
 ```python
 from scrapling.fetchers import Fetcher
 
-page = Fetcher.get('https://raw.githubusercontent.com/D4Vinci/Scrapling/main/images/main_cover.png')
+page = Fetcher.get('https://raw.githubusercontent.com/D4Vinci/Scrapling/main/docs/assets/main_cover.png')
 with open(file='main_cover.png', mode='wb') as f:
    f.write(page.body)
 ```

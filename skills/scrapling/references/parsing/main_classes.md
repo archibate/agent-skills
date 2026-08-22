@@ -131,14 +131,14 @@ Getting the attributes of the element
 ```
 Access a specific attribute with any of the following
 ```python
->>> article.attrib['class']
->>> article.attrib.get('class')
->>> article['class']  # new in v0.3
+article.attrib['class']
+article.attrib.get('class')
+article['class']  # new in v0.3
 ```
 Check if the attributes contain a specific attribute with any of the methods below
 ```python
->>> 'class' in article.attrib
->>> 'class' in article  # new in v0.3
+'class' in article.attrib
+'class' in article  # new in v0.3
 ```
 Get the HTML content of the element
 ```python
@@ -279,13 +279,13 @@ In the [Selector](#selector) class, all methods/properties that should return a 
 Starting with v0.4, all selection methods consistently return [Selector](#selector)/[Selectors](#selectors) objects, even for text nodes and attribute values. Text nodes (selected via `::text`, `/text()`, `::attr()`, `/@attr`) are wrapped in [Selector](#selector) objects. These text node selectors have `tag` set to `"#text"`, and their `text` property returns the text value. You can still access the text value directly, and all other properties return empty/default values gracefully.
 
 ```python
->>> page.css('a::text')              # -> Selectors (of text node Selectors)
->>> page.xpath('//a/text()')         # -> Selectors
->>> page.css('a::text').get()        # -> TextHandler (the first text value)
->>> page.css('a::text').getall()     # -> TextHandlers (all text values)
->>> page.css('a::attr(href)')        # -> Selectors
->>> page.xpath('//a/@href')          # -> Selectors
->>> page.css('.price_color')         # -> Selectors
+page.css('a::text')              # -> Selectors (of text node Selectors)
+page.xpath('//a/text()')         # -> Selectors
+page.css('a::text').get()        # -> TextHandler (the first text value)
+page.css('a::text').getall()     # -> TextHandlers (all text values)
+page.css('a::attr(href)')        # -> Selectors
+page.xpath('//a/@href')          # -> Selectors
+page.css('.price_color')         # -> Selectors
 ```
 
 ### Data extraction methods
@@ -293,7 +293,7 @@ Starting with v0.4, [Selector](#selector) and [Selectors](#selectors) both provi
 
 **On a [Selector](#selector) object:**
 
-- `get()` returns a `TextHandler` — for text node selectors, it returns the text value; for HTML element selectors, it returns the serialized outer HTML.
+- `get()` returns a `TextHandler`: for text node selectors, it returns the text value; for HTML element selectors, it returns the serialized outer HTML.
 - `getall()` returns a `TextHandlers` list containing the single serialized string.
 - `extract_first` is an alias for `get()`, and `extract` is an alias for `getall()`.
 

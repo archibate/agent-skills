@@ -7,7 +7,7 @@
 | `bilibili.com` | `bilibili-api` — fetches video title, description, comments |
 | `youtube.com` / `youtu.be` | `yt-dlp --dump-json --skip-download` for title/description/metadata; `yt-dlp --write-auto-sub --sub-lang en --skip-download` for transcript |
 | `arxiv.org` / `ssrn.com` | `$jina-ai` skill |
-| `mp.weixin.qq.com` (微信公众号) | `$scrapling` skill — `scrapling extract get <url>` works without a browser |
+| `mp.weixin.qq.com` (微信公众号) | `$scrapling` skill — use its bundled launcher with `extract get <url> <output.md> --ai-targeted`; no browser needed |
 | `www.cnblogs.com` (博客园) | Plain defuddle works — server-rendered HTML with the article body inline. For a user's post index: `curl -sL 'https://www.cnblogs.com/<user>/rss'` (Atom feed) |
 | `blog.csdn.net` (CSDN) | `$scrapling` skill — plain `curl` returns a JS-skeleton (content is JS-loaded) and defuddle hits 404 anti-bot. For a summary-only index: `curl -sL 'https://blog.csdn.net/<user>/rss/list'` returns RSS with 摘要 (not full bodies) |
 | `zhihu.com` / `zhuanlan.zhihu.com` (知乎) | `scripts/fetch_zhihu.py <url>` — see `references/zhihu.md` |
