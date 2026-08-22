@@ -245,7 +245,7 @@ jina search "query" && echo "ok" || echo "failed: $?"
 
 | Scenario | Tool |
 |---|---|
-| Read a web page | **`$read-url`** skill |
+| Read a web page | `$read-url` skill |
 | Find STEM papers | `jina search --arxiv` |
 | Find social-science / finance papers | `jina search --ssrn` |
 | Read paper abstract / metadata | `jina read` (`/abs/` URL) |

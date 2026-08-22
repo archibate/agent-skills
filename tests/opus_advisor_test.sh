@@ -45,6 +45,27 @@ assert_arg_value() {
         ' "$1" || fail "expected $2 argument '$3'"
 }
 
+provider_override_names=(
+    CLAUDE_CODE_USE_BEDROCK CLAUDE_CODE_USE_VERTEX CLAUDE_CODE_USE_FOUNDRY
+    CLAUDE_CODE_USE_ANTHROPIC_AWS CLAUDE_CODE_USE_ANTHROPIC_GOOGLE_CLOUD
+    CLAUDE_CODE_USE_MANTLE CLAUDE_CODE_USE_GATEWAY
+    ANTHROPIC_FOUNDRY_RESOURCE ANTHROPIC_VERTEX_PROJECT_ID
+    ANTHROPIC_AWS_WORKSPACE_ID ANTHROPIC_GOOGLE_CLOUD_PROJECT
+    ANTHROPIC_GOOGLE_CLOUD_LOCATION ANTHROPIC_GOOGLE_CLOUD_WORKSPACE_ID
+    CLOUD_ML_REGION ANTHROPIC_BASE_URL _CLAUDE_CODE_ASSUME_FIRST_PARTY_BASE_URL
+    ANTHROPIC_BEDROCK_BASE_URL ANTHROPIC_VERTEX_BASE_URL
+    ANTHROPIC_FOUNDRY_BASE_URL ANTHROPIC_AWS_BASE_URL
+    ANTHROPIC_GOOGLE_CLOUD_BASE_URL ANTHROPIC_BEDROCK_MANTLE_BASE_URL
+    CLAUDE_CODE_ARTIFACTS_API_BASE_URL CLAUDE_CODE_ARTIFACTS_API_TOKEN
+    CLAUDE_CODE_ARTIFACT_ASSET_BASE_URL CLAUDE_CODE_ARTIFACT_LIVE_BASE_URL
+    CLAUDE_CODE_ARTIFACT_VIEWER_BASE_URL CLAUDE_CODE_MEMORY_API_BASE_URL
+    CLAUDE_CODE_MEMORY_API_TOKEN ANTHROPIC_UNIX_SOCKET
+    CLAUDE_CODE_CUSTOM_OAUTH_URL CLAUDE_CODE_API_BASE_URL
+    CLAUDE_CODE_PROXY_URL CLAUDE_CODE_HTTP_PROXY CLAUDE_CODE_HTTPS_PROXY
+    CLAUDE_CODE_PROVIDER_MANAGED_BY_HOST CLAUDE_CODE_HOST_AUTH_ENV_VAR
+    CLAUDE_CODE_HOST_CREDS_FILE
+)
+
 fixture="$TEST_TMP/project"
 mock_bin="$TEST_TMP/bin"
 mkdir -p "$fixture" "$mock_bin"
@@ -57,6 +78,12 @@ set -eu
 printf '%s\n' "$PWD" >"$MOCK_CLAUDE_CWD"
 printf '%s\n' "${TMPDIR:-}" >"$MOCK_CLAUDE_TMPDIR"
 printf '%s\n' "$@" >"$MOCK_CLAUDE_ARGS"
+: >"$MOCK_CLAUDE_PROVIDER_OVERRIDES"
+for provider_override in $MOCK_CLAUDE_PROVIDER_OVERRIDE_NAMES; do
+    if [[ -v $provider_override ]]; then
+        printf '%s\n' "$provider_override" >>"$MOCK_CLAUDE_PROVIDER_OVERRIDES"
+    fi
+done
 
 while [ "$#" -gt 0 ]; do
     if [ "$1" = --settings ]; then
@@ -108,11 +135,18 @@ args_file="$TEST_TMP/args"
 cwd_file="$TEST_TMP/cwd"
 tmpdir_file="$TEST_TMP/tmpdir"
 settings_file="$TEST_TMP/settings"
+provider_overrides_file="$TEST_TMP/provider-overrides"
 export MOCK_CLAUDE_ARGS="$args_file"
 export MOCK_CLAUDE_CWD="$cwd_file"
 export MOCK_CLAUDE_TMPDIR="$tmpdir_file"
 export MOCK_CLAUDE_SETTINGS="$settings_file"
+export MOCK_CLAUDE_PROVIDER_OVERRIDES="$provider_overrides_file"
+export MOCK_CLAUDE_PROVIDER_OVERRIDE_NAMES="${provider_override_names[*]}"
 export SURPRISE_SERVICE_TOKEN=secret-for-denylist-test
+for provider_override in "${provider_override_names[@]}"; do
+    printf -v "$provider_override" 'injected-%s' "$provider_override"
+    export "$provider_override"
+done
 
 printf '1. successful advisory contract\n'
 output=$(
@@ -123,6 +157,7 @@ output=$(
 [ "$output" = 'mock advisory verdict' ] || fail "unexpected launcher output: $output"
 assert_contains "$TEST_TMP/progress.err" 'started mock-opus'
 assert_contains "$TEST_TMP/progress.err" 'using Read'
+[ ! -s "$provider_overrides_file" ] || fail 'Claude inherited an alternate-provider routing override'
 
 for expected in --no-session-persistence --verbose; do
     assert_line "$args_file" "$expected"

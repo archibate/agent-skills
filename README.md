@@ -71,7 +71,7 @@ cd agent-skills
 - Opus 帮 Codex 小审计🧐——`opus-advisor`
 - 面向现代模型的提示词规范🤖——`writing-prompt`
 - 模仿人类不那么严肃的说话风格✍️——`writing-as-human`
-- 阻断浮夸风报告📔——`artifact-restraint`
+- 禁止浮夸风PPT📔——`artifact-restraint`
 
 ## 一键安装 🧰
 

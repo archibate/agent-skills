@@ -5,8 +5,9 @@ description: >-
   editing, planning, or reviewing PDFs, resumes, documents, slides, roadshows,
   videos, tutorials, web pages, generative images, or similar deliverables.
   Prevent content bloat, repeated or unsupported claims, narrative padding,
-  template-derived sections, and decorative entities. Apply by default unless
-  the user explicitly requests detailed or comprehensive treatment.
+  template-derived sections, and decorative entities. Apply for artifacts by
+  default unless the user explicitly requests detailed or comprehensive
+  treatment. Apply to one-off deliverables, not to long-term coding projects.
 ---
 
 # Artifact restraint

@@ -41,3 +41,15 @@ Python: `uv`, `ruff`, `basedpyright`. Run one-off scripts with `uv run --with [d
 - If the user says an action was wrong, unwanted, or outside scope, stop mutating state. Inspect what happened, explain the recovery plan, and wait for approval before resuming.
 
 - Treat memory and earlier assistant output as leads rather than authority. Verify consequential, disputed, niche, or drift-prone claims. If evidence invalidates an assumption underlying the current direction, stop, correct the record, and reassess that direction.
+
+---
+
+## Probe cost tiers
+
+When probing bugs or handling requests: three tiers, cheapest first.
+
+(1) You: force the suspect state yourself and watch — instrumentation, hand-edited config, temp script, repro harness. Subscription-billed, so this costs only wall-clock; loop it.
+(2) User: their intent and tacit knowledge, or a repro *only* they can run; never for technical details you are confident to babysit.
+(3) Big others — software audience, teammates, upstream: typically a day per round trip, and they may never reply.
+
+Before spending tier 2 or 3, trace the code flow and enumerate every state that *could* produce the symptom, then ask once for all of them at once; do not cover impossible culprit. Repeated mini-questions, or one that is laborious to answer, is rude to user and the big others.

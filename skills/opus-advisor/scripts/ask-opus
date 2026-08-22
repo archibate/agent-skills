@@ -172,6 +172,31 @@ advisor_system_prompt=$'You are an independent read-only advisor to Codex. Inspe
 printf -v advisor_prompt 'Mode: %s\nProject root: %s\nScratch directory: %s\n\n%s' \
     "$advisor_mode" "$advisor_root" "$advisor_runtime_dir" "$advisor_request"
 
+advisor_provider_overrides=(
+    ANTHROPIC_FOUNDRY_RESOURCE ANTHROPIC_VERTEX_PROJECT_ID
+    ANTHROPIC_AWS_WORKSPACE_ID
+    ANTHROPIC_GOOGLE_CLOUD_PROJECT ANTHROPIC_GOOGLE_CLOUD_LOCATION
+    ANTHROPIC_GOOGLE_CLOUD_WORKSPACE_ID CLOUD_ML_REGION
+    ANTHROPIC_UNIX_SOCKET CLAUDE_CODE_CUSTOM_OAUTH_URL
+    CLAUDE_CODE_ARTIFACTS_API_TOKEN CLAUDE_CODE_MEMORY_API_TOKEN
+    CLAUDE_CODE_PROVIDER_MANAGED_BY_HOST CLAUDE_CODE_HOST_AUTH_ENV_VAR
+    CLAUDE_CODE_HOST_CREDS_FILE _CLAUDE_CODE_ASSUME_FIRST_PARTY_BASE_URL
+)
+while IFS= read -r advisor_env_name; do
+    case "$advisor_env_name" in
+        ANTHROPIC_*BASE_URL|CLAUDE_CODE_*BASE_URL|CLAUDE_CODE_USE_*|CLAUDE_CODE_*PROXY*)
+            advisor_provider_overrides+=("$advisor_env_name")
+            ;;
+    esac
+done < <(compgen -e)
+for advisor_provider_override in "${advisor_provider_overrides[@]}"; do
+    if ! unset -v "$advisor_provider_override" || [[ -v $advisor_provider_override ]]; then
+        printf 'opus-advisor: cannot clear provider routing override: %s\n' \
+            "$advisor_provider_override" >&2
+        exit 2
+    fi
+done
+
 cd "$advisor_runtime_dir"
 export TMPDIR="$advisor_runtime_dir"
 mkfifo "$advisor_stream_pipe"

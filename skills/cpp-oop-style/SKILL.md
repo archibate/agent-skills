@@ -747,6 +747,9 @@ runtime (every linked translation unit must match).
 
 You MUST proactively load these when the task touches their area:
 
+- `references/decoupled-modules.md` — definite computation vs tacit I/O or GUI
+  boundaries, interface seams, agent-operable harnesses, and integration gates.
+  Load me before decomposing a new C++ project or multi-module architecture.
 - `references/ownership-lifetime.md` — no raw `new`, smart pointers vs `vector`,
   references vs pointers, RAII for C resources, the rule of five, dangling
   temporaries. Load me before smart pointers, or resource management design.

@@ -46,6 +46,16 @@ Progress is streamed to stderr; stdout contains only the final advisory report.
 Host-wide reads can expose source and system files to Claude. Do not invoke the advisor where that visibility to the model provider is unacceptable.
 Any tool permission denial invalidates the advisory call; the launcher fails closed instead of returning a partial report.
 
+External disclosure must be authorized by the active execution policy or the
+user; this skill does not grant that approval. When official Anthropic services
+are an approved recipient, this resolved launcher is a subset of that
+provider-level trust. Keep secrets out of the request text and do not direct
+Opus to credential stores: the launcher clears alternate-provider and custom
+endpoint routing, denies credential environment variables to sandboxed tools,
+but does not restrict file reads. It retains standard proxy and TLS environment
+settings needed for host connectivity; those settings remain part of the
+disclosure boundary.
+
 Give Opus:
 
 - the goal and success criteria;
