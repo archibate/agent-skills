@@ -722,17 +722,16 @@ async function getOrStartHub() {
 
   const wsUrl = getWsUrl();
   const endpoint = getEndpoint(wsUrl);
-  if (process.env.CODEX_SANDBOX_NETWORK_DISABLED === '1') {
-    throw new Error(
-      `Chrome CDP cannot reach ${endpoint.label} because this Codex process is running ` +
-      'with network access disabled (CODEX_SANDBOX_NETWORK_DISABLED=1). ' +
-      'Re-run this command outside the sandbox; do not ask the user to click Chrome "Allow".'
-    );
-  }
-
   try {
     await probeTcpEndpoint(wsUrl);
   } catch (error) {
+    if (process.env.CODEX_SANDBOX_NETWORK_DISABLED === '1') {
+      throw new Error(
+        `Chrome CDP cannot reach ${endpoint.label}; the TCP attempt failed with ` +
+        `${formatNetworkError(error)}. This Codex process is running with network access ` +
+        'disabled. Re-run this command outside the sandbox.'
+      );
+    }
     throw new Error(
       `Cannot reach Chrome DevTools at ${endpoint.label} (${formatNetworkError(error)}). ` +
       'The browser may be closed, remote debugging may be off, or DevToolsActivePort may be stale. ' +

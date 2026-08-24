@@ -24,4 +24,5 @@ Use the `jina` CLI for Jina AI APIs. Load only the references required by the ta
 | Condition | Read before acting |
 |---|---|
 | Install or configure the CLI; compose pipes or parallel batches; parse JSON; handle exit codes; inspect session context | [CLI operations](references/cli-operations.md) |
+| Jina network failure | Jina requires outbound HTTPS to `https://jina.ai`, run `jina` out of sandbox. Check `https://status.jina.ai/api/v2/status.json` if issue persists |
 | A task spans multiple rows | Read each matching page and skip unrelated references |

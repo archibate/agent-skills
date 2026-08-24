@@ -122,6 +122,12 @@ case "${MOCK_CLAUDE_BEHAVIOR:-success}" in
             '{"type":"result","is_error":true,"subtype":"success","permission_denials":[],"result":"API Error: Connection refused — a firewall or proxy may be blocking it (ConnectionRefused)"}'
         exit 1
         ;;
+    server_overload)
+        printf '%s\n' \
+            '{"type":"system","subtype":"init","model":"mock-opus"}' \
+            '{"type":"result","is_error":true,"subtype":"success","permission_denials":[],"result":"API Error: 529 Overloaded — server-side issue"}'
+        exit 1
+        ;;
     fail) exit 7 ;;
     hang)
         trap 'exit 143' TERM
@@ -151,7 +157,8 @@ done
 printf '1. successful advisory contract\n'
 output=$(
     cd "$fixture"
-    PATH="$mock_bin:$PATH" "$ROOT/skills/opus-advisor/scripts/ask-opus" review \
+    CODEX_SANDBOX_NETWORK_DISABLED=1 PATH="$mock_bin:$PATH" \
+        "$ROOT/skills/opus-advisor/scripts/ask-opus" review \
         'Inspect the fixture and return a verdict.' 2>"$TEST_TMP/progress.err"
 )
 [ "$output" = 'mock advisory verdict' ] || fail "unexpected launcher output: $output"
@@ -249,7 +256,7 @@ assert_contains "$TEST_TMP/failure.err" 'Claude exited with status 7'
 
 printf '6. actionable network failure\n'
 set +e
-MOCK_CLAUDE_BEHAVIOR=network_fail PATH="$mock_bin:$PATH" \
+CODEX_SANDBOX_NETWORK_DISABLED=1 MOCK_CLAUDE_BEHAVIOR=network_fail PATH="$mock_bin:$PATH" \
     "$ROOT/skills/opus-advisor/scripts/ask-opus" consult test \
     >"$TEST_TMP/network.out" 2>"$TEST_TMP/network.err"
 status=$?
@@ -257,12 +264,39 @@ set -e
 [ "$status" -eq 1 ] || fail "network failure returned $status"
 [ ! -s "$TEST_TMP/network.out" ] || fail 'network failure wrote an advisory result'
 assert_contains "$TEST_TMP/network.err" 'Claude error: API Error:'
-assert_contains "$TEST_TMP/network.err" 'Run ask-opus outside any active Codex sandbox'
+assert_contains "$TEST_TMP/network.err" 'sandbox may have blocked the Claude connection'
+assert_contains "$TEST_TMP/network.err" 'required outbound service:'
+assert_contains "$TEST_TMP/network.err" 'network justification:'
+assert_contains "$TEST_TMP/network.err" 'Re-run ask-opus outside the active Codex sandbox'
 assert_contains "$TEST_TMP/network.err" 'Claude exited with status 1'
 scratch=$(cat "$cwd_file")
 [ ! -e "$scratch" ] || fail 'scratch directory survived a network failure'
 
-printf '7. permission denial propagation\n'
+printf '7. unmarked network failure preserves provider error\n'
+set +e
+env -u CODEX_SANDBOX_NETWORK_DISABLED MOCK_CLAUDE_BEHAVIOR=network_fail PATH="$mock_bin:$PATH" \
+    "$ROOT/skills/opus-advisor/scripts/ask-opus" consult test \
+    >"$TEST_TMP/unmarked-network.out" 2>"$TEST_TMP/unmarked-network.err"
+status=$?
+set -e
+[ "$status" -eq 1 ] || fail "unmarked network failure returned $status"
+assert_contains "$TEST_TMP/unmarked-network.err" 'Claude error: API Error:'
+assert_not_contains "$TEST_TMP/unmarked-network.err" 'Codex sandbox'
+assert_not_contains "$TEST_TMP/unmarked-network.err" 'network justification:'
+
+printf '8. server overload is not a sandbox failure\n'
+set +e
+CODEX_SANDBOX_NETWORK_DISABLED=1 MOCK_CLAUDE_BEHAVIOR=server_overload PATH="$mock_bin:$PATH" \
+    "$ROOT/skills/opus-advisor/scripts/ask-opus" consult test \
+    >"$TEST_TMP/overload.out" 2>"$TEST_TMP/overload.err"
+status=$?
+set -e
+[ "$status" -eq 1 ] || fail "server overload returned $status"
+assert_contains "$TEST_TMP/overload.err" '529 Overloaded'
+assert_not_contains "$TEST_TMP/overload.err" 'Codex sandbox'
+assert_not_contains "$TEST_TMP/overload.err" 'network justification:'
+
+printf '9. permission denial propagation\n'
 set +e
 MOCK_CLAUDE_BEHAVIOR=denied PATH="$mock_bin:$PATH" \
     "$ROOT/skills/opus-advisor/scripts/ask-opus" review test \
@@ -272,7 +306,7 @@ set -e
 [ "$status" -eq 1 ] || fail "permission denial returned $status"
 assert_contains "$TEST_TMP/denied.err" 'permission_denials=["Read(/blocked)"]'
 
-printf '8. missing result event\n'
+printf '10. missing result event\n'
 set +e
 MOCK_CLAUDE_BEHAVIOR=noresult PATH="$mock_bin:$PATH" \
     "$ROOT/skills/opus-advisor/scripts/ask-opus" review test \
@@ -282,13 +316,13 @@ set -e
 [ "$status" -eq 1 ] || fail "missing result returned $status"
 assert_contains "$TEST_TMP/noresult.err" 'invalid Claude response stream'
 
-printf '9. nonnumeric progress is inert\n'
+printf '11. nonnumeric progress is inert\n'
 malicious_marker="$TEST_TMP/arithmetic-injection"
 MOCK_CLAUDE_BEHAVIOR=malicious MOCK_CLAUDE_MARKER="$malicious_marker" PATH="$mock_bin:$PATH" \
     "$ROOT/skills/opus-advisor/scripts/ask-opus" review test >/dev/null 2>"$TEST_TMP/malicious.err"
 [ ! -e "$malicious_marker" ] || fail 'stream progress executed arithmetic input'
 
-printf '10. empty result rejection\n'
+printf '12. empty result rejection\n'
 set +e
 MOCK_CLAUDE_BEHAVIOR=emptyresult PATH="$mock_bin:$PATH" \
     "$ROOT/skills/opus-advisor/scripts/ask-opus" review test \
@@ -298,7 +332,7 @@ set -e
 [ "$status" -eq 1 ] || fail "empty result returned $status"
 assert_contains "$TEST_TMP/empty.err" 'invalid Claude response'
 
-printf '11. numeric progress guard\n'
+printf '13. numeric progress guard\n'
 output=$(MOCK_CLAUDE_BEHAVIOR=numeric_edge PATH="$mock_bin:$PATH" \
     "$ROOT/skills/opus-advisor/scripts/ask-opus" review test 2>"$TEST_TMP/numeric.err")
 [ "$output" = safe ] || fail "numeric edge returned unexpected output: $output"

@@ -285,8 +285,13 @@ if (( advisor_status != 0 )); then
             *"Can't reach the API server"*|*"Connection refused"*|*"No internet route"*|\
                 *"Couldn't connect through your proxy"*|*"Unable to connect to API"*|\
                 *FailedToOpenSocket*|*ECONNREFUSED*|*ConnectionRefused*)
-                printf '%s\n' \
-                    'opus-advisor: Run ask-opus outside any active Codex sandbox so the Claude CLI can reach the API or configured proxy.' >&2
+                if [[ ${CODEX_SANDBOX_NETWORK_DISABLED:-} == 1 ]]; then
+                    printf '%s\n' \
+                        'opus-advisor: CODEX_SANDBOX_NETWORK_DISABLED=1 is set; the Codex sandbox may have blocked the Claude connection.' \
+                        'opus-advisor: required outbound service: official Anthropic Claude API via the configured proxy and TLS settings' \
+                        'opus-advisor: network justification: consult a read-only Claude Opus advisor; sends the request and project files the advisor reads to official Anthropic services' \
+                        'opus-advisor: Re-run ask-opus outside the active Codex sandbox.' >&2
+                fi
                 ;;
         esac
     fi

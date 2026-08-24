@@ -74,7 +74,7 @@ Size balancing: important or information-dense instructions justify a long top-l
 
 Reserve a negative hedge for cases in which the negative branch is relevant or would be a common mistake unless stated explicitly. For example:
 
-`Use chicken, not frog` is typically unjustified. A model would not think of "frog" anyway. In fact, mentioning "frog" in the context can counterintuitively increase the risk of using it because of context anchoring, especially for weaker models (from roughly 0% to 1%).
+`Use chicken, not frog` is typically unjustified. A model would not think of "frog" anyway. In fact, mentioning "frog" in the context can counterintuitively increase the risk of using it because of context anchoring, especially for weaker models.
 
 `Use chicken, not chick` is typically justified. This clearly requires a mature chicken, which is what we want; the negative branch catches the model *before* it uses "chick," which would be wrong.
 

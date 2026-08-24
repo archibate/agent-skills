@@ -423,6 +423,42 @@ compiler is your reviewer.
 - **Reserve `mutable` only for logical constness**, such as a cache or mutex that
   does not change the observable value. Never for hiding ordinary state changes.
 
+## Signature clarity
+
+Function signatures should be self-explained. An interface should convey its expected behavior from its declaration. A function should explain its purpose solely from name and types without ambiguity.
+
+**Why:** when writing code, reading the header can explains the expected behavior for most trivial functions.
+
+Use a name telling full story e.g. `Process::isRunning()` instead of `Process::check()`, unless the class already locks the context e.g. `OutOfOrderChecker::check()`.
+
+Avoid ambiguious function and class names, rename them immediately once you flag one.
+
+**Why:** a confusing interface name may confuse future agents to risk misuse them.
+
+When there are ambiguity of generic type in argument, define and use type-rich classes `sleep(Duration const &)`, `findByName(Name const &)`.
+
+When there are multiple argument whose order and meaning are ambiguious, use `fill(Rect const &)` and invoke with `Rect{...}`.
+
+**Why:** saves future agent from drifting type semantics during refactor.
+
+## Duty class
+
+Keep class interface small and neat, alert god-class tendency. When a class is piling too many methods and can be classified, consider breakdown heavy duty cluster into duty class.
+
+E.g. `std::unique_ptr<Painter> Canvas::getPainter()` + `Painter::fill(Path const &, Brush const &)` + `Painter::stroke(Path const &, Pen const &)`. Here `Painter` can be another abstract class, and `Canvas` implements `Paintable` which requires `Paintable::getPainter()`. `Canvas.cpp` can implement that as `CanvasPainter` privately using anonymous namespace (a typical implementation can holds a `Canvas *` pointer). This keeps the `Canvas` interface stay focused, also reserve for future `Paintable` implementations.
+
+**Why:** programmers and LLMs works better when knowledge is progressively disclosed. Reading a god-class floods context by side-cars unrelevant to the goal. So keep interface small and hierarchy to avoid dilution.
+
+## Don't repeat yourself
+
+When there are more than 2~3 paths sharing common pattern or concept: extract into abstracted class. E.g. `Path` for `Line`, `Arc`, `Bezier`; `Brush` for `Color`, `Gradient`; saves `fill()` from combination hell.
+
+Two approaches to abstraction:
+- Potentially vast expansion in future -> **Dynamic polymorphism**: `Path` as abstract class; pointer semantics; pass as `Path const &` (or `Path *` if mutable); return and store as `std::unique_ptr<Path>`.
+- Fixed types, likely won't expand -> **Static polymorphism**: `Brush` as a data-class wrapped `std::variant`; value semantics; pass as `Brush const &`; return and store as `Brush`.
+
+Avoid using function overload and templates for polymorphism unless the context is metaprogramming or performance.
+
 ## Boolean expression style
 
 Prefer the C++ alternative operator tokens `not`, `and`, and `or` in

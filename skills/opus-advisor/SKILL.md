@@ -32,11 +32,12 @@ Run the launcher from the project under review:
 <skill-directory>/scripts/ask-opus <consult|review|gate> '<request>'
 ```
 
-Run `ask-opus` outside any active Codex sandbox; request escalated execution for
-the launcher command. Outer escalation lets the Claude CLI use the host network
-and configured proxy. It does not replace or relax the launcher's own read-only
-sandbox for Opus tools. If policy denies outer escalation, report the advisor as
-unavailable.
+Run `ask-opus` under the current execution policy. If the launcher reaches a
+real connection failure and reports a network justification, retry it outside
+the active Codex sandbox with escalated execution. Outer escalation lets the
+Claude CLI use the host network and configured proxy; it does not replace or
+relax the launcher's own read-only sandbox for Opus tools. If policy denies the
+required retry, report the advisor as unavailable.
 
 Resolve `<skill-directory>` from this loaded `SKILL.md`; do not assume the skill is inside the current project.
 

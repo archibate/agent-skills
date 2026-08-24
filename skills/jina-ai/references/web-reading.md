@@ -21,4 +21,5 @@ jina datetime https://example.com/article
 
 | Scenario | Tool |
 |---|---|
-| Read a web page | `jina read`; use the `$read-url` skill if it does not work |
+| Read a web page | `jina read` |
+| Jina unreachable or content incomplete | `$read-url` skill |

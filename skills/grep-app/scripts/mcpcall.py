@@ -1,7 +1,7 @@
 #!/usr/bin/env -S uv run --script
 # /// script
 # requires-python = ">=3.10"
-# dependencies = ["mcp>=2,<3", "anyio"]
+# dependencies = ["mcp>=2,<3", "anyio", "httpx2"]
 # ///
 """grep.app MCP tool caller.
 
@@ -10,6 +10,7 @@ Usage:
     mcpcall.py searchGitHub query:"CORS(" matchCase:true --args '{"language":["Python"]}'
     mcpcall.py --list
 """
+
 import argparse
 import json
 import os
@@ -17,23 +18,63 @@ import sys
 from functools import partial
 
 import anyio
-
+import httpx2
 from mcp.client.session import ClientSession
 from mcp.client.streamable_http import streamable_http_client
 
 SERVER_URL = "https://mcp.grep.app"
 
+CONNECTION_FAILURES = (
+    httpx2.ConnectError,
+    httpx2.ConnectTimeout,
+    httpx2.ProxyError,
+)
 
-def check_sandbox_network() -> None:
-    if os.environ.get("CODEX_SANDBOX_NETWORK_DISABLED") != "1":
-        return
-    print("error: network access is disabled by the Codex sandbox", file=sys.stderr)
+
+def find_connection_failure(error: BaseException) -> httpx2.TransportError | None:
+    pending = [error]
+    seen: set[int] = set()
+    while pending:
+        current = pending.pop()
+        if id(current) in seen:
+            continue
+        seen.add(id(current))
+        if isinstance(current, CONNECTION_FAILURES):
+            return current
+        nested = getattr(current, "exceptions", ())
+        if isinstance(nested, tuple):
+            pending.extend(nested)
+        if current.__cause__ is not None:
+            pending.append(current.__cause__)
+        if current.__context__ is not None:
+            pending.append(current.__context__)
+    return None
+
+
+def run_with_network_diagnostic(async_fn):
+    try:
+        return anyio.run(async_fn, backend="asyncio")
+    except Exception as error:
+        if os.environ.get("CODEX_SANDBOX_NETWORK_DISABLED") != "1":
+            raise
+        connection_failure = find_connection_failure(error)
+        if connection_failure is None:
+            raise
+    print(
+        f"error: failed to connect to grep.app MCP: {connection_failure}",
+        file=sys.stderr,
+    )
+    print(
+        "  sandbox indicator: CODEX_SANDBOX_NETWORK_DISABLED=1; "
+        "the Codex sandbox may have blocked this connection",
+        file=sys.stderr,
+    )
     print(f"  required outbound HTTPS: {SERVER_URL}", file=sys.stderr)
     print(
         "  network justification: query grep.app MCP for public code search",
         file=sys.stderr,
     )
-    sys.exit(1)
+    raise SystemExit(1) from None
 
 
 def parse_kv_args(args: list[str]) -> dict:
@@ -91,18 +132,15 @@ def main():
     parser.add_argument("--list", action="store_true", help="List available tools")
     args = parser.parse_args()
 
-    if args.list or args.tool:
-        check_sandbox_network()
-
     if args.list:
-        anyio.run(list_tools, backend="asyncio")
+        run_with_network_diagnostic(list_tools)
     elif args.tool:
         arguments = {}
         if args.kv_args:
             arguments.update(parse_kv_args(args.kv_args))
         if args.json_args:
             arguments.update(json.loads(args.json_args))
-        is_error = anyio.run(partial(call_tool, args.tool, arguments), backend="asyncio")
+        is_error = run_with_network_diagnostic(partial(call_tool, args.tool, arguments))
         if is_error:
             sys.exit(1)
     else:

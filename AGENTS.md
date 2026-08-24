@@ -5,10 +5,12 @@
 Modern CLI tools available:
 
 - `rg` not `grep` · `fd` not `find` · `exa` not `ls` · `sd` not `sed`
-- `just` not `make` · `uv` not `pip` · `uv run` not `python3` · `pnpm` not `npm`
+- `just` not `make` · `uv` not `pip` · `uv run` not `python3`
 - `sqlite3` · `hyperfine` · `rsync` · `gh`
 
 Python: `uv`, `ruff`, `basedpyright`. Run one-off scripts with `uv run --with [deps]`. Run tools with `uvx`. Avoid polluting system python with raw `pip`.
+
+Node.js: `npx -y` instead of `npm i -g`.
 
 ---
 

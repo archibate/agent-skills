@@ -156,14 +156,15 @@ async function unusedPort() {
 }
 
 async function sandboxDiagnostic() {
-  const { env } = makeCase('sandbox', 9222);
+  const port = await unusedPort();
+  const { env } = makeCase('sandbox', port);
   env.CODEX_SANDBOX_NETWORK_DISABLED = '1';
   const result = await runCdp(env);
   const context = JSON.stringify(result);
   assert.equal(result.status, 1);
   assert.match(result.stderr, /network access disabled/, context);
   assert.match(result.stderr, /outside the sandbox/, context);
-  assert.match(result.stderr, /do not ask the user to click Chrome "Allow"/, context);
+  assert.match(result.stderr, /TCP attempt failed/, context);
 }
 
 async function tcpRefusalDiagnostic() {
@@ -194,16 +195,21 @@ async function websocketRejectionDiagnostic() {
   assert.doesNotMatch(result.stderr, /did you click Allow/);
 }
 
-async function successfulHubStartup() {
+async function successfulHubStartup(caseName = 'success', sandboxMarker = false) {
   const sockets = new Set();
   const server = createFakeCdpServer(sockets);
   const port = await listen(server);
-  const { env } = makeCase('success', port);
+  const { env } = makeCase(caseName, port);
+  if (sandboxMarker) env.CODEX_SANDBOX_NETWORK_DISABLED = '1';
   const result = await runCdp(env);
   await closeServer(server, sockets);
   assert.equal(result.status, 0, JSON.stringify(result));
   assert.equal(result.stdout, '\n');
   assert.equal(result.stderr, '');
+}
+
+async function sandboxMarkerAllowsReachableEndpoint() {
+  await successfulHubStartup('sandbox-success', true);
 }
 
 async function pendingAllowDiagnostic() {
@@ -227,6 +233,7 @@ const cases = [
   ['TCP refusal diagnostic', tcpRefusalDiagnostic],
   ['WebSocket rejection diagnostic', websocketRejectionDiagnostic],
   ['successful Hub startup', successfulHubStartup],
+  ['sandbox marker allows reachable endpoint', sandboxMarkerAllowsReachableEndpoint],
   ['pending Allow diagnostic', pendingAllowDiagnostic],
 ];
 

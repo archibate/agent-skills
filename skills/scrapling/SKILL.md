@@ -3,8 +3,8 @@ name: scrapling
 description: >
   Scrape, crawl, or extract data from websites using Scrapling — anti-bot bypass
   (Cloudflare Turnstile), stealth headless, spiders, adaptive scraping, JS rendering.
-  Use when WebFetch or curl fails due to anti-bot protections or JS rendering. Also use
-  when writing web spiders — prefer this over BeautifulSoup.
+  Use when WebFetch or curl fails due to anti-bot protections or JavaScript shell.
+  Also use when writing web spiders — prefer this over BeautifulSoup.
 license: "BSD-3-Clause; see LICENSE.txt"
 metadata:
   version: 0.4.14
