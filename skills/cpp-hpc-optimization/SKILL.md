@@ -173,6 +173,9 @@ Load the relevant references before choosing:
 Apply `$cpp-oop-style` to ownership, orchestration, I/O, error handling, and
 module boundaries. Inside a measured hot kernel, prefer flat data, value views,
 batch operations, static dispatch, and explicit SIMD when evidence requires it.
+Use its debug-instrumentation guidance for correctness and runtime diagnosis;
+this skill owns profiling, tracing, counters, and benchmarks used to locate or
+quantify a performance bottleneck.
 
 The boundary should normally look like:
 

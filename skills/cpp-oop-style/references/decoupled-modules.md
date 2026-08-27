@@ -60,6 +60,15 @@ The harness must:
   and rerun it during diagnosis; and
 - make external side effects and their targets explicit.
 
+When diagnosis starts repeating instrument/rebuild/observe cycles, read
+`debug-harnesses.md` and replace further source-edit round trips with the
+smallest useful harness, REPL, or batched runner.
+
+When requirements already include customer-side diagnosis, live calibration, or
+costly integrated startup, read `debug-harnesses.md` and design the persistent
+module-owned control seam while decomposing the module. Build only the adapters
+required by concrete development and support workflows.
+
 Automated tests may still lock the definite invariants of a tacit module, but
 they do not replace interactive exploration. Do not freeze the implementation's
 current output as an expected result when the correct result itself requires

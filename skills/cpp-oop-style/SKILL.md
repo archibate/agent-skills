@@ -61,7 +61,7 @@ Everything else is behavior behind an interface, or data in a struct.
 | `int parseInt()` returning `-1` on failure | `optional<int> parseInt()` |
 | `enum Mode` + `switch` dispatch | inject a strategy / functor, or a state class |
 | `pair<bool, It>` / `tuple<...>` returns | named result struct |
-| `const T&`, `const T*` | East const: `T const &`, `T const *` |
+| `const T& x`, `const T* p` | East const: `T const &x`, `T const *p` |
 
 ## Named anti-patterns (real smells this overrides)
 
@@ -443,7 +443,7 @@ When there are multiple argument whose order and meaning are ambiguious, use `fi
 
 ## Duty class
 
-Keep class interface small and neat, alert god-class tendency. When a class is piling too many methods and can be classified, consider breakdown heavy duty cluster into duty class.
+Keep class interface small and orthogonal. Alert god-class tendency. When a class is piling too many methods and can be classified into orthogonal categories, consider breakdown heavy duty cluster into duty class.
 
 E.g. `std::unique_ptr<Painter> Canvas::getPainter()` + `Painter::fill(Path const &, Brush const &)` + `Painter::stroke(Path const &, Pen const &)`. Here `Painter` can be another abstract class, and `Canvas` implements `Paintable` which requires `Paintable::getPainter()`. `Canvas.cpp` can implement that as `CanvasPainter` privately using anonymous namespace (a typical implementation can holds a `Canvas *` pointer). This keeps the `Canvas` interface stay focused, also reserve for future `Paintable` implementations.
 
@@ -726,10 +726,10 @@ This is a style for code that must live and change. Don't weaponize it:
   inner loop it is even fine to drop OOP entirely — raw intrinsics, free
   functions, value-semantic SIMD wrappers — provided every such kernel is paired
   with a reference-checked test and a benchmark. Performance you can't measure is
-  not a reason to abandon the style.
+  not a reason to abandon the style. (See `$cpp-hpc-optimization`.)
 - **`shared_ptr` vs `unique_ptr`:** prefer a single clear owner (`unique_ptr`,
-  or a process-lifetime raw owning pointer for singletons); reach for
-  `shared_ptr` only when ownership is genuinely shared.
+  or a process-lifetime raw owning pointer for singletons); reach for `shared_ptr`
+  only when ownership is genuinely shared.
 
 ## Exemplar libraries — good API to imitate
 
@@ -786,6 +786,13 @@ You MUST proactively load these when the task touches their area:
 - `references/decoupled-modules.md` — definite computation vs tacit I/O or GUI
   boundaries, interface seams, agent-operable harnesses, and integration gates.
   Load me before decomposing a new C++ project or multi-module architecture.
+- `references/debug-instrumentation.md` — discriminating state capture, mature
+  logging backends, stable instrument keys, JSONL, and bounded hot-path probes.
+  Load me before adding or structuring temporary diagnostic logs.
+- `references/debug-harnesses.md` — minimal harnesses, application or GDB REPLs,
+  durable developer surfaces, customer diagnostics, live calibration, and fast
+  diagnostic builds. Load me when debugging needs controllable execution or when
+  designing persistent development and support controls.
 - `references/ownership-lifetime.md` — no raw `new`, smart pointers vs `vector`,
   references vs pointers, RAII for C resources, the rule of five, dangling
   temporaries. Load me before smart pointers, or resource management design.
