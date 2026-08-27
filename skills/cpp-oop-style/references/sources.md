@@ -12,7 +12,10 @@ The main source is <https://github.com/parallel101/cppguidebook>, especially
 
 The companion <https://github.com/parallel101/course> material covers the
 `design`, `stl`, and `cmake` sessions, including singleton, get/set, type
-erasure, and move semantics.
+erasure, and move semantics. The CMake-first project guidance comes specifically
+from course `01` (CMake foundations), `11` (modern CMake), and `16` (modular
+CMake project management), including their `slides.pptx` decks and numbered
+`CMakeLists.txt` examples.
 
 ## Exemplar code
 

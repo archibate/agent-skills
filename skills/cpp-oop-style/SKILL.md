@@ -6,8 +6,10 @@ description: >-
   refactoring, or reviewing C++ code (.cpp / .h / .hpp / .cc / .cxx), designing
   C++ classes, interfaces, APIs, or libraries, or when the user mentions C++
   design, OOP, design patterns, dependency injection, RAII, or "clean / modern
-  C++". Apply it even when the user does not explicitly ask for a style: the
-  default way models write C++ leans on free functions, public mutable state,
+  C++". Also use it for CMake-first C++ project layout, module targets, usage
+  requirements, and dependency wiring. Apply it even when the user does not
+  explicitly ask for a style: the default way models write C++ leans on free
+  functions, public mutable state,
   raw new/delete, sentinel return codes, and long loose parameter lists — this
   skill replaces all of that with abstract-class-or-data-class design,
   dependency injection, type-rich APIs, value-based error handling, and RAII
@@ -328,6 +330,28 @@ for subsystems that are truly one-per-process.
 - **Collaborators are borrowed, not owned.** Pass dependencies as raw interface
   pointers (`Dep *`) or references; the injectee never owns its collaborators.
   Ownership lives in the composition root. (See `references/ownership-lifetime.md`.)
+
+## CMake-first project structure
+
+- **Make the target graph mirror the module graph.** Give each architectural
+  module its own directory, `CMakeLists.txt`, and library target; let executable
+  targets be composition roots that link those modules.
+- **Keep public structure explicit.** Put exported headers under
+  `include/<module>/`, implementations under `src/`, include them as
+  `<module/Foo.h>`, and use the module name as the C++ namespace.
+- **Attach requirements to the target that owns them.** Sources, include paths,
+  definitions, options, and dependencies use `target_*`; choose `PRIVATE`,
+  `PUBLIC`, or `INTERFACE` from whether consumers need the requirement.
+- **Prefer an `OBJECT` library for an internal module folded into final products
+  in one build tree.** Multiple in-tree apps, tests, or probes do not require an
+  archive. Use `STATIC` or `SHARED` when the library is itself a deliberate
+  archive, runtime, ABI, installation, or deployment boundary.
+- **Wire third-party code through imported targets.** Prefer
+  `find_package(... CONFIG ...)` and `Package::component`; keep machine-specific
+  package locations in configure-time cache inputs rather than project files.
+
+Read `references/cmake-first-projects.md` before creating or restructuring a
+CMake C++ project, changing module targets, or deciding dependency visibility.
 
 ## Type-rich data classes
 
@@ -786,6 +810,10 @@ You MUST proactively load these when the task touches their area:
 - `references/decoupled-modules.md` — definite computation vs tacit I/O or GUI
   boundaries, interface seams, agent-operable harnesses, and integration gates.
   Load me before decomposing a new C++ project or multi-module architecture.
+- `references/cmake-first-projects.md` — course-derived CMake-first directory
+  layout, target kinds, usage requirements, source discovery, third-party
+  dependencies, and embeddable subprojects. Load me before creating or
+  restructuring CMake C++ targets or dependency wiring.
 - `references/debug-instrumentation.md` — discriminating state capture, mature
   logging backends, stable instrument keys, JSONL, and bounded hot-path probes.
   Load me before adding or structuring temporary diagnostic logs.
