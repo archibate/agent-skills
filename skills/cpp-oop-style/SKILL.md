@@ -7,9 +7,10 @@ description: >-
   C++ classes, interfaces, APIs, or libraries, or when the user mentions C++
   design, OOP, design patterns, dependency injection, RAII, or "clean / modern
   C++". Also use it for CMake-first C++ project layout, module targets, usage
-  requirements, and dependency wiring. Apply it even when the user does not
-  explicitly ask for a style: the default way models write C++ leans on free
-  functions, public mutable state,
+  requirements, third-party dependency acquisition and integration, binary ABI
+  compatibility, installation, packaging, and application deployment. Apply it
+  even when the user does not explicitly ask for a style: the default way models
+  write C++ leans on free functions, public mutable state,
   raw new/delete, sentinel return codes, and long loose parameter lists — this
   skill replaces all of that with abstract-class-or-data-class design,
   dependency injection, type-rich APIs, value-based error handling, and RAII
@@ -342,16 +343,36 @@ for subsystems that are truly one-per-process.
 - **Attach requirements to the target that owns them.** Sources, include paths,
   definitions, options, and dependencies use `target_*`; choose `PRIVATE`,
   `PUBLIC`, or `INTERFACE` from whether consumers need the requirement.
+- **Name repeated configuration profiles with CMake Presets.** When developers
+  repeatedly choose among several options, build types, or toolchains, commit a
+  `CMakePresets.json` so configure, build, and test use short named profiles with
+  separate build trees instead of reconstructed `-D...` command lines.
 - **Prefer an `OBJECT` library for an internal module folded into final products
   in one build tree.** Multiple in-tree apps, tests, or probes do not require an
   archive. Use `STATIC` or `SHARED` when the library is itself a deliberate
   archive, runtime, ABI, installation, or deployment boundary.
-- **Wire third-party code through imported targets.** Prefer
-  `find_package(... CONFIG ...)` and `Package::component`; keep machine-specific
-  package locations in configure-time cache inputs rather than project files.
+- **Normalize each third-party dependency to one CMake target.** Prefer an
+  upstream target whether its source is vendored with `add_subdirectory` or
+  discovered as an installed package. Wrap header-only trees, pkg-config data,
+  legacy variables, and raw binary SDKs behind a target instead of scattering
+  include paths and flags across consumers.
+- **Give each logical dependency one provider and version in the final graph.**
+  Resolve diamonds at the composition root; do not let two parents silently
+  embed incompatible copies of the same library.
+- **Choose the delivery contract before adding packaging machinery.** Public
+  libraries and geek-oriented CLI tools get a textbook install target and source
+  archive; end-user applications get a dedicated artifact pipeline; pybind11
+  extensions are installed into a Python wheel staging tree.
 
 Read `references/cmake-first-projects.md` before creating or restructuring a
 CMake C++ project, changing module targets, or deciding dependency visibility.
+For acquiring, building, finding, vendoring, or wrapping a third-party library,
+or for diagnosing a binary dependency ABI mismatch, read
+`references/dependencies/router.md` first.
+For any install, package, release archive, portable bundle, AppImage, native
+installer, or Python-extension distribution task, read
+`references/deployment/router.md` first. It routes further by deliverable type
+and distribution scope.
 
 ## Type-rich data classes
 
@@ -811,9 +832,17 @@ You MUST proactively load these when the task touches their area:
   boundaries, interface seams, agent-operable harnesses, and integration gates.
   Load me before decomposing a new C++ project or multi-module architecture.
 - `references/cmake-first-projects.md` — course-derived CMake-first directory
-  layout, target kinds, usage requirements, source discovery, third-party
-  dependencies, and embeddable subprojects. Load me before creating or
-  restructuring CMake C++ targets or dependency wiring.
+  layout, target kinds, usage requirements, named configuration presets, source
+  discovery, third-party dependencies, and embeddable subprojects. Load me
+  before creating or restructuring CMake C++ targets or dependency wiring.
+- `references/dependencies/router.md` — third-party dependency router by source
+  control, package metadata, graph ownership, and ABI risk. Load me first for
+  vendoring, package discovery, manual library integration, binary SDKs,
+  dependency diamonds, or C++ ABI mismatches; then follow the matching leaf.
+- `references/deployment/router.md` — deployment router by deliverable type,
+  audience, and portability scope. Load me first for installation, packaging,
+  release archives, application artifacts, native installers, or Python wheels;
+  then follow only the matching child routes.
 - `references/debug-instrumentation.md` — discriminating state capture, mature
   logging backends, stable instrument keys, JSONL, and bounded hot-path probes.
   Load me before adding or structuring temporary diagnostic logs.

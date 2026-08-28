@@ -60,6 +60,111 @@ cmake -B build
 cmake --build build
 ```
 
+## Name recurring configuration profiles with CMake Presets
+
+Add a tracked `CMakePresets.json` when configuring the project repeatedly
+requires several cache options, build modes, toolchains, generators, or
+environment choices. A preset turns an error-prone command such as
+`cmake -B ... -DCMAKE_BUILD_TYPE=... -DFOO=... -DBAR=...` into a named,
+reviewable project workflow:
+
+```sh
+cmake --preset debug
+cmake --build --preset debug
+ctest --preset debug
+```
+
+Presets do not replace `option()` declarations, target properties, or dependency
+logic in `CMakeLists.txt`. They select supported combinations of those inputs.
+Commit project-wide profiles in `CMakePresets.json`; put personal paths, local
+SDK locations, and machine-specific overrides in ignored
+`CMakeUserPresets.json`. The user file implicitly includes the project file and
+may inherit its presets. Do not commit secrets in either file.
+
+For a single-config generator such as Ninja or Unix Makefiles, give each build
+type its own configure preset and binary tree. A hidden base avoids repetition;
+macros inherited from it are expanded in the selected derived preset, so
+`${presetName}` becomes `debug`, `release`, or `clang-release` here:
+
+```json
+{
+  "version": 3,
+  "cmakeMinimumRequired": {
+    "major": 3,
+    "minor": 21,
+    "patch": 0
+  },
+  "configurePresets": [
+    {
+      "name": "base",
+      "hidden": true,
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build/${presetName}",
+      "cacheVariables": {
+        "CMAKE_EXPORT_COMPILE_COMMANDS": true,
+        "BUILD_TESTING": true
+      }
+    },
+    {
+      "name": "debug",
+      "inherits": "base",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug",
+        "MYPROJECT_ENABLE_TRACING": true
+      }
+    },
+    {
+      "name": "release",
+      "inherits": "base",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "MYPROJECT_ENABLE_TRACING": false
+      }
+    },
+    {
+      "name": "clang-release",
+      "inherits": "release",
+      "toolchainFile": "${sourceDir}/cmake/toolchains/clang.cmake"
+    }
+  ],
+  "buildPresets": [
+    {"name": "debug", "configurePreset": "debug"},
+    {"name": "release", "configurePreset": "release"},
+    {"name": "clang-release", "configurePreset": "clang-release"}
+  ],
+  "testPresets": [
+    {
+      "name": "debug",
+      "configurePreset": "debug",
+      "output": {"outputOnFailure": true}
+    },
+    {
+      "name": "release",
+      "configurePreset": "release",
+      "output": {"outputOnFailure": true}
+    }
+  ]
+}
+```
+
+Replace `MYPROJECT_ENABLE_TRACING` with options the project actually declares.
+Use configure-preset `cacheVariables` for CMake cache inputs, `toolchainFile` for
+a toolchain selection, and `environment` only for inputs genuinely supplied by
+the environment. Build presets may add repeatable `targets`, `jobs`, or other
+build-tool choices. Keep the preset schema version compatible with the oldest
+CMake expected to consume the file.
+
+Do not reuse one binary directory after changing compilers or toolchains. Naming
+the toolchain in the preset and deriving `binaryDir` from `${presetName}` makes
+the separation automatic. `${sourceDir}` keeps checked-in paths independent of
+the checkout location.
+
+For a true multi-config generator such as Ninja Multi-Config, Visual Studio, or
+Xcode, do not set `CMAKE_BUILD_TYPE`. Configure one tree, then use build/test
+presets whose `configuration` is `Debug` or `Release`. Use the separate-tree
+pattern above when independent `build/Debug` and `build/Release` directories are
+the desired project convention.
+
 ## Choose the target kind from the delivery boundary
 
 - `OBJECT`: an internal implementation module whose object files are folded
@@ -120,42 +225,42 @@ root before creating targets. Keep local requirements on the affected target.
 When a raw option is genuinely necessary, use `target_compile_options` and
 guard it by compiler, platform, configuration, or language as appropriate.
 
-## Import third-party dependencies as targets
+## Normalize third-party dependencies as targets
 
-Prefer an installed package's modern config and namespaced imported target:
+Acquisition and CMake integration are separate decisions. A dependency may come
+from a vendored source tree, an installed package, pkg-config, or a prebuilt SDK;
+the rest of the project should still consume one target carrying its usage
+requirements.
+
+Prefer an upstream namespaced target when one exists. The same consumer spelling
+can work whether the provider came from `add_subdirectory` or `find_package`:
 
 ```cmake
 find_package(TBB CONFIG REQUIRED COMPONENTS tbb)
 target_link_libraries(foo PRIVATE TBB::tbb)
 ```
 
-The imported target owns its library location, include paths, definitions,
-compile options, and transitive dependencies. Do not duplicate those properties
-on every consumer.
+The dependency target owns its library location or sources, include paths,
+definitions, compile options, and transitive dependencies. Do not duplicate
+those properties on every consumer.
 
 Discover a dependency in the module that owns the corresponding link edge. Move
 discovery to the root only when several child targets deliberately share one
 project-wide dependency policy.
 
-Use this order:
+Give each logical dependency one provider, version, and canonical target in the
+final graph. This is especially important for header-only libraries and embedded
+dependencies, where two differently configured copies can compile yet violate
+the ODR or exchange incompatible types.
 
-1. Use a system or package-manager installation with
-   `find_package(... CONFIG ...)` and `Package::component`.
-2. For a non-standard install prefix, pass `-DPackage_DIR=...` or
-   `-DCMAKE_PREFIX_PATH=...` during configure. Keep host paths out of committed
-   `CMakeLists.txt` and avoid global environment settings that couple unrelated
-   projects.
-3. When no package config exists, use a maintained `FindPackage.cmake` in the
-   project `cmake/` directory and extend `CMAKE_MODULE_PATH` from the root.
-4. Use legacy `${Package_LIBRARIES}` and `${Package_INCLUDE_DIRS}` only when the
-   available finder exposes no imported target.
-5. Vendor a third party with `add_subdirectory` only when that project explicitly
-   supports embedding and vendoring is a deliberate repository policy.
-
-Mark required dependencies `REQUIRED`. For an optional dependency, omit
-`REQUIRED`, test whether its imported target exists, then attach both the link
-and feature definition to the consuming target. Preserve a working fallback
+For `find_package`, mark required dependencies `REQUIRED`. For an optional
+dependency, omit `REQUIRED`, test whether its target exists, then attach both the
+link and feature definition to the consuming target. Preserve a working fallback
 when it is absent.
+
+Read `dependencies/router.md` before choosing between vendored source, package
+config, a CMake find module, pkg-config, legacy variables, a manually wrapped
+library, or a binary ABI adapter.
 
 ## Keep subprojects embeddable
 
@@ -177,12 +282,14 @@ another project's `add_subdirectory`:
 - Let target usage requirements cross module boundaries. Do not use parent-scope
   variables as a substitute for target dependencies.
 
-The course material establishes no house convention for authoring `install()`,
-`export()`, package config files, namespaced aliases for first-party targets, or
-CTest layout. Supporting `add_subdirectory` alone does not require alias targets,
-`BUILD_INTERFACE` / `INSTALL_INTERFACE`, or export scaffolding. Follow the
-repository's existing contract or the task's distribution requirements instead
-of inventing one from these project-organization rules.
+Supporting `add_subdirectory` alone does not require alias targets,
+`BUILD_INTERFACE` / `INSTALL_INTERFACE`, exports, or package config files. Add
+that machinery only after choosing a distribution contract through
+`deployment/router.md`.
+
+Do not combine unrelated delivery contracts in one default template. A
+repository may publish more than one deliverable, but each deliverable gets its
+own explicit pipeline and verification boundary.
 
 ## Materialize verification surfaces as targets
 

@@ -10,6 +10,13 @@ curl -sL https://raw.githubusercontent.com/<owner>/<repo>/<ref>/<path>
 
 Use this whenever you have an explicit file path. For wiki pages: `https://raw.githubusercontent.com/wiki/<owner>/<repo>/<page>.md`.
 
+## Repo / gist metadata
+
+```bash
+gh repo view <owner>/<repo> --json name,description,defaultBranchRef,stargazerCount,languages,readme
+gh gist view <id>
+```
+
 ## Issue or PR body + comments
 
 ```bash
@@ -45,13 +52,6 @@ curl -sL 'https://api.github.com/search/code?q=<query>'                    | jq 
 ```
 
 `gh search repos <query>` / `gh search code <query>` do the same. Repository search is fully anonymous; code search works anonymously but is heavily rate-limited (~10/min) and best run with a token.
-
-## Repo / gist metadata
-
-```bash
-gh repo view <owner>/<repo> --json name,description,defaultBranchRef,stargazerCount,languages,readme
-gh gist view <id>
-```
 
 ## Avoid `gh api`
 
