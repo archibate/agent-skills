@@ -4,10 +4,8 @@ description: >-
   Enforce a closed content inventory for generic artifacts. Use when creating,
   editing, planning, or reviewing PDFs, resumes, documents, slides, roadshows,
   videos, tutorials, web pages, generative images, or similar deliverables.
-  Prevent content bloat, repeated or unsupported claims, narrative padding,
-  template-derived sections, and decorative entities. Apply for artifacts by
-  default unless the user explicitly requests detailed or comprehensive
-  treatment.
+  Apply for artifacts by default unless the user explicitly requests detailed
+  or comprehensive treatment.
 ---
 
 # Artifact restraint
@@ -20,6 +18,9 @@ arrange and present that inventory; it must not enlarge it.
 Every claim, action, benefit, example, section, label, object, and decoration
 must map to one inventory item. State each item once. A repeated or unmapped
 element makes the artifact invalid; revise before returning it.
+
+Prevent content bloat, repeated or unsupported claims, narrative padding,
+template-derived sections, and unsoliscated decorative entities.
 
 Polished and professional change execution quality, not content scope. Format
 conventions do not authorize content. A landing page does not inherently need
