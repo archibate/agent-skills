@@ -4,7 +4,7 @@ set -eu
 set -o pipefail
 
 ROOT=$(CDPATH='' cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd -P)
-TEST_TMP=$(mktemp -d "${TMPDIR:-/tmp}/opus-advisor-test.XXXXXX")
+TEST_TMP=$(mktemp -d "${TMPDIR:-/tmp}/fable-advisor-test.XXXXXX")
 
 cleanup() {
     rm -rf -- "$TEST_TMP"
@@ -36,6 +36,13 @@ assert_not_line() {
     if awk -v needle="$2" '$0 == needle { found = 1 } END { exit !found }' "$1"; then
         fail "did not expect exact line '$2' in $1"
     fi
+}
+
+assert_line_count() {
+    local actual
+    actual=$(awk -v needle="$2" '$0 == needle { count++ } END { print count + 0 }' "$1")
+    [ "$actual" -eq "$3" ] ||
+        fail "expected exact line '$2' $3 times in $1, found $actual"
 }
 
 assert_arg_value() {
@@ -97,34 +104,41 @@ done
 case "${MOCK_CLAUDE_BEHAVIOR:-success}" in
     success)
         printf '%s\n' \
-            '{"type":"system","subtype":"init","model":"mock-opus"}' \
+            '{"type":"system","subtype":"init","model":"mock-fable"}' \
+            '{"type":"system","subtype":"init","model":"mock-fable"}' \
+            '{"type":"system","subtype":"thinking_tokens","estimated_tokens":1999,"estimated_tokens_delta":1999}' \
+            '{"type":"system","subtype":"thinking_tokens","estimated_tokens":2000,"estimated_tokens_delta":1}' \
+            '{"type":"system","subtype":"thinking_tokens","estimated_tokens":1999,"estimated_tokens_delta":1999}' \
+            '{"type":"system","subtype":"thinking_tokens","estimated_tokens":2000,"estimated_tokens_delta":1}' \
             '{"type":"assistant","message":{"content":[{"type":"tool_use","id":"read-1","name":"Read"}]}}' \
-            '{"type":"user","message":{"content":[{"type":"tool_result","tool_use_id":"read-1","content":"mock read proof"}]}}' \
+            '{"type":"assistant","message":{"content":[{"type":"tool_use","id":"read-1","name":"Read"}]}}' \
+            '{"type":"assistant","message":{"content":[{"type":"tool_use","id":"bash-1","name":"Bash"}]}}' \
+            '{"type":"assistant","message":{"content":[{"type":"tool_use","id":"bash-2","name":"Bash"}]}}' \
             '{"type":"result","is_error":false,"subtype":"success","permission_denials":[],"result":"mock advisory verdict"}'
         ;;
     denied) printf '%s\n' '{"type":"result","is_error":false,"subtype":"success","permission_denials":["Read(/blocked)"],"result":"partial verdict"}' ;;
-    noresult) printf '%s\n' '{"type":"system","subtype":"init","model":"mock-opus"}' ;;
+    noresult) printf '%s\n' '{"type":"system","subtype":"init","model":"mock-fable"}' ;;
     emptyresult) printf '%s\n' '{"type":"result","is_error":false,"subtype":"success","permission_denials":[],"result":""}' ;;
     malicious)
         jq -cn --arg value "a[\$(touch $MOCK_CLAUDE_MARKER)]" \
-            '{type:"system", subtype:"thinking_tokens", estimated_tokens:$value}'
+            '{type:"system", subtype:"thinking_tokens", estimated_tokens_delta:$value}'
         printf '%s\n' '{"type":"result","is_error":false,"subtype":"success","permission_denials":[],"result":"safe"}'
         ;;
     numeric_edge)
         printf '%s\n' \
-            '{"type":"system","subtype":"thinking_tokens","estimated_tokens":-5}' \
-            '{"type":"system","subtype":"thinking_tokens","estimated_tokens":1e30}' \
+            '{"type":"system","subtype":"thinking_tokens","estimated_tokens_delta":-5}' \
+            '{"type":"system","subtype":"thinking_tokens","estimated_tokens_delta":1e30}' \
             '{"type":"result","is_error":false,"subtype":"success","permission_denials":[],"result":"safe"}'
         ;;
     network_fail)
         printf '%s\n' \
-            '{"type":"system","subtype":"init","model":"mock-opus"}' \
+            '{"type":"system","subtype":"init","model":"mock-fable"}' \
             '{"type":"result","is_error":true,"subtype":"success","permission_denials":[],"result":"API Error: Connection refused — a firewall or proxy may be blocking it (ConnectionRefused)"}'
         exit 1
         ;;
     server_overload)
         printf '%s\n' \
-            '{"type":"system","subtype":"init","model":"mock-opus"}' \
+            '{"type":"system","subtype":"init","model":"mock-fable"}' \
             '{"type":"result","is_error":true,"subtype":"success","permission_denials":[],"result":"API Error: 529 Overloaded — server-side issue"}'
         exit 1
         ;;
@@ -158,18 +172,24 @@ printf '1. successful advisory contract\n'
 output=$(
     cd "$fixture"
     CODEX_SANDBOX_NETWORK_DISABLED=1 PATH="$mock_bin:$PATH" \
-        "$ROOT/skills/opus-advisor/scripts/ask-opus" review \
+        "$ROOT/skills/fable-advisor/scripts/ask-fable" review \
         'Inspect the fixture and return a verdict.' 2>"$TEST_TMP/progress.err"
 )
 [ "$output" = 'mock advisory verdict' ] || fail "unexpected launcher output: $output"
-assert_contains "$TEST_TMP/progress.err" 'started mock-opus'
-assert_contains "$TEST_TMP/progress.err" 'using Read'
+assert_line_count "$TEST_TMP/progress.err" 'fable-advisor: started mock-fable' 1
+assert_line "$TEST_TMP/progress.err" 'fable-advisor: reasoning (~2000 tokens)'
+assert_line "$TEST_TMP/progress.err" 'fable-advisor: reasoning (~4000 tokens)'
+assert_not_contains "$TEST_TMP/progress.err" 'reasoning (~1999 tokens)'
+assert_not_contains "$TEST_TMP/progress.err" 'reasoning (~3999 tokens)'
+assert_line_count "$TEST_TMP/progress.err" 'fable-advisor: using Read' 1
+assert_line_count "$TEST_TMP/progress.err" 'fable-advisor: using Bash' 1
+assert_line "$TEST_TMP/progress.err" 'fable-advisor: completed'
 [ ! -s "$provider_overrides_file" ] || fail 'Claude inherited an alternate-provider routing override'
 
 for expected in --no-session-persistence --verbose; do
     assert_line "$args_file" "$expected"
 done
-assert_arg_value "$args_file" --model opus
+assert_arg_value "$args_file" --model fable
 assert_arg_value "$args_file" --effort max
 assert_arg_value "$args_file" --permission-mode dontAsk
 assert_arg_value "$args_file" --setting-sources ''
@@ -183,7 +203,7 @@ done
 scratch=$(cat "$cwd_file")
 [ "$scratch" = "$(cat "$tmpdir_file")" ] || fail 'Claude cwd and TMPDIR differ'
 case "$scratch" in
-    "${TMPDIR:-/tmp}"/opus-advisor.*) ;;
+    "${TMPDIR:-/tmp}"/fable-advisor.*) ;;
     *) fail "unexpected scratch path: $scratch" ;;
 esac
 [ ! -e "$scratch" ] || fail 'scratch directory survived a successful run'
@@ -215,7 +235,7 @@ assert_contains "$args_file" 'Inspect the fixture and return a verdict.'
 
 printf '2. nested Claude guard\n'
 set +e
-CLAUDECODE=1 PATH="$mock_bin:$PATH" "$ROOT/skills/opus-advisor/scripts/ask-opus" review test \
+CLAUDECODE=1 PATH="$mock_bin:$PATH" "$ROOT/skills/fable-advisor/scripts/ask-fable" review test \
     >"$TEST_TMP/nested.out" 2>"$TEST_TMP/nested.err"
 status=$?
 set -e
@@ -224,8 +244,8 @@ assert_contains "$TEST_TMP/nested.err" 'refusing to start a nested Claude Code s
 
 printf '3. invalid timeout\n'
 set +e
-OPUS_ADVISOR_TIMEOUT_SECONDS=nope PATH="$mock_bin:$PATH" \
-    "$ROOT/skills/opus-advisor/scripts/ask-opus" consult test \
+FABLE_ADVISOR_TIMEOUT_SECONDS=nope PATH="$mock_bin:$PATH" \
+    "$ROOT/skills/fable-advisor/scripts/ask-fable" consult test \
     >"$TEST_TMP/invalid-timeout.out" 2>"$TEST_TMP/invalid-timeout.err"
 status=$?
 set -e
@@ -234,8 +254,8 @@ assert_contains "$TEST_TMP/invalid-timeout.err" 'must be a positive integer'
 
 printf '4. bounded execution\n'
 set +e
-MOCK_CLAUDE_BEHAVIOR=hang OPUS_ADVISOR_TIMEOUT_SECONDS=1 PATH="$mock_bin:$PATH" \
-    "$ROOT/skills/opus-advisor/scripts/ask-opus" gate test \
+MOCK_CLAUDE_BEHAVIOR=hang FABLE_ADVISOR_TIMEOUT_SECONDS=1 PATH="$mock_bin:$PATH" \
+    "$ROOT/skills/fable-advisor/scripts/ask-fable" gate test \
     >"$TEST_TMP/timeout.out" 2>"$TEST_TMP/timeout.err"
 status=$?
 set -e
@@ -247,7 +267,7 @@ scratch=$(cat "$cwd_file")
 printf '5. Claude failure propagation\n'
 set +e
 MOCK_CLAUDE_BEHAVIOR=fail PATH="$mock_bin:$PATH" \
-    "$ROOT/skills/opus-advisor/scripts/ask-opus" gate test \
+    "$ROOT/skills/fable-advisor/scripts/ask-fable" gate test \
     >"$TEST_TMP/failure.out" 2>"$TEST_TMP/failure.err"
 status=$?
 set -e
@@ -257,7 +277,7 @@ assert_contains "$TEST_TMP/failure.err" 'Claude exited with status 7'
 printf '6. actionable network failure\n'
 set +e
 CODEX_SANDBOX_NETWORK_DISABLED=1 MOCK_CLAUDE_BEHAVIOR=network_fail PATH="$mock_bin:$PATH" \
-    "$ROOT/skills/opus-advisor/scripts/ask-opus" consult test \
+    "$ROOT/skills/fable-advisor/scripts/ask-fable" consult test \
     >"$TEST_TMP/network.out" 2>"$TEST_TMP/network.err"
 status=$?
 set -e
@@ -267,7 +287,7 @@ assert_contains "$TEST_TMP/network.err" 'Claude error: API Error:'
 assert_contains "$TEST_TMP/network.err" 'sandbox may have blocked the Claude connection'
 assert_contains "$TEST_TMP/network.err" 'required outbound service:'
 assert_contains "$TEST_TMP/network.err" 'network justification:'
-assert_contains "$TEST_TMP/network.err" 'Re-run ask-opus outside the active Codex sandbox'
+assert_contains "$TEST_TMP/network.err" 'Re-run ask-fable outside the active Codex sandbox'
 assert_contains "$TEST_TMP/network.err" 'Claude exited with status 1'
 scratch=$(cat "$cwd_file")
 [ ! -e "$scratch" ] || fail 'scratch directory survived a network failure'
@@ -275,7 +295,7 @@ scratch=$(cat "$cwd_file")
 printf '7. unmarked network failure preserves provider error\n'
 set +e
 env -u CODEX_SANDBOX_NETWORK_DISABLED MOCK_CLAUDE_BEHAVIOR=network_fail PATH="$mock_bin:$PATH" \
-    "$ROOT/skills/opus-advisor/scripts/ask-opus" consult test \
+    "$ROOT/skills/fable-advisor/scripts/ask-fable" consult test \
     >"$TEST_TMP/unmarked-network.out" 2>"$TEST_TMP/unmarked-network.err"
 status=$?
 set -e
@@ -287,7 +307,7 @@ assert_not_contains "$TEST_TMP/unmarked-network.err" 'network justification:'
 printf '8. server overload is not a sandbox failure\n'
 set +e
 CODEX_SANDBOX_NETWORK_DISABLED=1 MOCK_CLAUDE_BEHAVIOR=server_overload PATH="$mock_bin:$PATH" \
-    "$ROOT/skills/opus-advisor/scripts/ask-opus" consult test \
+    "$ROOT/skills/fable-advisor/scripts/ask-fable" consult test \
     >"$TEST_TMP/overload.out" 2>"$TEST_TMP/overload.err"
 status=$?
 set -e
@@ -299,17 +319,18 @@ assert_not_contains "$TEST_TMP/overload.err" 'network justification:'
 printf '9. permission denial propagation\n'
 set +e
 MOCK_CLAUDE_BEHAVIOR=denied PATH="$mock_bin:$PATH" \
-    "$ROOT/skills/opus-advisor/scripts/ask-opus" review test \
+    "$ROOT/skills/fable-advisor/scripts/ask-fable" review test \
     >"$TEST_TMP/denied.out" 2>"$TEST_TMP/denied.err"
 status=$?
 set -e
 [ "$status" -eq 1 ] || fail "permission denial returned $status"
 assert_contains "$TEST_TMP/denied.err" 'permission_denials=["Read(/blocked)"]'
+assert_not_contains "$TEST_TMP/denied.err" 'fable-advisor: completed'
 
 printf '10. missing result event\n'
 set +e
 MOCK_CLAUDE_BEHAVIOR=noresult PATH="$mock_bin:$PATH" \
-    "$ROOT/skills/opus-advisor/scripts/ask-opus" review test \
+    "$ROOT/skills/fable-advisor/scripts/ask-fable" review test \
     >"$TEST_TMP/noresult.out" 2>"$TEST_TMP/noresult.err"
 status=$?
 set -e
@@ -319,13 +340,13 @@ assert_contains "$TEST_TMP/noresult.err" 'invalid Claude response stream'
 printf '11. nonnumeric progress is inert\n'
 malicious_marker="$TEST_TMP/arithmetic-injection"
 MOCK_CLAUDE_BEHAVIOR=malicious MOCK_CLAUDE_MARKER="$malicious_marker" PATH="$mock_bin:$PATH" \
-    "$ROOT/skills/opus-advisor/scripts/ask-opus" review test >/dev/null 2>"$TEST_TMP/malicious.err"
+    "$ROOT/skills/fable-advisor/scripts/ask-fable" review test >/dev/null 2>"$TEST_TMP/malicious.err"
 [ ! -e "$malicious_marker" ] || fail 'stream progress executed arithmetic input'
 
 printf '12. empty result rejection\n'
 set +e
 MOCK_CLAUDE_BEHAVIOR=emptyresult PATH="$mock_bin:$PATH" \
-    "$ROOT/skills/opus-advisor/scripts/ask-opus" review test \
+    "$ROOT/skills/fable-advisor/scripts/ask-fable" review test \
     >"$TEST_TMP/empty.out" 2>"$TEST_TMP/empty.err"
 status=$?
 set -e
@@ -334,7 +355,8 @@ assert_contains "$TEST_TMP/empty.err" 'invalid Claude response'
 
 printf '13. numeric progress guard\n'
 output=$(MOCK_CLAUDE_BEHAVIOR=numeric_edge PATH="$mock_bin:$PATH" \
-    "$ROOT/skills/opus-advisor/scripts/ask-opus" review test 2>"$TEST_TMP/numeric.err")
+    "$ROOT/skills/fable-advisor/scripts/ask-fable" review test 2>"$TEST_TMP/numeric.err")
 [ "$output" = safe ] || fail "numeric edge returned unexpected output: $output"
+assert_not_contains "$TEST_TMP/numeric.err" 'value too great for base'
 
-printf 'All opus-advisor tests passed.\n'
+printf 'All fable-advisor tests passed.\n'

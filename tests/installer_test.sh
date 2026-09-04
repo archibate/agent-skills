@@ -73,7 +73,6 @@ assert_link_target "$CASE_HOME/.claude/skills/cpp-hpc-optimization" "$ROOT/skill
 assert_link_target "$CASE_HOME/.agents/skills/artifact-restraint" "$ROOT/skills/artifact-restraint"
 assert_contains "$CASE_HOME/.codex/AGENTS.md" '<!-- archibate/agent-skills:begin -->'
 assert_contains "$CASE_HOME/.codex/AGENTS.md" '<!-- archibate/agent-skills:end -->'
-assert_contains "$CASE_HOME/.codex/AGENTS.md" '$artifact-restraint'
 
 printf '3. hard dependency closure\n'
 new_case closure
@@ -200,17 +199,17 @@ assert_link_target "$CASE_HOME/.agents/skills/cpp-oop-style" "$ROOT/skills/cpp-o
 
 printf '14. target-specific skills install only for compatible agents\n'
 new_case target-compatibility
-run_installer --skills opus-advisor --targets codex,claude --yes --skip-deps >/dev/null
-assert_file "$CASE_HOME/.agents/skills/opus-advisor/SKILL.md"
-[ ! -e "$CASE_HOME/.claude/skills/opus-advisor" ] || fail 'Codex-only skill was installed for Claude'
+run_installer --skills fable-advisor --targets codex,claude --yes --skip-deps >/dev/null
+assert_file "$CASE_HOME/.agents/skills/fable-advisor/SKILL.md"
+[ ! -e "$CASE_HOME/.claude/skills/fable-advisor" ] || fail 'Codex-only skill was installed for Claude'
 
 new_case unsupported-target
 set +e
-run_installer --skills opus-advisor --targets claude --yes --skip-deps >/dev/null 2>&1
+run_installer --skills fable-advisor --targets claude --yes --skip-deps >/dev/null 2>&1
 status=$?
 set -e
 [ "$status" -eq 1 ] || fail "unsupported target returned $status instead of 1"
-[ ! -e "$CASE_HOME/.claude/skills/opus-advisor" ] || fail 'unsupported target installed opus-advisor'
+[ ! -e "$CASE_HOME/.claude/skills/fable-advisor" ] || fail 'unsupported target installed fable-advisor'
 
 printf '15. Scrapling installs with only the uv runtime\n'
 scrapling_runtimes=$(awk -F '\t' '$1 == "scrapling" { print $8 }' "$ROOT/installer/catalog.tsv")

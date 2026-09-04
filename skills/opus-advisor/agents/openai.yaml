@@ -1,4 +1,0 @@
-interface:
-  display_name: "Opus Advisor"
-  short_description: "Consult an independent read-only Opus reviewer."
-  default_prompt: "Use $opus-advisor to challenge this decision and return an evidence-backed verdict."

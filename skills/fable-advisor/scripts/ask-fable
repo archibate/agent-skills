@@ -11,7 +11,7 @@ if (( $# != 2 )); then
 fi
 
 if [[ ${CLAUDECODE:-} == 1 ]]; then
-    printf 'opus-advisor: refusing to start a nested Claude Code session\n' >&2
+    printf 'fable-advisor: refusing to start a nested Claude Code session\n' >&2
     exit 2
 fi
 
@@ -27,20 +27,20 @@ esac
 
 for advisor_dependency in claude jq; do
     if ! command -v "$advisor_dependency" >/dev/null 2>&1; then
-        printf 'opus-advisor: missing required command: %s\n' "$advisor_dependency" >&2
+        printf 'fable-advisor: missing required command: %s\n' "$advisor_dependency" >&2
         exit 127
     fi
 done
 
-advisor_timeout=${OPUS_ADVISOR_TIMEOUT_SECONDS:-900}
+advisor_timeout=${FABLE_ADVISOR_TIMEOUT_SECONDS:-900}
 case "$advisor_timeout" in
     ''|*[!0-9]*)
-        printf 'opus-advisor: OPUS_ADVISOR_TIMEOUT_SECONDS must be a positive integer\n' >&2
+        printf 'fable-advisor: FABLE_ADVISOR_TIMEOUT_SECONDS must be a positive integer\n' >&2
         exit 2
         ;;
 esac
 if (( advisor_timeout == 0 )); then
-    printf 'opus-advisor: OPUS_ADVISOR_TIMEOUT_SECONDS must be a positive integer\n' >&2
+    printf 'fable-advisor: FABLE_ADVISOR_TIMEOUT_SECONDS must be a positive integer\n' >&2
     exit 2
 fi
 
@@ -70,7 +70,7 @@ advisor_credentials_json=$(
 )
 
 advisor_scratch_parent=${TMPDIR:-/tmp}
-advisor_runtime_dir=$(mktemp -d "$advisor_scratch_parent/opus-advisor.XXXXXX")
+advisor_runtime_dir=$(mktemp -d "$advisor_scratch_parent/fable-advisor.XXXXXX")
 advisor_response_file="$advisor_runtime_dir/response.json"
 advisor_stream_file="$advisor_runtime_dir/response.ndjson"
 advisor_stream_pipe="$advisor_runtime_dir/response.pipe"
@@ -91,31 +91,43 @@ cleanup_advisor() {
         kill "$advisor_stream_pid" 2>/dev/null || true
     fi
     case "$advisor_runtime_dir" in
-        "$advisor_scratch_parent"/opus-advisor.*) rm -rf -- "$advisor_runtime_dir" ;;
+        "$advisor_scratch_parent"/fable-advisor.*) rm -rf -- "$advisor_runtime_dir" ;;
     esac
 }
 trap cleanup_advisor EXIT
 trap 'exit 130' HUP INT TERM
 
 stream_advisor_events() {
-    local advisor_event advisor_event_kind advisor_event_value advisor_next_thinking_report=500
+    local advisor_event advisor_event_kind advisor_event_value
+    local advisor_thinking_report_interval=2000 advisor_thinking_tokens=0
+    local advisor_next_thinking_report=2000
+    local advisor_started=0 advisor_last_tool=
 
     while IFS= read -r advisor_event; do
         printf '%s\n' "$advisor_event" >>"$advisor_stream_file"
         while IFS=$'\t' read -r advisor_event_kind advisor_event_value; do
             case "$advisor_event_kind" in
                 START)
-                    printf 'opus-advisor: started %s\n' "$advisor_event_value" >&2
+                    if (( ! advisor_started )); then
+                        printf 'fable-advisor: started %s\n' "$advisor_event_value" >&2
+                        advisor_started=1
+                    fi
                     ;;
                 THINK)
                     if [[ "$advisor_event_value" =~ ^[0-9]+$ ]] &&
-                        (( advisor_event_value >= advisor_next_thinking_report )); then
-                        printf 'opus-advisor: reasoning (~%s tokens)\n' "$advisor_event_value" >&2
-                        advisor_next_thinking_report=$(( (advisor_event_value / 500 + 1) * 500 ))
+                        (( (advisor_thinking_tokens += advisor_event_value) >= advisor_next_thinking_report )); then
+                        printf 'fable-advisor: reasoning (~%s tokens)\n' "$advisor_thinking_tokens" >&2
+                        advisor_next_thinking_report=$((
+                            (advisor_thinking_tokens / advisor_thinking_report_interval + 1) *
+                            advisor_thinking_report_interval
+                        ))
                     fi
                     ;;
                 TOOL)
-                    printf 'opus-advisor: using %s\n' "$advisor_event_value" >&2
+                    if [[ "$advisor_event_value" != "$advisor_last_tool" ]]; then
+                        printf 'fable-advisor: using %s\n' "$advisor_event_value" >&2
+                        advisor_last_tool=$advisor_event_value
+                    fi
                     ;;
             esac
         done < <(
@@ -123,8 +135,8 @@ stream_advisor_events() {
                 if .type == "system" and .subtype == "init" then
                     "START\t" + (.model // "unknown")
                 elif .type == "system" and .subtype == "thinking_tokens" and
-                     (.estimated_tokens | type) == "number" then
-                    "THINK\t" + (.estimated_tokens | floor | tostring)
+                     (.estimated_tokens_delta | type) == "number" then
+                    "THINK\t" + (.estimated_tokens_delta | floor | tostring)
                 elif .type == "assistant" then
                     .message.content[]? |
                     select(.type == "tool_use") |
@@ -191,7 +203,7 @@ while IFS= read -r advisor_env_name; do
 done < <(compgen -e)
 for advisor_provider_override in "${advisor_provider_overrides[@]}"; do
     if ! unset -v "$advisor_provider_override" || [[ -v $advisor_provider_override ]]; then
-        printf 'opus-advisor: cannot clear provider routing override: %s\n' \
+        printf 'fable-advisor: cannot clear provider routing override: %s\n' \
             "$advisor_provider_override" >&2
         exit 2
     fi
@@ -204,7 +216,7 @@ stream_advisor_events &
 advisor_stream_pid=$!
 claude -p \
     --no-session-persistence \
-    --model opus \
+    --model fable \
     --effort max \
     --permission-mode dontAsk \
     --setting-sources "" \
@@ -255,14 +267,14 @@ advisor_stream_pid=
 advisor_watchdog_pid=
 
 if [[ -e "$advisor_timeout_marker" ]]; then
-    printf 'opus-advisor: Claude exceeded the %s-second timeout\n' "$advisor_timeout" >&2
+    printf 'fable-advisor: Claude exceeded the %s-second timeout\n' "$advisor_timeout" >&2
     exit 124
 fi
 if (( advisor_stream_status != 0 )); then
     if (( advisor_stream_status == 124 )); then
-        printf 'opus-advisor: response stream did not close within 30 seconds\n' >&2
+        printf 'fable-advisor: response stream did not close within 30 seconds\n' >&2
     else
-        printf 'opus-advisor: response stream exited with status %s\n' "$advisor_stream_status" >&2
+        printf 'fable-advisor: response stream exited with status %s\n' "$advisor_stream_status" >&2
     fi
     exit "$advisor_stream_status"
 fi
@@ -280,27 +292,27 @@ if (( advisor_status != 0 )); then
             "$advisor_response_file" 2>/dev/null || true)
     fi
     if [[ -n "$advisor_error" ]]; then
-        printf 'opus-advisor: Claude error: %s\n' "$advisor_error" >&2
+        printf 'fable-advisor: Claude error: %s\n' "$advisor_error" >&2
         case "$advisor_error" in
             *"Can't reach the API server"*|*"Connection refused"*|*"No internet route"*|\
                 *"Couldn't connect through your proxy"*|*"Unable to connect to API"*|\
                 *FailedToOpenSocket*|*ECONNREFUSED*|*ConnectionRefused*)
                 if [[ ${CODEX_SANDBOX_NETWORK_DISABLED:-} == 1 ]]; then
                     printf '%s\n' \
-                        'opus-advisor: CODEX_SANDBOX_NETWORK_DISABLED=1 is set; the Codex sandbox may have blocked the Claude connection.' \
-                        'opus-advisor: required outbound service: official Anthropic Claude API via the configured proxy and TLS settings' \
-                        'opus-advisor: network justification: consult a read-only Claude Opus advisor; sends the request and project files the advisor reads to official Anthropic services' \
-                        'opus-advisor: Re-run ask-opus outside the active Codex sandbox.' >&2
+                        'fable-advisor: CODEX_SANDBOX_NETWORK_DISABLED=1 is set; the Codex sandbox may have blocked the Claude connection.' \
+                        'fable-advisor: required outbound service: official Anthropic Claude API via the configured proxy and TLS settings' \
+                        'fable-advisor: network justification: consult a read-only Claude Fable advisor; sends the request and project files the advisor reads to official Anthropic services' \
+                        'fable-advisor: Re-run ask-fable outside the active Codex sandbox.' >&2
                 fi
                 ;;
         esac
     fi
-    printf 'opus-advisor: Claude exited with status %s\n' "$advisor_status" >&2
+    printf 'fable-advisor: Claude exited with status %s\n' "$advisor_status" >&2
     exit "$advisor_status"
 fi
 
 if (( ! advisor_has_result )); then
-    printf 'opus-advisor: invalid Claude response stream\n' >&2
+    printf 'fable-advisor: invalid Claude response stream\n' >&2
     exit 1
 fi
 
@@ -311,13 +323,14 @@ if ! jq -e '
     (.result | type == "string" and length > 0)
     ' "$advisor_response_file" >/dev/null; then
     jq -r '
-        "opus-advisor: invalid Claude response" +
+        "fable-advisor: invalid Claude response" +
         " (is_error=" + (.is_error | tostring) +
         ", subtype=" + (.subtype | tostring) +
         ", permission_denials=" + (.permission_denials | tostring) + ")"
         ' "$advisor_response_file" >&2 2>/dev/null ||
-        printf 'opus-advisor: invalid Claude response JSON\n' >&2
+        printf 'fable-advisor: invalid Claude response JSON\n' >&2
     exit 1
 fi
 
+printf 'fable-advisor: completed\n' >&2
 jq -er '.result' "$advisor_response_file"

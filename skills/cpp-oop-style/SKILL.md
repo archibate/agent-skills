@@ -431,19 +431,55 @@ compiler is your reviewer.
 - In headers, share definitions with `inline`, never `static` (which silently
   duplicates per translation unit).
 
-## The `auto` idiom (AAA)
+## Use `auto` wisely in local variables
 
-- **Almost Always Auto:** `auto x = Type{...}`, never `Type x(...)`. Forces
-  initialization and survives return-type changes.
-- **Explicit cast over implicit:** `auto i = size_t{3};` not `auto i = 3;`.
-- **In range-for: `auto const &` to read, `auto &` to modify.** Never bare
-  `auto` — it copies. For maps: `for (auto const &[k, v] : m)`.
-- C++20 `auto` parameters are implicit templates: `auto square(auto const &x)`.
-- **Dispatch on type with `concept`-constrained overloads**, the static twin of
-  virtual dispatch — never an `if constexpr (is_same_v<…>)` chain, which is the
-  compile-time form of the `getType()` / `enum`-switch anti-pattern. Reserve
-  `if constexpr` for capability gating (`requires { … }`) and variadic recursion.
-  (See `references/generics-compile-time.md`.)
+For an ordinary local value, use one of two declaration forms (adding `const`
+according to the next section):
+
+```cpp
+auto x = rhs;       // deduced form: the type is locally evident
+Type x{rhs};        // named receiving form: the type adds missing semantics
+```
+
+Use the deduced form when the RHS names the type, the producer and its type are
+evident within the same function body, or the exact type is lengthy, unnamed, or
+deliberately an implementation detail:
+
+```cpp
+auto const i = std::size_t{1};
+auto worker = std::make_unique<Worker>(config);
+auto values = std::vector<int>(3); // `()` intentionally selects the count ctor
+```
+
+Use the named receiving form when a reader cannot recover the type from the
+current function without inspecting a callee, and the type is important to the
+meaning of the code:
+
+```cpp
+State const state{machine.state()};
+```
+
+The named form receives an existing expression. When supplying constructor
+arguments, put the constructed type on the RHS: `auto dog = Dog{"George", 10};`.
+Do not write `Type x = rhs`, `Type x(rhs)`, or an uninitialized `Type x`; those
+forms can hide conversions, misuse parentheses, or leave built-in values
+indeterminate. Braces make narrowing conversions ill-formed:
+
+```cpp
+std::size_t const count{fetchCount()};
+// int count = fetchCount();              // implicit narrowing
+// int count(fetchCount());               // implicit narrowing
+int const count{static_cast<int>(fetchCount())}; // only after a range check
+```
+
+Do not optimize for silently surviving return-type changes. A named receiving
+type should make narrowing API drift a compile error instead of an implicit
+conversion. Braces do not require exact type equality; use strong types when
+even otherwise-valid conversions must be rejected.
+
+`auto` deduction does not preserve top-level `const` or references. In
+range-for, use `auto const &` to read and `auto &` to modify; bare `auto` copies.
+For maps: `for (auto const &[key, value] : map)`.
 
 ## The `const` idiom
 

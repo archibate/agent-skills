@@ -14,6 +14,7 @@ scrapling	skill	skills/scrapling	web	no	-	-	uv	-	Anti-bot web scraping
 lark-cli	skill	skills/lark-cli	integration	no	-	-	node-npx,lark-auth	-	Lark and Feishu CLI
 fresh-arch	skill	skills/fresh-arch	thinking	no	-	grill-me	-	-	Fresh architecture design
 grill-me	skill	skills/grill-me	thinking	no	-	fresh-arch	-	-	Design interview
-opus-advisor	skill	skills/opus-advisor	thinking	no	-	-	claude-cli,jq	codex	Independent Opus advisor
+fable-advisor	skill	skills/fable-advisor	thinking	no	-	-	claude-cli,jq	codex	Independent Fable advisor
 writing-prompt	skill	skills/writing-prompt	writing	no	-	-	-	-	Modern prompt engineering
 writing-as-human	skill	skills/writing-as-human	writing	no	-	-	-	-	Context-aware human voice writing
+minimalist	skill	skills/minimalist	writing	no	-	-	-	-	Minimalist language

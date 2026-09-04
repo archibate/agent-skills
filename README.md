@@ -68,7 +68,7 @@ cd agent-skills
 - 读取各种网页，反反爬🐛——`read-url`（建议配合 `jina-ai` 和 `scrapling` 安装）
 - AI 自检前端渲染排版错误🔍——`visual-qa`（建议配合 `agent-browser` 安装）
 - 架构设计思维🧠——`grill-me`, `fresh-arch`
-- Opus 帮 Codex 小审计🧐——`opus-advisor`
+- Fable 帮 Codex 小审计🧐——`fable-advisor`
 - 面向现代模型的提示词规范🤖——`writing-prompt`
 - 模仿人类不那么严肃的说话风格✍️——`writing-as-human`
 - 禁止浮夸风PPT📔——`artifact-restraint`

@@ -724,11 +724,11 @@ runtime_probe() {
             ;;
         claude-cli)
             command -v claude >/dev/null 2>&1 && return 0
-            RUNTIME_PROBE_MESSAGE="Claude Code is required for the Opus advisor"
+            RUNTIME_PROBE_MESSAGE="Claude Code is required for the Fable advisor"
             ;;
         jq)
             command -v jq >/dev/null 2>&1 && return 0
-            RUNTIME_PROBE_MESSAGE="jq is required to build the Opus sandbox settings"
+            RUNTIME_PROBE_MESSAGE="jq is required to build the Fable sandbox settings"
             ;;
     esac
     return 1
