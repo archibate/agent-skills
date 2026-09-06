@@ -40,7 +40,7 @@ retry, report the advisor as unavailable.
 
 Resolve `<skill-directory>` from this loaded `SKILL.md`; do not assume the skill is inside the current project.
 
-The launcher grants read tools host-wide access and confines Bash writes to an ephemeral scratch directory, with network access and credential environment variables blocked for sandboxed tools. It removes that directory after the call and times out after 900 seconds by default; set `FABLE_ADVISOR_TIMEOUT_SECONDS` when a different bound is justified.
+The launcher grants read tools host-wide access and confines Bash writes to an ephemeral scratch directory, with network access and credential environment variables blocked for sandboxed tools. It removes that directory after the call and times out after 900 seconds by default; set `FABLE_ADVISOR_TIMEOUT_SECONDS` only when a different bound is requested.
 Progress is streamed to stderr; stdout contains only the final advisory report.
 Any tool permission denial invalidates the advisory call; the launcher fails closed instead of returning a partial report.
 

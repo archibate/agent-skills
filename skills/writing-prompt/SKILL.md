@@ -5,7 +5,7 @@ description: "Create or edit agent-facing/LLM prompts using modern prompt-engine
 
 # Writing Prompt
 
-A prompt is read by a target model with known capabilities and a finite instruction budget. Size the prompt for that reader: lean, rational, unambiguous, and declarative. Do not benchmaxx evaluations. Allocate the budget by importance, and split the prompt when it outgrows that budget.
+A prompt is read by a target model with particular capabilities. Size the prompt for that reader: lean, rational, unambiguous, and direct. Do not benchmaxx evaluations. Allocate detail by importance, and split the prompt when essential guidance becomes hard to find.
 
 ## Know your target model
 
@@ -16,69 +16,84 @@ First, identify which model your prompt targets.
 
 Call it the *target model*—the audience you are writing for.
 
-Assess the target model's capabilities, especially its instruction following and comprehension, based on its tier. If unsure, consult its pricing or SWE Pro scores. Tailor the prompt's strength to it.
+Tailor the level of detail to the target model's instruction following and comprehension, using observed behavior on relevant tasks when available.
 
-**Why:** Capable flagship models and cost-efficient weaker models can vary in instruction-following ability. A pushy prompt that hard-codes every decision point may be necessary for a weaker model but unnecessarily constrain a flagship model. If heuristic guidance already produces stable behavior from a flagship model, its deliberate flexibility allows the model to apply its capabilities instead of following every instruction literally.
+**Why:** Models can vary in how much explicit guidance they need. If heuristic guidance already produces stable behavior, its flexibility allows the model to use context and judgment without having every decision prescribed.
 
 For agent-facing docs, assume the target model is yourself: the same model, but without your current context. Ask what would enable a fresh instance of you to understand the scenario and reliably make the same decisions. Do not repeat common knowledge that does not depend on context. If the audience is a flagship model comparable to you, GPT-3.5 era prompting is over-engineering.
 
-## Build minimal working prompt
+## Build a minimal working prompt
 
-Clarify what you want to accomplish. Derive a minimal prompt from first principles that does the job. Prefer *rational*, *declarative* sentences.
+Clarify what you want to accomplish. Derive a minimal prompt from first principles that does the job. Prefer *rational*, *direct* sentences.
 
-**Why:** Keeping prompts minimal improves *interpretability* and reduces the risk of *overfitting*. Lengthy prompts also dilute attention and waste tokens.
+**Why:** Concise prompts are easier to inspect and maintain. Extra detail can obscure important constraints, add token cost, and overfit the prompt to individual examples.
 
-Pushy prompts:
+Possible simplifications, when the intended meaning is preserved:
 
-- ALL-CAPS: `ALWAYS use X.` → `Always use X.` (90%)
-- Bold: `**Use X**.` → `Use X.` (70%)
-- Negative: `Use X, not Y.` → `Use X.` (50%)
-- Only: `Use X only if C.` → `Use X if C.` (30%)
-- Justifying: `Use X (the correct form).` → `Use X.` (30%)
+- ALL-CAPS: `ALWAYS use X.` → `Always use X.`
+- Bold: `**Use X**.` → `Use X.`
+- Negative: `Use X, not Y.` → `Use X.`
+- Justifying: `Use X (the correct form).` → `Use X.`
 
-The precentage (%) shows calibration threshold above which pushy prompts becomes legitimate.
+Default to rational prompts. Add missing context or resolve ambiguity before strengthening the wording. Escalate emphasis gradually when observed failures show that an important instruction is being missed (see *Instruction budget*).
 
-Default to rational prompts. Reserve pushy wording for cases in which a rational prompt would clearly fail because of missing context, ambiguity, or limited model capability, or when an instruction must survive budget pressure (see *Instruction budget*). Escalate gradually to pushier wording only after observing a failure.
+**The rule:** If the target model would not do `Y` after seeing `Use X`, then `Use X, not Y.` is unjustified (see *When to use a negative hedge*). If `**X**` does not improve the target model's adherence to the instruction, use plain `X`. If the target model likely already knows that `X` implies `the correct form`, that justification is redundant.
 
-**The rule:** If the target model would not do `Y` after seeing `Use X`, then `Use X, not Y.` is unjustified (see *When to use negative hedge*). If `**X**` does not improve the target model's attention to it, use plain `X`. If the target model likely already knows that `X` implies `the correct form`, that justification is redundant. If the model would not use `X` outside condition `C`, then `Use X if C` is more rational than `Use X only if C`.
-
-**Authoritative reports**
-
-Current OpenAI GPT-5.6 guidance reports that leaner system prompts improved internal coding-agent eval scores while reducing tokens and cost, and recommends stating each instruction once. ([GPT-5.6 guidance](https://developers.openai.com/api/docs/guides/latest-model#favor-leaner-prompts))
-
-For reasoning models specifically, current OpenAI guidance recommends simple, direct prompts, no chain-of-thought instructions, and try zero-shot before few-shot examples. ([reasoning-model guidance](https://developers.openai.com/api/docs/guides/reasoning-best-practices#how-to-prompt-reasoning-models-effectively))
+For reasoning models specifically, OpenAI recommends simple, direct prompts, avoiding chain-of-thought instructions, and trying zero-shot prompting before adding few-shot examples. ([Reasoning-model guidance](https://developers.openai.com/api/docs/guides/reasoning-best-practices#how-to-prompt-reasoning-models-effectively))
 
 ## Instruction budget
 
-Models have instruction budgets; a flagship model may have a budget of roughly 300 instructions. When too many instructions exceed that budget, the model has to discard some of them, diluting attention and harming instruction following.
+Use *instruction budget* as a design metaphor for the difficulty of following many competing requirements. Practical limits depend on the model, task, and context; this is not a fixed count of instructions.
 
-More is not better. Do not pile up instructions merely to babysit the model. Spend the instruction budget only when required to produce stable behavior.
+Keep instructions that materially affect behavior. A long skill competes with other skills, user requests, and task evidence for space and attention.
 
-This is especially true for weaker models, which have smaller instruction budgets.
+To make the prompt easier to follow:
 
-Prompts are easier for models to follow when:
+- Use direct sentences that make the requested behavior clear.
+- Prefer positive wording when it fully expresses the requirement; retain negative constraints for relevant pitfalls.
+- Resolve contradictions so the model has a consistent set of rules to follow.
+- Group related instructions under descriptive headings, using consistent heading levels to make topics and subtopics easy to locate.
+- Use Markdown for prose and lists. Use descriptive XML tags when explicit start/end markers help delimit content without relying on semantic cues or indentation. Few-shot examples and nested content are common cases; see *How to use `when`*.
+- Use concise pseudocode in fenced code blocks only when it clarifies control flow, execution order, or branch boundaries.
+- Prefer explicit labels and relationships over layouts that depend on ASCII art or space padding.
 
-- Prefer declarative sentences → they reduce perplexity and stabilize instruction following.
-- Prefer positive forms to negative ones → negative forms consume the instruction budget faster; reserve them for critical pitfalls.
-- Avoid contradictions between rules → resolving them consumes more of the budget.
-- Use structural text when applicable → Markdown bullet points, with XML tags reserved for tree hierarchies.
-- Avoid ASCII art or space padding → LLMs do not read them.
-
-ALL-CAPS or bold formatting raises an instruction's priority. When the instruction budget is exhausted, the model discards lower-priority rules while emphasized ones remain in attention. Because emphasis continuously occupies attention, reserve it for important constraints that must remain salient in long contexts.
+ALL-CAPS or bold formatting may make an instruction more noticeable, but does not guarantee priority or reliable compliance. Reserve emphasis for important constraints.
 
 Size balancing: important or information-dense instructions justify a long top-level document; niche rules do not. Do not waste too much of the budget on minor items that are unlikely to be reused. If you cannot cut further, split the prompt; see `references/progressive-disclosure.md`.
 
-**Why:** despite a flagship model may offer 300 instructions, a pushy skill occupying 100 instructions can shrink the budget available to other skills and user context.
-
-## When to use negative hedge
+## When to use a negative hedge
 
 Reserve a negative hedge for cases in which the negative branch is relevant or would be a common mistake unless stated explicitly. For example:
 
-`Use chicken, not frog` is typically unjustified. A model would not think of "frog" anyway. In fact, mentioning "frog" in the context can counterintuitively increase the risk of using it because of context anchoring, especially for weaker models.
+`Use chicken, not frog` adds little unless frog is a plausible alternative in the task.
 
-`Use chicken, not chick` is typically justified. This clearly requires a mature chicken, which is what we want; the negative branch catches the model *before* it uses "chick," which would be wrong.
+`Use chicken, not chick` can be justified when confusing an adult bird with a young one is a plausible mistake. If maturity is the requirement, `Use a mature chicken` states it directly.
 
-This trades instruction budget for protection against a specific pitfall.
+The extra wording earns its place when it prevents a plausible mistake.
+
+## How to use `when`
+
+Choose `when` or `only when` according to the intended condition. Let `X` be the action and `Y` the condition:
+
+- `Do X when Y` instructs the model to do `X` when `Y` holds. It does not by itself rule out `X` in other circumstances.
+- `Do X only when Y` rules out `X` when `Y` is false. It does not by itself require `X` whenever `Y` is true.
+
+`Do X only when Y` = `Do X when Y` + `Do not X when not Y`; imposing two requirements in one sentence.
+
+The same distinction applies to `if` and `only if`. These meanings differ even when `Y` is objective; preserve `only` when it carries the intended restriction.
+
+With subjective conditions, wording may also influence how readily the model judges the condition satisfied. The following tendencies were reported in use:
+
+<example>
+  <prompt>Times out after 900 seconds by default; set `TIMEOUT_SECONDS` when a different bound is justified.</prompt>
+  <behavior>The model tended to override the default timeout on each call.</behavior>
+</example>
+<example>
+  <prompt>Times out after 900 seconds by default; set `TIMEOUT_SECONDS` only when a different bound is justified.</prompt>
+  <behavior>The model tended to omit `TIMEOUT_SECONDS` and keep the default.</behavior>
+</example>
+
+In this example, `only when` reinforced the default of leaving the timeout unchanged. Choose the wording by its intended meaning first, then refine it using observed behavior from the target model.
 
 ## References
 

@@ -1,7 +1,7 @@
 ---
 name: minimalist
 description: >
-  Use minimalist language.
+  Speak in minimalist language.
 ---
 
 Response in a bullet list. Use minimalist language. No longer than 80 chars.
