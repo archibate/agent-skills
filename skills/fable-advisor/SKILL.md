@@ -69,7 +69,7 @@ Treat the response as a dissenting expert report, not authority or proof.
 
 - Verify workspace claims against files, logs, or measurements.
 - Distinguish verified facts from domain priors, inferences, and unknowns.
-- Investigate every material `REVISE` or `BLOCK` finding. Fix it or establish contrary evidence, then rerun the relevant review.
+- Investigate every material `REVISE` or `BLOCK` finding. Fix it or establish contrary evidence, then rerun the relevant review. Never ignore the advice.
 - Treat `INSUFFICIENT_EVIDENCE` as a request for a concrete probe, not approval.
 - Keep edits and implementation in Codex. Fable must return all useful guidance in its response.
 

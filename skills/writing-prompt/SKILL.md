@@ -45,7 +45,7 @@ For reasoning models specifically, OpenAI recommends simple, direct prompts, avo
 
 Use *instruction budget* as a design metaphor for the difficulty of following many competing requirements. Practical limits depend on the model, task, and context; this is not a fixed count of instructions.
 
-Keep instructions that materially affect behavior. A long skill competes with other skills, user requests, and task evidence for space and attention.
+Keep instructions that materially affect behavior, including triggers, actions, and recovery steps. Do not delete useful instructions merely to reduce word count. Include the author's working context, design history, and implementation details only when the target model needs them to decide or act correctly. Catch yourself before story-telling in prompts.
 
 To make the prompt easier to follow:
 
@@ -73,12 +73,11 @@ The extra wording earns its place when it prevents a plausible mistake.
 
 ## How to use `when`
 
-Choose `when` or `only when` according to the intended condition. Let `X` be the action and `Y` the condition:
+Let `X` be the action and `Y` the condition. Distinguish a trigger from a prerequisite:
 
-- `Do X when Y` instructs the model to do `X` when `Y` holds. It does not by itself rule out `X` in other circumstances.
-- `Do X only when Y` rules out `X` when `Y` is false. It does not by itself require `X` whenever `Y` is true.
-
-`Do X only when Y` = `Do X when Y` + `Do not X when not Y`; imposing two requirements in one sentence.
+- `Do X when Y`: When `Y` holds, do `X`. This instruction alone does not specify what to do when `Y` is false.
+- `Do X only when Y`: When `Y` is false, do not do `X`. When `Y` holds, this instruction alone does not require `X`.
+- `Do X if and only if Y`: When `Y` holds, do `X`; otherwise, do not do `X`. Two requirements in one sentence; spends 2x instruction budget.
 
 The same distinction applies to `if` and `only if`. These meanings differ even when `Y` is objective; preserve `only` when it carries the intended restriction.
 
