@@ -4,12 +4,14 @@ description: >
   Consult an independent read-only Claude Fable advisor when a decision can affect
   security, privacy, money, data loss, deployment, or public API compatibility;
   when investigation leaves two plausible directions with materially different
-  consequences; or when a consequential completion claim depends on an
-  unverified assumption or critical behavior that normal tests cannot cover.
-  Also use when the user requests an independent or Fable review. Skip routine
-  edits and uncertainty that local inspection, documentation, or tests can
-  resolve cheaply. Fable challenges Codex's reasoning and evidence; Codex retains
-  responsibility for edits and the final judgment.
+  consequences; when a consequential completion claim depends on an unverified
+  assumption or critical behavior that normal tests cannot cover; or before
+  claiming completion of a substantial goal, for final code or artifact review
+  and a sanity check, even when local validation passes. Also use when the user
+  requests an independent or Fable review. Skip routine work and cheaply
+  resolvable uncertainty when none of these triggers applies. Fable challenges
+  Codex's reasoning and evidence; Codex retains responsibility for edits and the
+  final judgment.
 ---
 
 # Fable Advisor
@@ -20,9 +22,11 @@ Use a fresh Fable context as an independent advisor. Fable inspects the project 
 
 - `consult` — challenge the problem framing and evidence before committing to a direction.
 - `review` — challenge work in progress or its correctness argument.
-- `gate` — challenge the finished work and verification evidence before claiming completion.
+- `gate` — review the final code or artifact and verification evidence before claiming completion.
 
 Combine overlapping needs into one call. For example, one `gate` call can cover correctness verification and the final audit.
+
+A substantial goal can be a complete feature, a major refactor, or a multi-step deliverable, including non-code artifacts. Judge its size by complexity and delivery scope.
 
 ## Prepare the request
 
@@ -73,6 +77,6 @@ Treat the response as a dissenting expert report, not authority or proof.
 - Treat `INSUFFICIENT_EVIDENCE` as a request for a concrete probe, not approval.
 - Keep edits and implementation in Codex. Fable must return all useful guidance in its response.
 
-For a completion gate, start a fresh call after implementation and tests. Include the final diff scope, verification commands and results, and known limitations. An `APPROVE` verdict is advisory input; Codex still needs independent evidence that the requested goal is satisfied.
+For a completion gate, start a fresh call after implementation and applicable validation; earlier consultations or in-progress reviews do not replace it. Include the final artifact paths, diff scope where applicable, verification commands and results, and known limitations. Ask Fable to check whether the work meets the goal, identify correctness issues and regressions, and assess whether the evidence supports the completion claim. An `APPROVE` verdict is advisory input; Codex still needs independent evidence that the requested goal is satisfied.
 
 If the launcher cannot run, report that the advisor was unavailable. Do not fabricate an advisory verdict.
