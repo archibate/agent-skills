@@ -51,7 +51,6 @@ these cross-cutting behaviors alongside the task-specific skills.
 - `context7`, `grep-app`, `jina-ai`, `read-url`, and `scrapling` —
   documentation, code, research, and web-content retrieval.
 - `fresh-arch` and `grill-me` — architecture design and design interrogation.
-- `writing-as-human` — context-aware human-voice generation and rewriting.
 - `lark-cli` — Lark/Feishu messaging, documents, calendars, and task workflows.
 
 Unless a file says otherwise, this repository's original material is licensed

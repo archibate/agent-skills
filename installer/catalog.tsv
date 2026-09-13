@@ -12,9 +12,9 @@ jina-ai	skill	skills/jina-ai	web	no	-	read-url	uv,jina-cli,jina-key	-	Jina searc
 read-url	skill	skills/read-url	web	no	-	jina-ai,scrapling,agent-browser,chrome-cdp	curl,node-npx	-	Resilient URL reader
 scrapling	skill	skills/scrapling	web	no	-	-	uv	-	Anti-bot web scraping
 lark-cli	skill	skills/lark-cli	integration	no	-	-	node-npx,lark-auth	-	Lark and Feishu CLI
+monitor-wakeup	skill	skills/monitor-wakeup	integration	no	-	-	-	codex	Session monitoring and wake-up
 fresh-arch	skill	skills/fresh-arch	thinking	no	-	grill-me	-	-	Fresh architecture design
 grill-me	skill	skills/grill-me	thinking	no	-	fresh-arch	-	-	Design interview
 fable-advisor	skill	skills/fable-advisor	thinking	no	-	-	claude-cli,jq	codex	Independent Fable advisor
 writing-prompt	skill	skills/writing-prompt	writing	no	-	-	-	-	Modern prompt engineering
-writing-as-human	skill	skills/writing-as-human	writing	no	-	-	-	-	Context-aware human voice writing
 minimalist	skill	skills/minimalist	writing	no	-	-	-	-	Minimalist language

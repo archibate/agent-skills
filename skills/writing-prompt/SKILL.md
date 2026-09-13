@@ -94,6 +94,12 @@ With subjective conditions, wording may also influence how readily the model jud
 
 In this example, `only when` reinforced the default of leaving the timeout unchanged. Choose the wording by its intended meaning first, then refine it using observed behavior from the target model.
 
+## Decision boundaries
+
+Avoid restating routine safety boundaries that the target model already handles reliably. Focus on task-specific requirements that needs explicit guidance.
+
+Overly broad cautionary language can cause unnecessary hesitation. OpenAI notes that GPT-6 Astra may take boundary language written for earlier models too seriously and stop where the user would expect it to continue. ([OpenAI guidance](https://developers.openai.com/blog/rethinking-skills-and-prompts-for-gpt-6-astra#decision-boundaries))
+
 ## References
 
 - `references/testing-prompts.md` — read before writing or tuning LLM tests: evaluation/test split, overfitting, and sample clustering.

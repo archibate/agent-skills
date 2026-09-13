@@ -72,7 +72,6 @@ cd agent-skills
 - 架构设计思维🧠——`grill-me`, `fresh-arch`
 - Fable 帮 Codex 小审计🧐——`fable-advisor`
 - 面向现代模型的提示词规范🤖——`writing-prompt`
-- 模仿人类不那么严肃的说话风格✍️——`writing-as-human`
 - 禁止浮夸风PPT📔——`artifact-restraint`
 
 ## 一键安装 🧰
