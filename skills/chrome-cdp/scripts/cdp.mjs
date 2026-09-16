@@ -6,8 +6,8 @@
 // Single hub daemon: every command (list/open/stop and per-tab ops) routes
 // through one persistent process that holds a single browser-level WebSocket
 // to Chrome. Chrome's "Allow debugging" modal therefore fires once per hub
-// lifetime, not once per tab or once per command. The hub auto-exits after
-// 8h idle.
+// lifetime, not once per tab or once per command. The hub has no idle expiry;
+// it stays connected until stopped or Chrome disconnects.
 
 import { readFileSync, writeFileSync, unlinkSync, existsSync, mkdirSync } from 'fs';
 import { homedir } from 'os';
@@ -19,7 +19,6 @@ const TIMEOUT = 15000;
 const NAVIGATION_TIMEOUT = 30000;
 const WEBSOCKET_CONNECT_TIMEOUT = 60000;
 const TCP_CONNECT_TIMEOUT = 1500;
-const IDLE_TIMEOUT = 8 * 60 * 60 * 1000;
 const DAEMON_CONNECT_RETRIES = 20;
 const DAEMON_CONNECT_DELAY = 300;
 const MIN_TARGET_PREFIX_LEN = 8;
@@ -592,12 +591,6 @@ async function runHub(wsUrl = getWsUrl()) {
   process.on('SIGTERM', shutdown);
   process.on('SIGINT', shutdown);
 
-  let idleTimer = setTimeout(shutdown, IDLE_TIMEOUT);
-  function resetIdle() {
-    clearTimeout(idleTimer);
-    idleTimer = setTimeout(shutdown, IDLE_TIMEOUT);
-  }
-
   async function getSession(targetId) {
     const cached = sessions.get(targetId);
     if (cached) return cached;
@@ -607,7 +600,6 @@ async function runHub(wsUrl = getWsUrl()) {
   }
 
   async function handleCommand({ cmd, targetId, args = [] }) {
-    resetIdle();
     try {
       // Hub-level commands — no per-tab session needed.
       if (cmd === 'shutdown') return { ok: true, result: '', stopAfter: true };
@@ -912,7 +904,7 @@ HUB IPC (for advanced use / scripting)
   Hub-level commands (no targetId): list, list_raw, open, stop, shutdown.
   Per-tab commands (require targetId): snap, eval, shot, html, nav, net,
   click, clickxy, type, loadall, evalraw. Use evalraw for arbitrary CDP.
-  Hub exits after 8h idle or when Chrome disconnects. \`stop <target>\`
+  Hub has no idle expiry and exits when stopped or Chrome disconnects. \`stop <target>\`
   detaches one tab session; \`stop\` (no args) ends the hub.
 `;
 

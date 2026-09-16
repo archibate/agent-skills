@@ -64,7 +64,7 @@ scripts/cdp.mjs clickxy <target> <x> <y>       # click at CSS pixel coords
 scripts/cdp.mjs type    <target> <text>         # Input.insertText at current focus; works in cross-origin iframes unlike eval
 scripts/cdp.mjs loadall <target> <selector> [ms]  # click "load more" until gone (default 1500ms between clicks)
 scripts/cdp.mjs evalraw <target> <method> [json]  # raw CDP command passthrough
-scripts/cdp.mjs open    [url]                  # open new tab (each triggers Allow prompt)
+scripts/cdp.mjs open    [url]                  # open new tab through the existing hub
 scripts/cdp.mjs stop    [target]               # stop daemon(s)
 ```
 
@@ -83,4 +83,4 @@ CSS px = screenshot image px / DPR
 - Prefer `snap --compact` over `html` for page structure.
 - Use `type` (not eval) to enter text in cross-origin iframes — `click`/`clickxy` to focus first, then `type`.
 - Follow the startup error literally: the CLI distinguishes a network-disabled Codex sandbox, an unreachable DevTools port, a rejected WebSocket, and a pending Chrome "Allow debugging" prompt. Do not infer an Allow prompt from other failures.
-- Chrome shows an "Allow debugging" modal **once per hub lifetime** (not per command, not per tab). A single background hub holds one WebSocket to Chrome; every command — `list`, `open`, and per-tab ops — routes through it. The hub auto-exits after 8 hours of inactivity or when Chrome disconnects. `stop <target>` detaches one tab's session; `stop` with no args ends the hub.
+- Chrome shows an "Allow debugging" modal **once per hub lifetime** (not per command, not per tab). A single background hub holds one WebSocket to Chrome; every command — `list`, `open`, and per-tab ops — routes through it. The hub has no idle expiry and stays connected until stopped or Chrome disconnects. `stop <target>` detaches one tab's session; `stop` with no args ends the hub. A new hub connection may require Allow again.

@@ -6,7 +6,7 @@ tooling.
 
 ## Install
 
-Use the interactive installer for Codex, OpenCode, or Claude Code:
+The interactive installer for Codex, OpenCode, or Claude Code:
 
 ```bash
 ./install.sh
@@ -30,6 +30,19 @@ For a noninteractive core installation:
 
 Do not copy `skills/.system`; Codex installs and updates its built-in skills
 itself, and this repository intentionally excludes them.
+
+### Metadata
+
+所有技能、默认选项、硬依赖、推荐关系和运行时检查都集中在 [`installer/catalog.tsv`](installer/catalog.tsv)。以后新增或移除技能，通常只需改技能目录和一行清单；若引入全新的外部工具，再给 [`installer/main.sh`](installer/main.sh) 增加一个显式处理器，杜绝把任意 shell 命令塞进数据文件里偷偷执行。
+
+提交前验证清单、依赖图和安装流程：
+
+```bash
+installer/main.sh --source-root . --validate
+tests/installer_test.sh
+```
+
+从清单移除技能只会让它不再出现在新安装中，不会静默删除用户机器上已经安装的副本。
 
 ## Agent guidance
 

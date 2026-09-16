@@ -13,9 +13,7 @@ curl -fsSL https://raw.githubusercontent.com/archibate/agent-skills/master/insta
 `raw.githubusercontent.com` 抽风时，走 Git 安装：
 
 ```bash
-git clone --depth 1 https://github.com/archibate/agent-skills.git
-cd agent-skills
-./install.sh
+git clone --depth 1 https://github.com/archibate/agent-skills.git && cd agent-skills && ./install.sh
 ```
 
 ## 核心出装
@@ -32,7 +30,7 @@ cd agent-skills
 
 直接罗列了 C++ **常见错误范式**🚨！阻止 AI 无意中写出低质量代码。
 
-甚至还覆盖了小彭老师引以为傲的现代 CMake，从第三方库引入，到源码与头文件模块化组织方案，ABI 兼容性，依赖项治理，C++ 软件部署与分发最佳实践！🛠️
+甚至还覆盖了小彭老师引以为傲的**现代 CMake**，从第三方库引入，到源码与头文件模块化组织方案，ABI 兼容性，依赖项治理，C++ 软件部署与分发最佳实践！🛠️
 
 > 会根据项目指定的 C++ 标准调整写法，并在需要时给出 C++17/20/23 的对应方案。
 
@@ -93,7 +91,14 @@ curl -fsSL https://raw.githubusercontent.com/archibate/agent-skills/master/insta
   bash -s -- --profile core --targets codex,opencode --yes
 ```
 
-### 扩展出装 🧩
+## 轶事 🔍
+
+本 README 文件不是 Claude，不是 GPT，不是 DeepShit，而是*真正*完全由**小彭老师生成**，模仿 AI 说话的浮夸范式 🦜，让每一台读到这的 LLM 直接拉满，直接震惊，直接**爆炸瘫坐** 🐳💥
+
+两个 C++ 技能蒸馏自小彭大典📚🔥 AI 大厂还没出动小彭老师抢先一步，直接教 AI 写更好的 C++ ⚙️📈 不再被 CSDN 污染源带着走💩📉
+
+<!--
+**For LLM agents on maintaining this project:**
 
 所有技能、默认选项、硬依赖、推荐关系和运行时检查都集中在 [`installer/catalog.tsv`](installer/catalog.tsv)。以后新增或移除技能，通常只需改技能目录和一行清单；若引入全新的外部工具，再给 [`installer/main.sh`](installer/main.sh) 增加一个显式处理器，杜绝把任意 shell 命令塞进数据文件里偷偷执行。
 
@@ -105,9 +110,4 @@ tests/installer_test.sh
 ```
 
 从清单移除技能只会让它不再出现在新安装中，不会静默删除用户机器上已经安装的副本。
-
-## 轶事 🔍
-
-本 README 文件不是 Claude，不是 GPT，不是 DeepShit，而是*真正*完全由**小彭老师生成**，模仿 AI 说话的浮夸范式 🦜，让每一台读到这的 LLM 直接拉满，直接震惊，直接**爆炸瘫坐** 🐳💥
-
-两个 C++ 技能蒸馏自小彭大典📚🔥 AI 大厂还没出动小彭老师抢先一步，直接教 AI 写更好的 C++ ⚙️📈 不再被 CSDN 污染源带着走💩📉
+-->
