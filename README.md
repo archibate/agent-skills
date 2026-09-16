@@ -98,15 +98,15 @@ curl -fsSL https://raw.githubusercontent.com/archibate/agent-skills/master/insta
 
 看看小彭老师 [`archibate/computer-use`](https://github.com/archibate/computer-use) MCP。
 
-- 无需 Claude / Codex 官方订阅会员，只要模型有视觉定位能力（包括 GPT、Claude、Gemini、GLM-5.3 Flash、Qwen），直接接管电脑。
+- 无需 Claude / Codex 官方订阅会员，只要模型有视觉定位能力（包括 GPT、Claude、Gemini、DeepSeek V4.1、GLM-5.3 Flash、Qwen），直接接管电脑。
 - 无需 Wendous / MacOS 系统，Linux 用户直接用，X11 和 Wayland 都支持。
 - 无需特定 Agent Harness，OpenCode 接入后也能用。
 
 烦恼：Agent 自动接管电脑时，鼠标被抢走 🖱️💥！电脑没法用了？
 
-小彭老师这款可配置**离屏模式** 🖥️，Agent 直接拥有**独立桌面**，不和你前台打架 🖱️💥
+小彭老师这款支持 Xvfb **离屏模式** 🖥️，Agent 直接拥有**独立桌面**，不和你前台打架 🖱️💥
 
-> 用法：在 Xvfb 离屏桌面里启动微信和飞书，配置好 Agent 监控就睡大觉去了 🥱。
+> 用法：在离屏桌面里启动微信或飞书，配置好 Agent 监控就睡大觉去了 🥱。
 >
 > 资本家先生派活？Agent 在后台直接秒回，直接秒接单，秒干完 🏆！小彭老师前台打游戏根本不知情 🎮
 
@@ -117,7 +117,7 @@ curl -fsSL https://raw.githubusercontent.com/archibate/agent-skills/master/insta
 也可以把这段话粘贴到你的 Agent 中，让他帮你配置：
 
 ```
-帮我配置好 https://github.com/archibate/computer-use 这个 MCP，阅读他的 README。确认 daemon 自启动，且你可以正常使用。通过 AskUserQuestion 或类似工具问我要不要配置成 Xvfb 离屏模式。
+帮我配置好 https://github.com/archibate/computer-use 这个 MCP，阅读他的 README。确认 daemon 自启动，且你可以正常使用。
 ```
 
 ## 轶事 🔍

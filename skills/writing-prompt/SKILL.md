@@ -1,6 +1,6 @@
 ---
 name: writing-prompt
-description: "Create or edit agent-facing/LLM prompts using modern prompt-engineering practices. Use this skill before editing agent-facing docs, rule files, references, skills, memory, or any form of LLM prompt. Also use it before writing LLM tests or evaluations. This is mandatory: NEVER skip this skill before writing agent-facing text; MUST use it before editing a file that will be fed to AI agents."
+description: "Create or edit agent-facing/LLM prompts using modern prompt-engineering practices. Use this skill before editing agent-facing docs, rule files, references, skills, memory, or any form of LLM prompt. Also use it before designing agent-facing JSON Schema, MCP tool prompts, or tool/script/CLI responses, and before writing LLM tests or evaluations. This is mandatory: NEVER skip this skill before writing agent-facing text; MUST use it before editing a file that will be fed to AI agents."
 ---
 
 # Writing Prompt
@@ -102,5 +102,6 @@ Overly broad cautionary language can cause unnecessary hesitation. OpenAI notes 
 
 ## References
 
+- `references/tool-schemas.md` — read before designing or editing agent-facing JSON Schema or MCP tool prompts: separate tool behavior, parameter semantics, and structural constraints.
 - `references/testing-prompts.md` — read before writing or tuning LLM tests: evaluation/test split, overfitting, and sample clustering.
-- `references/progressive-disclosure.md` — read when a prompt outgrows the instruction budget and you cannot cut further: split a lean entrypoint from details loaded on demand.
+- `references/progressive-disclosure.md` — read before choosing how instructions are loaded or designing agent-facing tool/script/CLI responses: disclose details through references or runtime results.

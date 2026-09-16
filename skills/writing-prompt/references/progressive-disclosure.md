@@ -1,6 +1,12 @@
 # Progressive Disclosure
 
-Split a prompt that has outgrown the instruction budget into a lean entrypoint that is always in context and details that are loaded on demand.
+Provide information when it becomes relevant to the agent's next decision. Keep what is needed to choose and correctly start an operation available before the call; deliver condition-specific diagnostics, recovery, and next steps when the condition occurs.
+
+Use reference files for detail selected by the task, and runtime results for guidance selected by actual outcomes. This applies to MCP tools, skill-local scripts, and CLIs.
+
+## Reference files
+
+Keep a lean entrypoint in context and load detailed guidance on demand.
 
 Skills provide a clear example: `SKILL.md` carries the triggers and decision rules, while `references/*.md` carries the long tail. Agent-facing docs for extensive project knowledge follow the same tree hierarchy.
 
@@ -23,3 +29,13 @@ scripts/executable --help
 **Why:** Absolute paths are verbose and non-portable; the agent can resolve a skill-relative path when executing the command.
 
 For large lookup tables, tell the agent to search the relevant reference by keyword instead of reading it end to end. Keep the table search-friendly; for example: "Search `references/routes.md` with `rg` for the relevant route or keyword."
+
+## Tool, script, and CLI results
+
+For failures detected reliably at runtime, return the relevant cause and feasible recovery in the error message. Avoid preloading an inventory of possible errors and remedies. Successful results can also provide a next-step hint when it becomes relevant.
+
+Make each response self-contained for its outcome: state what failed or completed, any known side effects or execution uncertainty, and the next useful action. Preserve machine-readable status fields where consumers need them. For example, a stale-frame result can say: "The supplied frame is no longer current; call computer_observe." The agent need not learn that recovery rule before seeing the failure.
+
+Before removing static recovery guidance, verify that the actual consumer receives the replacement message through the tool response, captured stdout/stderr, or an asynchronous result it reads. An exit code alone or a diagnostic hidden in logs cannot replace that guidance. Exercise the affected result paths to check delivery.
+
+Keep input requirements and material side effects available before invocation. Do not make the agent discover costly or irreversible restrictions by failing first.
