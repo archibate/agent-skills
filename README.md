@@ -69,6 +69,7 @@ git clone --depth 1 https://github.com/archibate/agent-skills.git && cd agent-sk
 - AI 自检前端渲染排版错误🔍——`visual-qa`（建议配合 `agent-browser` 安装）
 - 架构设计思维🧠——`grill-me`, `fresh-arch`
 - Fable 帮 Codex 小审计🧐——`fable-advisor`
+- 让 Codex 也能后台监控唤醒🖥️——`monitor-wakeup`（模仿 Claude Code 的 Monitor）
 - 面向现代模型的提示词规范🤖——`writing-prompt`
 - 禁止浮夸风PPT📔——`artifact-restraint`
 
@@ -80,7 +81,7 @@ curl -fsSL https://raw.githubusercontent.com/archibate/agent-skills/master/insta
 
 可选 Codex、OpenCode、Claude Code，默认勾选两大 C++ 技能和 `AGENTS.md` 三件核心套装；其余得力助手按需选配。
 
-安装器会自动补齐技能依赖，检查 CLI、浏览器、API Key 等运行条件，并在执行任何用户级依赖安装前亮出完整命令。**不碰 `sudo`，不偷存密钥**。已有技能和全局规则会先备份，`AGENTS.md` 只更新安装器管理的区块，不会一把扬了你的私人配置。
+安装器会自动补齐技能依赖，检查 CLI、浏览器、API Key 等运行条件，并在执行任何用户级依赖安装前亮出完整命令。不碰 `sudo`，不偷存密钥。已有技能和全局规则会先备份，`AGENTS.md` 只更新安装器管理的区块，不会一把扬了你的私人配置。
 
 从完整 Git 仓库运行时，安装器默认把所选技能链接到当前仓库；以后在仓库中 `git pull`，各 agent 立即吃到更新。请勿移动或删除这个仓库。若想安装独立副本，可传 `--install-mode copy`。`curl | bash` 下载的临时源码则始终默认复制，脚本退出后不会留下断链。
 
@@ -89,6 +90,34 @@ curl -fsSL https://raw.githubusercontent.com/archibate/agent-skills/master/insta
 ```bash
 curl -fsSL https://raw.githubusercontent.com/archibate/agent-skills/master/install.sh |
   bash -s -- --profile core --targets codex,opencode --yes
+```
+
+## 选配桌面 MCP 🔌
+
+想让 Agent 自己操作 GUI，自动化键盘鼠标？
+
+看看小彭老师 [`archibate/computer-use`](https://github.com/archibate/computer-use) MCP。
+
+- 无需 Claude / Codex 官方订阅会员，只要模型有视觉定位能力（包括 GPT、Claude、Gemini、GLM-5.3 Flash、Qwen），直接接管电脑。
+- 无需 Wendous / MacOS 系统，Linux 用户直接用，X11 和 Wayland 都支持。
+- 无需特定 Agent Harness，OpenCode 接入后也能用。
+
+烦恼：Agent 自动接管电脑时，鼠标被抢走 🖱️💥！电脑没法用了？
+
+小彭老师这款可配置**离屏模式** 🖥️，Agent 直接拥有**独立桌面**，不和你前台打架 🖱️💥
+
+> 用法：在 Xvfb 离屏桌面里启动微信和飞书，配置好 Agent 监控就睡大觉去了 🥱。
+>
+> 资本家先生派活？Agent 在后台直接秒回，直接秒接单，秒干完 🏆！小彭老师前台打游戏根本不知情 🎮
+
+不喜欢 MCP？也支持 CLI 使用：`cu --help`
+
+阅读 [`archibate/computer-use`](https://github.com/archibate/computer-use) 的 README 了解更多。
+
+也可以把这段话粘贴到你的 Agent 中，让他帮你配置：
+
+```
+帮我配置好 https://github.com/archibate/computer-use 这个 MCP，阅读他的 README。确认 daemon 自启动，且你可以正常使用。通过 AskUserQuestion 或类似工具问我要不要配置成 Xvfb 离屏模式。
 ```
 
 ## 轶事 🔍
