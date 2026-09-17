@@ -32,4 +32,4 @@ Keep valid input choices explicit in the schema. For output diagnostics, a stabl
 
 ## Verify the published contract
 
-Use constructs supported by the actual client and schema generator. Inspect the actual tool listing, including generated descriptions and schema constraints. Check that constraints and behavior agree with runtime validation; schema annotations alone do not establish enforcement. For a prose-only change, verify the published text and preserve the existing behavior without adding tests that merely freeze wording.
+Use constructs supported by the actual client and schema generator. Verify the published schema and the tool declaration actually presented to the model. Check that constraints and behavior agree with runtime validation; schema annotations alone do not establish enforcement. For a prose-only change, verify the published text and preserve the existing behavior without adding tests that merely freeze wording.

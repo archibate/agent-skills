@@ -38,4 +38,4 @@ Make each response self-contained for its outcome: state what failed or complete
 
 Before removing static recovery guidance, verify that the actual consumer receives the replacement message through the tool response, captured stdout/stderr, or an asynchronous result it reads. An exit code alone or a diagnostic hidden in logs cannot replace that guidance. Exercise the affected result paths to check delivery.
 
-Keep input requirements and material side effects available before invocation. Do not make the agent discover costly or irreversible restrictions by failing first.
+Before invocation, explain operation semantics and material side effects. Let cheap, side-effect-free validation errors explain input-format details.
