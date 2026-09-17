@@ -34,7 +34,7 @@ For large lookup tables, tell the agent to search the relevant reference by keyw
 
 For failures detected reliably at runtime, return the relevant cause and feasible recovery in the error message. Avoid preloading an inventory of possible errors and remedies. Successful results can also provide a next-step hint when it becomes relevant.
 
-Make each response self-contained for its outcome: state what failed or completed, any known side effects or execution uncertainty, and the next useful action. Preserve machine-readable status fields where consumers need them. For example, a stale-frame result can say: "The supplied frame is no longer current; call computer_observe." The agent need not learn that recovery rule before seeing the failure.
+Make each response self-contained for its outcome: state what failed or completed, any known side effects or execution uncertainty, and the next useful action. Preserve machine-readable status fields where consumers need them. For example, a missing-file result can say: "File not found; list the directory and select an existing file." The agent need not learn that recovery rule before seeing the failure.
 
 Before removing static recovery guidance, verify that the actual consumer receives the replacement message through the tool response, captured stdout/stderr, or an asynchronous result it reads. An exit code alone or a diagnostic hidden in logs cannot replace that guidance. Exercise the affected result paths to check delivery.
 
