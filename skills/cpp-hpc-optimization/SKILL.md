@@ -33,8 +33,9 @@ complexity with correctness evidence and a representative benchmark.
 7. **Never encode a benchmark accident as a law.** Cache sizes, SIMD width,
    thread count, tile size, padding, and crossover thresholds are target- and
    workload-dependent.
-8. **Keep a portable fallback.** ISA-specific kernels require feature dispatch,
-   tail handling, and equivalence tests.
+8. **Make ISA requirements explicit.** Use feature dispatch and a compatible
+   fallback when targets vary, or a verified fixed ISA for controlled deployments.
+   Both require tail handling and equivalence tests.
 
 ## Workflow
 

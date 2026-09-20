@@ -840,6 +840,14 @@ parent-owns-child idioms are deliberate and correct *for that paradigm*. Keep
 them inside Qt code; just don't carry them into value-semantic modern C++, where
 this skill's conventions apply.
 
+## Undefined behavior
+
+Establish each operation's bounds, lifetime, type, arithmetic, and synchronization
+preconditions before executing it. Validate external input in release builds;
+passing tests or running without a crash does not prove absence of UB. Classify
+behavior against the project's C++ version, distinguishing UB from unspecified
+or implementation-defined behavior and compile-time errors.
+
 ## Compiler hygiene
 
 Let the compiler enforce the style — most rules above become hard errors instead
@@ -864,6 +872,11 @@ runtime (every linked translation unit must match).
 
 You MUST proactively load these when the task touches their area:
 
+- `references/undefined-behavior.md` — UB checklist, focused constexpr probes,
+  and integrated sanitizer checks. Load me before writing or reviewing
+  pointer/bounds/lifetime operations, type punning, arithmetic boundaries,
+  sequencing, library preconditions, or shared mutable state, and when
+  investigating suspected UB.
 - `references/decoupled-modules.md` — definite computation vs tacit I/O or GUI
   boundaries, interface seams, agent-operable harnesses, and integration gates.
   Load me before decomposing a new C++ project or multi-module architecture.

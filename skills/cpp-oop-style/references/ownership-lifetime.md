@@ -100,8 +100,11 @@ Res(Res &&o) noexcept : h(o.h) { o.h = {}; }   // source blanked
 
 ## Polymorphic bases
 
-Any class with `virtual` functions needs `virtual ~T() = default;`. Without it,
-`delete basePtr` skips the derived destructor and leaks its RAII members. Enable
+Give polymorphic interfaces `virtual ~T() = default;`. Ordinary deletion of a
+derived object through a base pointer without a virtual base destructor is
+undefined behavior, not merely a skipped destructor or a leak. See
+[the deletion rule](https://eel.is/c++draft/expr.delete#3) and
+`undefined-behavior.md` for its specialized destroying-delete exception. Enable
 `-Wnon-virtual-dtor` and `-Wdelete-non-virtual-dtor`. To block slicing on a
 polymorphic base, also `T &operator=(T &&) = delete;`.
 

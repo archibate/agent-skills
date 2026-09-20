@@ -21,6 +21,7 @@
 - [Vectorize strided streams with indexed gathers](#vectorize-strided-streams-with-indexed-gathers)
 - [Handle tails tiny inputs and alignment](#handle-tails-tiny-inputs-and-alignment)
 - [Choose intrinsics only with evidence](#choose-intrinsics-only-with-evidence)
+- [Compile-time ISA flags](#compile-time-isa-flags)
 - [Dispatch across ISAs](#dispatch-across-isas)
 
 ## Make optimization legal and visible
@@ -457,10 +458,53 @@ two-vector unroll reaches 1302 ns, a modest gain consistent with exposing more
 memory-level parallelism in a bandwidth-heavy loop. Use the compiler's loop as
 the baseline; alignment and intrinsics are contracts/tools, not speed tokens.
 
+## Compile-time ISA flags
+
+For a fixed deployment target, or a controlled fleet with a dedicated binary
+per target, select the ISA at build time when this simplifies deployment and
+optimization. Runtime ISA dispatch is unnecessary within a binary whose minimum
+ISA is guaranteed by its deployment contract. Keep the reference path for
+correctness; a scalar path compiled with the same flags is not a portable binary
+fallback.
+
+For GCC on x86, `-march=` selects the permitted instruction set; `-mtune=` tunes
+code generation within that set. Use `-march=native` when the build environment's
+CPU features match the deployment target. On a separate build host, select an
+explicit target supported by the deployment compiler. Explicit settings are also
+useful for reproducible builds and fleet baselines, not just when probing is
+unavailable. See [GCC's x86 options](https://gcc.gnu.org/onlinedocs/gcc/x86-Options.html).
+
+Print GCC's expanded frontend arguments on the target machine with:
+
+```bash
+g++ -march=native -### -E -x c++ /dev/null 2>&1 | rg 'cc1plus'
+```
+
+To inspect enabled and disabled target options:
+
+```bash
+g++ -march=native -Q --help=target -x c++ -c /dev/null -o /dev/null
+```
+
+Use the reported `-march`, `-mtune`, and feature flags supported by the build
+compiler to reproduce the target ISA settings.
+Use `CMakePresets.json` or similar to manage flags for multiple target platforms.
+
+ISA flags allow the optimizer to use those instructions in compiled code;
+`-O3` does not guarantee that every eligible loop vectorizes or becomes faster.
+Inspect optimization reports and assembly, then benchmark on the target.
+
+The baseline `-march=x86-64` includes SSE2 but not AVX/AVX2. A capable CPU alone
+does not enable those instructions in generated code.
+
+If a build faults with `SIGILL` after adding `-m` flags but never witnessed before,
+unsupported ISA is likely the cause. Inspect the faulting instruction and its origin.
+
 ## Dispatch across ISAs
 
-Provide a scalar baseline and optional ISA variants. Select once per buffer,
-batch, or operation—not per element.
+When one binary must support different ISA capabilities, provide a baseline
+compatible with every supported target and optional ISA variants. Select once
+per buffer, batch, or operation—not per element.
 
 Possible mechanisms include separate translation units with target flags,
 function target attributes/multiversioning, platform dispatch libraries, or a

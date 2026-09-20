@@ -10,6 +10,11 @@ The main source is <https://github.com/parallel101/cppguidebook>, especially
 `design_gamedev.md`, `error_code.md`, `cpp_lifetime.md`, `lambda.md`,
 `functions.md`, `auto.md`, `design_concept.md`, and `platform.md`.
 
+The [undefined-behavior chapter (`undef.md`)](https://parallel101.github.io/cppguidebook/undef/)
+supplies the topic inventory for `undefined-behavior.md`. That reference checks
+the rules against the linked standards and qualifies version-dependent behavior
+rather than inheriting the chapter's classifications verbatim.
+
 The companion <https://github.com/parallel101/course> material covers the
 `design`, `stl`, and `cmake` sessions, including singleton, get/set, type
 erasure, and move semantics. The CMake-first project guidance comes specifically
