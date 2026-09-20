@@ -872,11 +872,6 @@ runtime (every linked translation unit must match).
 
 You MUST proactively load these when the task touches their area:
 
-- `references/undefined-behavior.md` — UB checklist, focused constexpr probes,
-  and integrated sanitizer checks. Load me before writing or reviewing
-  pointer/bounds/lifetime operations, type punning, arithmetic boundaries,
-  sequencing, library preconditions, or shared mutable state, and when
-  investigating suspected UB.
 - `references/decoupled-modules.md` — definite computation vs tacit I/O or GUI
   boundaries, interface seams, agent-operable harnesses, and integration gates.
   Load me before decomposing a new C++ project or multi-module architecture.
@@ -899,6 +894,11 @@ You MUST proactively load these when the task touches their area:
   durable developer surfaces, customer diagnostics, live calibration, and fast
   diagnostic builds. Load me when debugging needs controllable execution or when
   designing persistent development and support controls.
+- `references/undefined-behavior.md` — UB checklist, focused constexpr probes,
+  and integrated sanitizer checks. Load me before writing or reviewing
+  pointer/bounds/lifetime operations, type punning, arithmetic boundaries,
+  sequencing, library preconditions, or shared mutable state, and when
+  investigating suspected UB.
 - `references/ownership-lifetime.md` — no raw `new`, smart pointers vs `vector`,
   references vs pointers, RAII for C resources, the rule of five, dangling
   temporaries. Load me before smart pointers, or resource management design.
