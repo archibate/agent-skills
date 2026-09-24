@@ -183,8 +183,7 @@ constexpr void ubCheck(int const shift) {
     (void)result;
 }
 
-constexpr auto ubChecker =
-    (ubCheck(std::numeric_limits<unsigned>::digits), 0); // must fail to compile
+static_assert((ubCheck(std::numeric_limits<unsigned>::digits), true)); // must fail to compile
 ```
 
 Changing the count to `std::numeric_limits<unsigned>::digits - 1` gives a valid
