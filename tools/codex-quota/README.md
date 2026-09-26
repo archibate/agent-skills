@@ -112,6 +112,61 @@ Weekly Pro 5x candidates (this account's observed wire plan is `prolite`) includ
 the interval divided by the user-supplied Plus reference of **4,989.7 credits/week**.
 That reference is a comparison value, not an independently validated constant.
 
+## Token-based cross-check
+
+```bash
+uv run --offline python token_window.py
+```
+
+This offline check uses the latest saved account sample and the earliest matching
+rollout quota observation in that reset period. It counts `token_usage_record`
+requests once per hashed response ID, including real compaction calls and requests
+whose cumulative snapshot was delayed. Responses observed before the start are
+excluded even if a fork repeats them with a timestamp inside the interval.
+Cumulative token deltas provide a separate
+cross-check and supplement missing response records; inherited fork baselines are
+verified against the parent before counting the fork's first request. Restored
+parent snapshots are skipped until the fork produces new usage, including
+multi-record replays stamped at fork time. Unchanged
+counter snapshots add no usage, although a separate compaction request may still
+be billable. Malformed, rewound or unexplained counters remain visible and block
+extrapolation. Unmatched counter candidates alongside canonical responses also
+block extrapolation because they could describe the same request differently.
+The source JSONLs are read locally; exports contain numerical usage, model labels,
+timestamps, hashed provenance and the already-projected quota fields (including
+plan and numerical credit balance).
+
+`data/token_window_events.jsonl` is the auditable request ledger;
+`data/token_window.json` contains uncached/cached input, output, model breakdowns,
+and a conditional endpoint extrapolation in **tokens per 100% allowance**.
+Canonical requests without a matching counter snapshot retain null quota fields:
+they contribute tokens but no intermediate percentage point, and their quota
+epoch is checked against the nearest same-source counter. Such records can reflect
+compaction, delayed snapshots, boundary timing or fork copies; unavailable or
+different epochs block extrapolation, and an earlier original response is required
+to detect a restamped fork copy.
+It also
+tests all percentage observations against a single raw-token denominator; an
+inconsistent fit does not establish a constant-rate model. Since asynchronous
+quota reads can be out of order, a second diagnostic drops falling-percentage
+points and fits the remaining monotone subsequence. Raw token
+counts depend on the model/cache/output mix and are not an absolute credit budget.
+
+Known regime boundaries and changed plans/reset times are rejected. Same-source
+percentage decreases block the fit; cross-source reversals are recorded as timing
+warnings and require the explicit assumption that the readings are stale rather
+than hidden resets. Endpoint GET duration is retained as timing uncertainty.
+
+Web/mobile use in the saved account analytics is reported because it is missing
+from this machine's token logs. Account attribution and per-request speed also
+remain unverified. Astra-only Standard/Fast credit-equivalent scenarios use the
+[current official rate card](https://learn.chatgpt.com/docs/pricing), leave
+`codex-auto-review` unpriced, and do not assert that purchased-credit rates match
+included-quota weights. The script does not divide token units by the Plus credit
+reference or replace the direct-credit inference result.
+The rate card specifies no separate cache-write credit surcharge; the report
+retains the observed cache-write count rather than inventing an additional fee.
+
 ## Validation and source contracts
 
 ```bash
