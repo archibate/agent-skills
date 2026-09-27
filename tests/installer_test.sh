@@ -211,7 +211,32 @@ set -e
 [ "$status" -eq 1 ] || fail "unsupported target returned $status instead of 1"
 [ ! -e "$CASE_HOME/.claude/skills/monitor-wakeup" ] || fail 'unsupported target installed monitor-wakeup'
 
-printf '15. Scrapling installs with only the uv runtime\n'
+printf '15. Pi target shares the agents skills directory\n'
+new_case pi
+run_installer --profile core --targets pi --yes --skip-deps >/dev/null
+assert_file "$CASE_HOME/.agents/skills/cpp-oop-style/SKILL.md"
+assert_file "$CASE_HOME/.agents/skills/cpp-hpc-optimization/SKILL.md"
+assert_link_target "$CASE_HOME/.agents/skills/cpp-oop-style" "$ROOT/skills/cpp-oop-style"
+assert_file "$CASE_HOME/.pi/agent/AGENTS.md"
+assert_contains "$CASE_HOME/.pi/agent/AGENTS.md" '<!-- archibate/agent-skills:begin -->'
+[ ! -e "$CASE_HOME/.claude" ] || fail 'Pi-only install created Claude files'
+
+printf '15b. Pi honors PI_CODING_AGENT_DIR for guidance\n'
+new_case pi-agent-dir
+PI_CODING_AGENT_DIR="$CASE_ROOT/custom-agent" run_installer --skills agent-rules --targets pi --yes --skip-deps >/dev/null
+assert_file "$CASE_ROOT/custom-agent/AGENTS.md"
+[ ! -e "$CASE_HOME/.pi" ] || fail 'Pi guidance ignored PI_CODING_AGENT_DIR'
+
+printf '15c. Codex-only skill is rejected for Pi\n'
+new_case pi-unsupported-target
+set +e
+run_installer --skills monitor-wakeup --targets pi --yes --skip-deps >/dev/null 2>&1
+status=$?
+set -e
+[ "$status" -eq 1 ] || fail "Pi unsupported target returned $status instead of 1"
+[ ! -e "$CASE_HOME/.agents/skills/monitor-wakeup" ] || fail 'unsupported Pi target installed monitor-wakeup'
+
+printf '15d. Scrapling installs with only the uv runtime\n'
 scrapling_runtimes=$(awk -F '\t' '$1 == "scrapling" { print $8 }' "$ROOT/installer/catalog.tsv")
 [ "$scrapling_runtimes" = uv ] || fail "expected Scrapling runtime checks to be uv, found: $scrapling_runtimes"
 new_case scrapling-install

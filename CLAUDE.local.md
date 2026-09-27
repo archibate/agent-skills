@@ -6,7 +6,7 @@ tooling.
 
 ## Install
 
-The interactive installer for Codex, OpenCode, or Claude Code:
+The interactive installer for Codex, OpenCode, Claude Code, or Pi:
 
 ```bash
 ./install.sh
@@ -17,8 +17,8 @@ by default, so `git pull` updates them in place. Keep the checkout at a stable p
 or pass `--install-mode copy` for independent copies. Piped archive installations
 copy automatically because their source directory is temporary.
 
-Codex and OpenCode discover personal skills under `~/.agents/skills`; Claude
-Code uses `~/.claude/skills`. The installer resolves skill dependencies, checks
+Codex, OpenCode, and Pi discover personal skills under `~/.agents/skills`;
+Claude Code uses `~/.claude/skills`. The installer resolves skill dependencies, checks
 external requirements, and merges `AGENTS.md` into each selected agent's global
 guidance without replacing unrelated user content.
 

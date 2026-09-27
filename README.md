@@ -4,7 +4,7 @@
 
 *小彭老师直接自蒸馏🫙*
 
-让你的 Codex、OpenCode、Claude Code 顷刻炼化《小彭大典》📚🔥
+让你的 Codex、OpenCode、Claude Code、Pi 顷刻炼化《小彭大典》📚🔥
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/archibate/agent-skills/master/install.sh | bash
@@ -36,7 +36,7 @@ git clone --depth 1 https://github.com/archibate/agent-skills.git && cd agent-sk
 
 本技能不仅可以用于写出高质量代码，也能审查现有代码，随时调用一位虚拟小彭老师监督你。
 
-> 一键安装器默认勾选。手动安装时，拷贝 [`skills/cpp-oop-style`](skills/cpp-oop-style) 到 `~/.agents/skills/`（Codex、OpenCode）或 `~/.claude/skills/`（Claude Code）。
+> 一键安装器默认勾选。手动安装时，拷贝 [`skills/cpp-oop-style`](skills/cpp-oop-style) 到 `~/.agents/skills/`（Codex、OpenCode、Pi）或 `~/.claude/skills/`（Claude Code）。
 
 ### `cpp-hpc-optimization` 🚤
 
@@ -59,7 +59,7 @@ git clone --depth 1 https://github.com/archibate/agent-skills.git && cd agent-sk
 
 超 25 条**自律规则**——开工前必须先探索上下文，小规模烟测，小众第三方库用前必查证消幻觉，不要偷懒最小化修改量，严禁猴子补丁，简单能自己验证的问题不许停下等用户决策，修复必须修复真正根源，宣布完工前自己清理遗留垃圾等。
 
-> 一键安装器默认勾选，并会安全合并到 Codex、OpenCode 或 Claude Code 对应的全局规则文件。
+> 一键安装器默认勾选，并会安全合并到 Codex、OpenCode、Claude Code 或 Pi 对应的全局规则文件。
 
 ### 其他得力助手 🤲
 
@@ -78,7 +78,7 @@ git clone --depth 1 https://github.com/archibate/agent-skills.git && cd agent-sk
 curl -fsSL https://raw.githubusercontent.com/archibate/agent-skills/master/install.sh | bash
 ```
 
-可选 Codex、OpenCode、Claude Code，默认勾选两大 C++ 技能和 `AGENTS.md` 三件核心套装；其余得力助手按需选配。
+可选 Codex、OpenCode、Claude Code、Pi，默认勾选两大 C++ 技能和 `AGENTS.md` 三件核心套装；其余得力助手按需选配。
 
 安装器会自动补齐技能依赖，检查 CLI、浏览器、API Key 等运行条件，并在执行任何用户级依赖安装前亮出完整命令。不碰 `sudo`，不偷存密钥。已有技能和全局规则会先备份，`AGENTS.md` 只更新安装器管理的区块，不会一把扬了你的私人配置。
 

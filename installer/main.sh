@@ -34,9 +34,9 @@ ITEM_RUNTIMES=()
 ITEM_TARGETS=()
 ITEM_LABELS=()
 SELECTED=()
-TARGET_IDS=("codex" "opencode" "claude")
-TARGET_LABELS=("Codex" "OpenCode" "Claude Code")
-TARGET_SELECTED=(0 0 0)
+TARGET_IDS=("codex" "opencode" "claude" "pi")
+TARGET_LABELS=("Codex" "OpenCode" "Claude Code" "Pi")
+TARGET_SELECTED=(0 0 0 0)
 RUNTIME_IDS=()
 RUNTIME_SELECTED=()
 RUNTIME_INSTALLABLE=()
@@ -69,7 +69,8 @@ Usage:
 
 Options:
   --profile core|all              Initial skill selection
-  --targets codex,opencode,claude Target agents
+  --targets codex,opencode,claude,pi
+                                  Target agents
   --skills ID,ID                  Explicit skill/guidance selection
   --install-mode auto|link|copy   Reuse a Git checkout or copy skill files
   --ref REF                       Git branch, tag, or commit (bootstrap option)
@@ -459,10 +460,11 @@ detect_targets() {
         command -v codex >/dev/null 2>&1 && TARGET_SELECTED[0]=1
         command -v opencode >/dev/null 2>&1 && TARGET_SELECTED[1]=1
         command -v claude >/dev/null 2>&1 && TARGET_SELECTED[2]=1
+        command -v pi >/dev/null 2>&1 && TARGET_SELECTED[3]=1
         return 0
     }
 
-    TARGET_SELECTED=(0 0 0)
+    TARGET_SELECTED=(0 0 0 0)
     target_parts=()
     IFS=, read -r -a target_parts <<< "$TARGET_ARG"
     for target in "${target_parts[@]}"; do
@@ -1113,6 +1115,7 @@ guidance_destination() {
         codex) printf '%s/.codex/AGENTS.md\n' "$HOME" ;;
         opencode) printf '%s/.config/opencode/AGENTS.md\n' "$HOME" ;;
         claude) printf '%s/.claude/CLAUDE.md\n' "$HOME" ;;
+        pi) printf '%s/AGENTS.md\n' "${PI_CODING_AGENT_DIR:-$HOME/.pi/agent}" ;;
     esac
 }
 
@@ -1122,13 +1125,18 @@ install_content() {
         if [ "${SELECTED[$idx]}" -eq 1 ] && [ "${ITEM_KINDS[$idx]}" = skill ]; then
             source="$SOURCE_ROOT/${ITEM_SOURCES[$idx]}"
             shared_skills=0
-            if [ "${TARGET_SELECTED[0]}" -eq 1 ] && item_supports_target "$idx" codex; then shared_skills=1; fi
-            if [ "${TARGET_SELECTED[1]}" -eq 1 ] && item_supports_target "$idx" opencode; then shared_skills=1; fi
+            for shared_target in codex opencode pi; do
+                shared_idx=$(target_index "$shared_target")
+                if [ "${TARGET_SELECTED[$shared_idx]}" -eq 1 ] && item_supports_target "$idx" "$shared_target"; then
+                    shared_skills=1
+                fi
+            done
             if [ "$shared_skills" -eq 1 ]; then
                 destination="$HOME/.agents/skills/${ITEM_IDS[$idx]}"
                 materialize_skill "$source" "$destination" || return 1
             fi
-            if [ "${TARGET_SELECTED[2]}" -eq 1 ] && item_supports_target "$idx" claude; then
+            claude_idx=$(target_index claude)
+            if [ "${TARGET_SELECTED[$claude_idx]}" -eq 1 ] && item_supports_target "$idx" claude; then
                 destination="$HOME/.claude/skills/${ITEM_IDS[$idx]}"
                 materialize_skill "$source" "$destination" || return 1
             fi
