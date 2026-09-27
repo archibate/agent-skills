@@ -17,4 +17,5 @@ fresh-arch	skill	skills/fresh-arch	thinking	no	-	grill-me	-	-	Fresh architecture
 grill-me	skill	skills/grill-me	thinking	no	-	fresh-arch	-	-	Design interview
 fable-advisor	skill	skills/fable-advisor	thinking	no	-	-	claude-cli,jq	codex	Independent Fable advisor
 writing-prompt	skill	skills/writing-prompt	writing	no	-	-	-	-	Modern prompt engineering
+employee-chat	skill	skills/employee-chat	writing	no	-	-	-	-	Workplace chat writing
 minimalist	skill	skills/minimalist	writing	no	-	-	-	-	Minimalist language
