@@ -15,7 +15,6 @@ lark-cli	skill	skills/lark-cli	integration	no	-	-	node-npx,lark-auth	-	Lark and 
 monitor-wakeup	skill	skills/monitor-wakeup	integration	no	-	-	-	codex	Session monitoring and wake-up
 fresh-arch	skill	skills/fresh-arch	thinking	no	-	grill-me	-	-	Fresh architecture design
 grill-me	skill	skills/grill-me	thinking	no	-	fresh-arch	-	-	Design interview
-fable-advisor	skill	skills/fable-advisor	thinking	no	-	-	claude-cli,jq	codex	Independent Fable advisor
 writing-prompt	skill	skills/writing-prompt	writing	no	-	-	-	-	Modern prompt engineering
 employee-chat	skill	skills/employee-chat	writing	no	-	-	-	-	Workplace chat writing
 minimalist	skill	skills/minimalist	writing	no	-	-	-	-	Minimalist language

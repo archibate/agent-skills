@@ -68,7 +68,6 @@ git clone --depth 1 https://github.com/archibate/agent-skills.git && cd agent-sk
 - 读取各种网页，反反爬🐛——`read-url`（建议配合 `jina-ai` 和 `scrapling` 安装）
 - AI 自检前端渲染排版错误🔍——`visual-qa`（建议配合 `agent-browser` 安装）
 - 架构设计思维🧠——`grill-me`, `fresh-arch`
-- Fable 帮 Codex 小审计🧐——`fable-advisor`
 - 让 Codex 也能后台监控唤醒🖥️——`monitor-wakeup`（模仿 Claude Code 的 Monitor）
 - 面向现代模型的提示词规范🤖——`writing-prompt`
 - 禁止浮夸风PPT📔——`artifact-restraint`

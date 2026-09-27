@@ -150,7 +150,7 @@ target_index() {
 
 runtime_known() {
     case "$1" in
-        curl|uv|node-npx|node22|chrome-browser|chrome-debug|context7-key|jina-cli|jina-key|agent-browser-cli|agent-browser-runtime|lark-auth|claude-cli|jq) return 0 ;;
+        curl|uv|node-npx|node22|chrome-browser|chrome-debug|context7-key|jina-cli|jina-key|agent-browser-cli|agent-browser-runtime|lark-auth) return 0 ;;
         *) return 1 ;;
     esac
 }
@@ -721,14 +721,6 @@ runtime_probe() {
             ;;
         lark-auth)
             RUNTIME_PROBE_MESSAGE="Lark authentication must be completed manually"
-            ;;
-        claude-cli)
-            command -v claude >/dev/null 2>&1 && return 0
-            RUNTIME_PROBE_MESSAGE="Claude Code is required for the Fable advisor"
-            ;;
-        jq)
-            command -v jq >/dev/null 2>&1 && return 0
-            RUNTIME_PROBE_MESSAGE="jq is required to build the Fable sandbox settings"
             ;;
     esac
     return 1
