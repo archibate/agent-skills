@@ -274,6 +274,19 @@ item_supports_target() {
     [ "$supported" = "-" ] || contains_csv "$target" "$supported"
 }
 
+# A skill is restricted when it does not support every shared agent. The shared
+# ~/.agents/skills root is scanned by Codex, OpenCode, and Pi alike, so a
+# restricted skill must never be materialized there; it installs into each
+# supporting agent's private skill directory instead.
+item_restricted_for_shared() {
+    local idx=$1
+    local target
+    for target in codex opencode pi; do
+        item_supports_target "$idx" "$target" || return 0
+    done
+    return 1
+}
+
 item_has_selected_target() {
     local idx=$1
     local target_idx=0
@@ -328,6 +341,11 @@ validate_catalog() {
         validate_id_list "$id" "dependency" "${ITEM_REQUIRES[$idx]}"
         validate_id_list "$id" "recommendation" "${ITEM_RECOMMENDS[$idx]}"
         validate_target_list "$id" "${ITEM_TARGETS[$idx]}"
+        if [ "${ITEM_KINDS[$idx]}" = skill ] && item_restricted_for_shared "$idx"; then
+            case "${ITEM_SOURCES[$idx]}" in
+                skills/*) die "$id is target-restricted; move its source out of skills/ (e.g. skills-<target>/$id)" ;;
+            esac
+        fi
         runtimes=${ITEM_RUNTIMES[$idx]}
         if [ "$runtimes" != "-" ]; then
             runtime_parts=()
@@ -362,7 +380,7 @@ validate_catalog() {
         idx=$((idx + 1))
     done
 
-    for skill_dir in "$SOURCE_ROOT"/skills/*; do
+    for skill_dir in "$SOURCE_ROOT"/skills/* "$SOURCE_ROOT"/skills-*/*; do
         [ -f "$skill_dir/SKILL.md" ] || continue
         basename_value=${skill_dir##*/}
         item_index "$basename_value" >/dev/null || die "skill missing from catalog: $basename_value"
@@ -1119,26 +1137,49 @@ guidance_destination() {
     esac
 }
 
+skill_destination() {
+    local target=$1
+    local id=$2
+    case "$target" in
+        codex) printf '%s/skills/%s\n' "${CODEX_HOME:-$HOME/.codex}" "$id" ;;
+        opencode) printf '%s/opencode/skills/%s\n' "${XDG_CONFIG_HOME:-$HOME/.config}" "$id" ;;
+        claude) printf '%s/.claude/skills/%s\n' "$HOME" "$id" ;;
+        pi) printf '%s/skills/%s\n' "${PI_CODING_AGENT_DIR:-$HOME/.pi/agent}" "$id" ;;
+    esac
+}
+
 install_content() {
     idx=0
     while [ "$idx" -lt "${#ITEM_IDS[@]}" ]; do
         if [ "${SELECTED[$idx]}" -eq 1 ] && [ "${ITEM_KINDS[$idx]}" = skill ]; then
             source="$SOURCE_ROOT/${ITEM_SOURCES[$idx]}"
-            shared_skills=0
-            for shared_target in codex opencode pi; do
-                shared_idx=$(target_index "$shared_target")
-                if [ "${TARGET_SELECTED[$shared_idx]}" -eq 1 ] && item_supports_target "$idx" "$shared_target"; then
-                    shared_skills=1
+            if item_restricted_for_shared "$idx"; then
+                target_idx=0
+                while [ "$target_idx" -lt "${#TARGET_IDS[@]}" ]; do
+                    target=${TARGET_IDS[$target_idx]}
+                    if [ "${TARGET_SELECTED[$target_idx]}" -eq 1 ] && item_supports_target "$idx" "$target"; then
+                        destination=$(skill_destination "$target" "${ITEM_IDS[$idx]}")
+                        materialize_skill "$source" "$destination" || return 1
+                    fi
+                    target_idx=$((target_idx + 1))
+                done
+            else
+                shared_skills=0
+                for shared_target in codex opencode pi; do
+                    shared_idx=$(target_index "$shared_target")
+                    if [ "${TARGET_SELECTED[$shared_idx]}" -eq 1 ] && item_supports_target "$idx" "$shared_target"; then
+                        shared_skills=1
+                    fi
+                done
+                if [ "$shared_skills" -eq 1 ]; then
+                    destination="$HOME/.agents/skills/${ITEM_IDS[$idx]}"
+                    materialize_skill "$source" "$destination" || return 1
                 fi
-            done
-            if [ "$shared_skills" -eq 1 ]; then
-                destination="$HOME/.agents/skills/${ITEM_IDS[$idx]}"
-                materialize_skill "$source" "$destination" || return 1
-            fi
-            claude_idx=$(target_index claude)
-            if [ "${TARGET_SELECTED[$claude_idx]}" -eq 1 ] && item_supports_target "$idx" claude; then
-                destination="$HOME/.claude/skills/${ITEM_IDS[$idx]}"
-                materialize_skill "$source" "$destination" || return 1
+                claude_idx=$(target_index claude)
+                if [ "${TARGET_SELECTED[$claude_idx]}" -eq 1 ] && item_supports_target "$idx" claude; then
+                    destination="$HOME/.claude/skills/${ITEM_IDS[$idx]}"
+                    materialize_skill "$source" "$destination" || return 1
+                fi
             fi
         fi
         idx=$((idx + 1))

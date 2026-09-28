@@ -130,6 +130,8 @@ curl -fsSL https://raw.githubusercontent.com/archibate/agent-skills/master/insta
 
 所有技能、默认选项、硬依赖、推荐关系和运行时检查都集中在 [`installer/catalog.tsv`](installer/catalog.tsv)。以后新增或移除技能，通常只需改技能目录和一行清单；若引入全新的外部工具，再给 [`installer/main.sh`](installer/main.sh) 增加一个显式处理器，杜绝把任意 shell 命令塞进数据文件里偷偷执行。
 
+目标受限技能（`targets` 列不是 `-` 且未覆盖 codex/opencode/pi 全部）的源码必须放在 `skills-<target>/` 下，不能放 `skills/`：`~/.agents/skills` 是各 agent 共享扫描目录，放进去会泄漏给所有 agent，安装器会把它装进对应 agent 的私有技能目录（如 `~/.codex/skills`）。
+
 提交前验证清单、依赖图和安装流程：
 
 ```bash

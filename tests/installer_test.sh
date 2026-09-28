@@ -199,9 +199,12 @@ assert_link_target "$CASE_HOME/.agents/skills/cpp-oop-style" "$ROOT/skills/cpp-o
 
 printf '14. target-specific skills install only for compatible agents\n'
 new_case target-compatibility
-run_installer --skills monitor-wakeup --targets codex,claude --yes --skip-deps >/dev/null
-assert_file "$CASE_HOME/.agents/skills/monitor-wakeup/SKILL.md"
+run_installer --skills monitor-wakeup --targets codex,claude,pi --yes --skip-deps >/dev/null
+assert_file "$CASE_HOME/.codex/skills/monitor-wakeup/SKILL.md"
+assert_link_target "$CASE_HOME/.codex/skills/monitor-wakeup" "$ROOT/skills-codex/monitor-wakeup"
+[ ! -e "$CASE_HOME/.agents/skills/monitor-wakeup" ] || fail 'Codex-only skill leaked into the shared skills directory'
 [ ! -e "$CASE_HOME/.claude/skills/monitor-wakeup" ] || fail 'Codex-only skill was installed for Claude'
+[ ! -e "$CASE_HOME/.pi/agent/skills/monitor-wakeup" ] || fail 'Codex-only skill was installed for Pi'
 
 new_case unsupported-target
 set +e
