@@ -1,0 +1,6 @@
+interface:
+  display_name: "System Software Audit"
+  short_description: "Audit safety, state, concurrency and resource bounds."
+  default_prompt: "Use $system-software-audit to audit this implementation and its operational risks before production deployment, reproduce material findings safely, and report evidence and readiness."
+policy:
+  allow_implicit_invocation: true

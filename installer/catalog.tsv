@@ -2,6 +2,7 @@
 agent-rules	guidance	AGENTS.md	core	yes	-	-	-	-	Agent behavior rules
 cpp-oop-style	skill	skills/cpp-oop-style	core	yes	-	cpp-hpc-optimization	-	-	C++ OOP style
 cpp-hpc-optimization	skill	skills/cpp-hpc-optimization	core	yes	cpp-oop-style	-	-	-	C++ HPC optimization
+system-software-audit	skill	skills/system-software-audit	core	yes	-	-	-	-	System software audit
 agent-browser	skill	skills/agent-browser	browser	no	-	-	agent-browser-cli,agent-browser-runtime	-	Headless browser automation
 chrome-cdp	skill	skills/chrome-cdp	browser	no	-	-	node22,chrome-browser,chrome-debug	-	Visible Chrome automation
 visual-qa	skill	skills/visual-qa	browser	no	-	agent-browser	-	-	Visual quality assurance
