@@ -1,2 +1,4 @@
 /skills/cpp-hpc-optimization/references/parallel101/** -whitespace linguist-vendored
-/skills/scrapling/** -whitespace linguist-vendored
+/skills/web-fetch/references/scrapling.md -whitespace linguist-vendored
+/skills/web-fetch/references/scrapling-LICENSE.txt -whitespace linguist-vendored
+/skills/web-fetch/scripts/scrapling -whitespace linguist-vendored

@@ -184,6 +184,8 @@ export class Job {
 	readonly startedAt: number;
 	/** Set once the model has been given the final status, so completion is not delivered twice. */
 	observed = false;
+	/** Live `job_watch` subscriptions; while any is active it owns the job's exit notification. */
+	watchers = 0;
 	status: JobStatus | undefined;
 	readonly done: Promise<JobStatus>;
 	private child: ChildProcess;
@@ -280,6 +282,11 @@ export class Job {
 				// Files already removed at pi exit.
 			}
 		});
+	}
+
+	/** Keep the process alive until this job exits; the counterpart to detach()'s unref. */
+	keepAlive(): void {
+		this.child.ref();
 	}
 }
 
@@ -386,23 +393,16 @@ export function listJobs(): Job[] {
 	return [...registry.jobs.values()].sort((a, b) => b.startedAt - a.startedAt);
 }
 
-/** Forward bytes appended to `path` into `onData` until stopped. */
+/** Forward bytes appended to `path`, starting at `startOffset`, into `onData` until stopped. */
 export function tailFile(
 	path: string,
 	onData: (data: Buffer) => void,
 	pollMs = 100,
-	fromEnd = false,
+	startOffset = 0,
 ): { stop(): void } {
 	const fd = openSync(path, "r");
 	const buffer = Buffer.alloc(64 * 1024);
-	let offset = 0;
-	if (fromEnd) {
-		try {
-			offset = statSync(path).size;
-		} catch {
-			offset = 0;
-		}
-	}
+	let offset = startOffset;
 	const drain = () => {
 		for (;;) {
 			const n = readSync(fd, buffer, 0, buffer.length, offset);
@@ -441,5 +441,36 @@ export function readTail(path: string, lines: number, maxBytes = 64 * 1024): str
 		}
 	} catch {
 		return "";
+	}
+}
+
+/**
+ * Watch seed: the last `lines` complete lines of `path`, any trailing partial line, and the byte
+ * offset a follower resumes from. Reads [size-maxBytes, size) and resumes at `size`, so the partial
+ * is held rather than lost and no byte is read twice.
+ */
+export function readTailSeed(
+	path: string,
+	lines: number,
+	maxBytes = 64 * 1024,
+): { seedLines: string[]; partial: string; offset: number } {
+	let size: number;
+	try {
+		size = statSync(path).size;
+	} catch {
+		return { seedLines: [], partial: "", offset: 0 };
+	}
+	const start = Math.max(0, size - maxBytes);
+	const fd = openSync(path, "r");
+	try {
+		const buffer = Buffer.alloc(size - start);
+		if (buffer.length > 0) readSync(fd, buffer, 0, buffer.length, start);
+		let text = buffer.toString("utf8");
+		if (start > 0) text = text.replace(/^[^\n]*\n?/, "");
+		const complete = text.split("\n");
+		const partial = complete.pop() ?? "";
+		return { seedLines: complete.slice(-lines), partial, offset: size };
+	} finally {
+		closeSync(fd);
 	}
 }

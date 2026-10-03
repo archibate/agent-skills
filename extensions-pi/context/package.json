@@ -1,0 +1,5 @@
+{
+	"name": "pi-context-extension",
+	"private": true,
+	"type": "module"
+}

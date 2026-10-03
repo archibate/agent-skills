@@ -157,13 +157,24 @@ test("cache-home symlink resolves to a trusted directory", (t) => {
 	h.emit("session_shutdown");
 });
 
-for (const id of ["../escape", ".", "..", "a/b", "", "x".repeat(129)]) {
-	test(`rejects unsafe session id ${JSON.stringify(id)}`, (t) => {
+for (const id of ["../escape", ".", "..", "a/b", "", "-lead", "trail-", ".lead", "trail."]) {
+	test(`rejects session id outside Pi's grammar ${JSON.stringify(id)}`, (t) => {
 		fixture(t);
 		const h = harness(id);
 		assert.throws(() => h.emit("session_start"), /Invalid scratchpad session ID/);
 		assert.equal(process.env.TMPDIR, undefined);
 		assert.equal(existsSync(process.env.XDG_CACHE_HOME), false);
+	});
+}
+
+// Pi permits '.', '_', and '-' inside a session id, so subagent ids like "<parent>.review" must work.
+for (const id of ["a", "session-a", "01a0fffc-fed5-7136-b8c2-0c256308a5b9.review", "A.b_c-9"]) {
+	test(`accepts Pi-valid session id ${JSON.stringify(id)}`, (t) => {
+		fixture(t);
+		const h = harness(id);
+		h.emit("session_start");
+		assert.equal(process.env.TMPDIR, join(process.env.XDG_CACHE_HOME, "pi", "scratchpad", id));
+		h.emit("session_shutdown");
 	});
 }
 

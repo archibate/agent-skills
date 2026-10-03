@@ -1,14 +1,14 @@
 /**
  * jobs extension: explicit background jobs, files as the API.
  *
- * `bash` stays native pi (foreground, timeout-gated); this extension only injects a default
- * timeout so a forgotten long command cannot hang forever, and appends a `job_start` hint when
- * that timeout fires.
+ * `bash` stays native pi (foreground, timeout-gated); this extension injects a default timeout so
+ * a forgotten long command cannot hang forever, appends a `job_start` hint when that timeout fires,
+ * and holds one-shot (print/JSON) runs open while jobs are pending so their completion reaches the
+ * agent instead of being killed by process exit.
  *
  * Only two tools are declared. Everything else is the filesystem: `job_start` returns a job id and
- * the paths of its companion files, and the model operates them with bash (grep, tail, kill,
- * wait on the `status` file). `job_watch` exists because pushing lines into the agent needs the
- * in-process runtime.
+ * its directory, and the model operates it with bash (grep, tail, kill, wait on the `status` file).
+ * `job_watch` exists because pushing lines into the agent needs the in-process runtime.
  */
 
 import type { ExtensionAPI, ExtensionToolContext } from "@earendil-works/pi-coding-agent";
@@ -21,6 +21,7 @@ import {
 	type Job,
 	listJobs,
 	readTail,
+	readTailSeed,
 	registry,
 	startJob,
 	tailFile,
@@ -29,6 +30,7 @@ import {
 const DEFAULT_BASH_TIMEOUT_SECONDS = readEnvInt("PI_JOBS_BASH_TIMEOUT_SECONDS", 120);
 const WATCH_DEFAULT_SECONDS = 600;
 const WATCH_MAX_SECONDS = 3600;
+const WATCH_SEED_LINES = 20;
 const BATCH_MS = 1000;
 const MAX_LINES_PER_EVENT = 20;
 const FLOOD_EVENTS = 10;
@@ -105,27 +107,17 @@ function sessionEnv(ctx: ExtensionToolContext): NodeJS.ProcessEnv {
 }
 
 function jobContract(job: Job): string {
-	return [
-		`Started ${label(job)} (process group ${job.pid}). It runs in the background and you will be notified when it exits.`,
-		`Directory (owner-only): ${job.dir}`,
-		`  command  ${job.commandPath}`,
-		`  stdout   ${job.stdoutPath}`,
-		`  stderr   ${job.stderrPath}`,
-		`  status   ${job.statusPath}   (created when it finishes; cat it for the status)`,
-		`  pgid     ${job.pgidPath}`,
-		`  started  ${job.startedPath}`,
-		"Operate it with bash:",
-		`  grep -i <pattern> ${job.stdoutPath}`,
-		`  tail -n 50 ${job.stdoutPath}`,
-		`  until [ -e ${job.statusPath} ]; do sleep 1; done; cat ${job.statusPath}   # wait for it`,
-		`  kill -- -${job.pid}                                                       # SIGTERM the group; -9 to force`,
-	].join("\n");
+	return (
+		`Started ${label(job)} (pgid ${job.pid}). Dir: ${job.dir} ` +
+		"(owner-only; stdout, stderr, status inside). You will be notified when it exits."
+	);
 }
 
 /** Tail a running job's log and deliver matching lines, with batching and flood protection. */
 function watchJob(job: Job, pattern: RegExp | undefined, timeoutSeconds: number): void {
 	const tag = `[${label(job)}]`;
-	let partial = "";
+	const seed = readTailSeed(job.stdoutPath, WATCH_SEED_LINES);
+	let partial = seed.partial;
 	let pending: string[] = [];
 	let batchTimer: NodeJS.Timeout | undefined;
 	const eventTimes: number[] = [];
@@ -145,6 +137,7 @@ function watchJob(job: Job, pattern: RegExp | undefined, timeoutSeconds: number)
 		const batch = flooded ? undefined : pending.slice(0, MAX_LINES_PER_EVENT).join("\n");
 		pending = [];
 		activeWatchers--;
+		job.watchers--;
 		deliver(`${tag} ${reason}${batch ? `\n${batch}` : ""}`);
 	};
 
@@ -172,9 +165,12 @@ function watchJob(job: Job, pattern: RegExp | undefined, timeoutSeconds: number)
 		if (pending.length > 0 && !batchTimer && !flooded) batchTimer = setTimeout(flush, BATCH_MS);
 	};
 
-	const tail = tailFile(job.stdoutPath, onData, POLL_MS, true);
+	const tail = tailFile(job.stdoutPath, onData, POLL_MS, seed.offset);
 	const expiry = setTimeout(() => stop(`watch expired after ${timeoutSeconds}s`), timeoutSeconds * 1000);
 	expiry.unref();
+	// Replay recent output first, so a watch attached after the job started does not miss it.
+	for (const line of seed.seedLines) if (!pattern || pattern.test(line)) pending.push(line);
+	if (pending.length > 0) flush();
 	void job.done.then((status) => stop(`${describeStatus(status)}${status.timedOut ? " (timed out)" : ""}`));
 }
 
@@ -201,7 +197,7 @@ export default function jobsExtension(pi: ExtensionAPI): void {
 				...event.content,
 				{
 					type: "text" as const,
-					text: "For work that should outlive this call, use job_start to run it in the background; it returns the job's files and notifies you on exit.",
+					text: "For work that should outlive this call, use job_start to run it in the background; it returns the job's directory and notifies you on exit.",
 				},
 			],
 			details: event.details,
@@ -214,14 +210,27 @@ export default function jobsExtension(pi: ExtensionAPI): void {
 		if (!guidelines.includes(GUIDELINE)) guidelines.push(GUIDELINE);
 	});
 
+	// One-shot modes (print/json) exit the process as soon as the run settles, which would kill
+	// pending jobs before their completion notification reached the agent. Hold settlement while
+	// jobs run: re-ref their child handles so the process stays alive, wait for the next one to
+	// exit, then force a continuation so the delivered notification becomes a real turn.
+	pi.on("agent_before_settle", async (_event, ctx) => {
+		if (ctx.mode !== "print" && ctx.mode !== "json") return;
+		const running = listJobs().filter((job) => job.running);
+		if (running.length === 0) return;
+		for (const job of running) job.keepAlive();
+		await Promise.race(running.map((job) => job.done));
+		return { continue: true };
+	});
+
 	pi.registerTool({
 		name: "job_start",
 		label: "job_start",
 		description:
-			"Start a shell command in the background and return a job id plus the paths of its files " +
-			"(stdout, stderr, exit, pid, meta). The command keeps running after this call and you are " +
-			"notified when it exits. Inspect and control it with bash: grep/tail the stdout file, wait " +
-			"on the exit file, `kill -- -<pgid>` to stop. Only for long-running work; use bash for quick commands.",
+			"Start a shell command in the background and return its job id, process group, and file " +
+			"directory. The command outlives this call and you are notified when it exits. Inspect and " +
+			"control it with bash: grep/tail the stdout file, wait on the status file, `kill -- -<pgid>` " +
+			"to stop the group. Only for long-running work; use bash for quick commands.",
 		parameters: Type.Object({
 			command: Type.String({ description: "Shell command to run in the background." }),
 			name: Type.Optional(Type.String({ description: "Short label used in notifications (e.g. \"build\")." })),
@@ -240,7 +249,8 @@ export default function jobsExtension(pi: ExtensionAPI): void {
 			});
 			job.detach();
 			void job.done.then((status) => {
-				if (job.observed) return;
+				// A live watch delivers its own exit message (with matched output), so defer to it.
+				if (job.observed || job.watchers > 0) return;
 				job.observed = true;
 				deliver(`[${label(job)}] finished: ${statusLine(job)}\n${readTail(job.stdoutPath, 20)}`);
 			});
@@ -255,9 +265,10 @@ export default function jobsExtension(pi: ExtensionAPI): void {
 		name: "job_watch",
 		label: "job_watch",
 		description:
-			"Watch a running job's output: matching lines are delivered to you as messages while you " +
-			"keep working or after your turn ends. Use it instead of polling. Ends when the job exits, " +
-			"the timeout fires, or the output floods. The id comes from job_start.",
+			"Watch a running job's output: recent matching lines are replayed first, then new ones " +
+			"arrive as messages while you keep working or after your turn ends. Use it instead of " +
+			"polling. Ends when the job exits, the timeout fires, or the output floods. The id comes " +
+			"from job_start.",
 		parameters: Type.Object({
 			id: Type.String({ description: "Job id from job_start." }),
 			pattern: Type.Optional(
@@ -280,17 +291,19 @@ export default function jobsExtension(pi: ExtensionAPI): void {
 			if (activeWatchers >= MAX_WATCHERS) throw new Error(`Too many active job watches (max ${MAX_WATCHERS}).`);
 			const seconds = clamp(params.timeout ?? WATCH_DEFAULT_SECONDS, 1, WATCH_MAX_SECONDS);
 			activeWatchers++;
+			job.watchers++;
 			try {
 				watchJob(job, pattern, seconds);
 			} catch (error) {
 				activeWatchers--;
+				job.watchers--;
 				throw error;
 			}
 			return {
 				content: [
 					{
 						type: "text",
-						text: `Watching ${label(job)}${pattern ? ` for /${params.pattern}/` : ""}. Matching output arrives as messages; the watch stops when the job exits or after ${seconds}s.`,
+						text: `Watching ${label(job)}${pattern ? ` for /${params.pattern}/` : ""}. Recent output is replayed, then new matching lines arrive as messages; the watch stops when the job exits or after ${seconds}s.`,
 					},
 				],
 				details: { id: job.id },

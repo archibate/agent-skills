@@ -14,7 +14,7 @@ Only two tools are declared; everything else is the job's files on disk, operate
 
 | Tool | Purpose |
 |---|---|
-| `job_start` | Run a command in the background; notifies on exit and returns the job's files. |
+| `job_start` | Run a command in the background; notifies on exit and returns the job's directory. |
 | `job_watch` | Deliver matching stdout lines as messages instead of polling (needs the live runtime). |
 
 `/jobs` lists the jobs this pi process knows about.
@@ -50,24 +50,27 @@ until [ -e "$d/status" ]; do sleep 1; done; cat "$d/status"   # wait for it
 kill -- -"$(cat "$d/pgid")"                    # SIGTERM the group; -9 to force
 ```
 
-`job_start` prints exactly these paths and the commands, so a model with bash can run a job
-end-to-end without extra tool schemas.
+`job_start` returns its directory, and the files inside follow this layout, so a model with bash
+can run a job end-to-end without extra tool schemas.
 
 ## Behavior
 
 - Every job runs in its own process group with detached stdio; `$TMPDIR` is resolved per call, so
   logs follow the scratchpad (and any later `TMPDIR` change).
 - The process-global registry lives on `globalThis`, so live jobs survive `/reload`; the newest
-  extension load owns notification delivery. On pi exit, live jobs are killed and the files this
-  process created are removed.
+  extension load owns notification delivery. On forced exit (SIGTERM, crash) live jobs are killed
+  and the files this process created are removed; a graceful one-shot run waits for them instead.
 - Completion is delivered with `pi.sendMessage({triggerTurn: true, deliverAs: "steer"})`, so it
-  arrives while the agent keeps working or wakes it after the turn ends (interactive/RPC mode).
-  `job_watch` starts at the current end of the log, batches lines, and stops on flood, timeout, or
-  job exit.
+  arrives while the agent keeps working or wakes it after the turn ends. In one-shot modes
+  (print/JSON) the run holds before settling while jobs are pending, so completion is delivered as
+  a continuation turn instead of being lost to process exit. `job_watch` replays the last 20 lines
+  (the seed), then follows from there, batches lines, and stops on flood, timeout, or job exit;
+  while a watch is live it owns the job's exit notification, so the generic completion summary is
+  suppressed for that job.
 - `bash` default timeout: `PI_JOBS_BASH_TIMEOUT_SECONDS` (default 120, `0` disables). The timeout
   error points the model at `job_start`.
-- Background work only survives while pi runs: in print mode pi exits when the turn ends, which
-  kills the jobs. Jobs are meaningful in interactive or RPC mode.
+- A job with no `timeout` that never finishes will hold a one-shot run open indefinitely; kill it
+  (`kill -- -<pgid>`) or pass `timeout` when starting it.
 
 ## Editor setup
 

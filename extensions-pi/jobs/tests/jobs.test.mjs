@@ -7,7 +7,7 @@ import { test } from "node:test";
 // Isolate the job root before the engine computes it.
 const base = mkdtempSync(join(homedir(), ".cache", "pi-jobs-test-"));
 process.env.TMPDIR = base;
-const { describeStatus, getJob, groupAlive, listJobs, readTail, registry, rootDir, startJob } = await import("../jobs.ts");
+const { describeStatus, getJob, groupAlive, listJobs, readTail, readTailSeed, registry, rootDir, startJob } = await import("../jobs.ts");
 
 const shell = { shell: "/bin/sh", args: ["-c"], commandTransport: "args" };
 
@@ -83,6 +83,22 @@ test("readTail returns the last lines and tolerates a missing file", () => {
 	writeFileSync(path, "a\nb\nc\nd\n");
 	assert.equal(readTail(path, 2), "c\nd");
 	assert.equal(readTail(join(base, "missing.txt"), 2), "");
+});
+
+test("readTailSeed keeps recent complete lines, holds the partial, and reports the resume offset", () => {
+	const path = join(base, "seed.txt");
+	writeFileSync(path, "a\nb\nc\npart");
+	const seed = readTailSeed(path, 2);
+	assert.deepEqual(seed.seedLines, ["b", "c"]);
+	assert.equal(seed.partial, "part");
+	assert.equal(seed.offset, statSync(path).size);
+
+	// A file ending on a newline has no held partial.
+	writeFileSync(path, "a\nb\n");
+	assert.deepEqual(readTailSeed(path, 5), { seedLines: ["a", "b"], partial: "", offset: statSync(path).size });
+
+	// A missing file seeds nothing and resumes at the start.
+	assert.deepEqual(readTailSeed(join(base, "missing.txt"), 2), { seedLines: [], partial: "", offset: 0 });
 });
 
 test("describeStatus covers exit codes and signals", () => {

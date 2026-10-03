@@ -9,13 +9,14 @@ visual-qa	skill	skills/visual-qa	browser	no	-	agent-browser	-	-	Visual quality a
 artifact-restraint	skill	skills/artifact-restraint	writing	yes	-	-	-	-	Artifact restraint
 context7	skill	skills/context7	web	no	-	-	uv,context7-key	-	Current library documentation
 grep-app	skill	skills/grep-app	web	no	-	-	uv	-	Public GitHub code search
-jina-ai	skill	skills/jina-ai	web	no	-	read-url	uv,jina-cli,jina-key	-	Jina search and extraction
-read-url	skill	skills/read-url	web	no	-	jina-ai,scrapling,agent-browser,chrome-cdp	curl,node-npx	-	Resilient URL reader
-scrapling	skill	skills/scrapling	web	no	-	-	uv	-	Anti-bot web scraping
+web-search	skill	skills/web-search	web	no	-	web-fetch	uv,jina-cli,jina-key	-	Web and academic search
+web-fetch	skill	skills/web-fetch	web	no	-	web-search,agent-browser,chrome-cdp	curl,node-npx	-	Resilient URL reader
 lark-cli	skill	skills/lark-cli	integration	no	-	-	node-npx,lark-auth	-	Lark and Feishu CLI
 monitor-wakeup	skill	skills-codex/monitor-wakeup	integration	no	-	-	-	codex	Session monitoring and wake-up
 jobs	extension	extensions-pi/jobs	integration	no	-	-	-	pi	Background job tools
 scratchpad	extension	extensions-pi/scratchpad	integration	no	-	-	-	pi	Session scratchpad
+context	extension	extensions-pi/context	integration	no	-	-	-	pi	Context window usage
+prompt-stash	extension	extensions-pi/prompt-stash	integration	no	-	-	-	pi	Stash and restore the prompt draft
 pi-subagents	skill	skills-pi/pi-subagents	thinking	no	jobs	-	-	pi	Subagent orchestration
 fresh-arch	skill	skills/fresh-arch	thinking	no	-	grill-me	-	-	Fresh architecture design
 grill-me	skill	skills/grill-me	thinking	no	-	fresh-arch	-	-	Design interview

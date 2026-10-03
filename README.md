@@ -63,9 +63,9 @@ git clone --depth 1 https://github.com/archibate/agent-skills.git && cd agent-sk
 
 ### 其他得力助手 🤲
 
-- 第三方技能集成🔧——`scrapling`, `lark-cli`, `agent-browser`
-- MCP 占用上下文💥——小彭老师转成技能：`jina-ai`, `context7`, `grep-app`, `chrome-cdp`
-- 读取各种网页，反反爬🐛——`read-url`（建议配合 `jina-ai` 和 `scrapling` 安装）
+- 第三方 CLI 技能集成🔧——`lark-cli`, `agent-browser`
+- MCP 占用上下文💥——小彭老师转成技能：`web-search`, `context7`, `grep-app`, `chrome-cdp`
+- 读取各种网页，反反爬🐛——`web-fetch`（建议配合 `web-search` 安装）
 - AI 自检前端渲染排版错误🔍——`visual-qa`（建议配合 `agent-browser` 安装）
 - 架构设计思维🧠——`grill-me`, `fresh-arch`
 - 让 Codex 也能后台监控唤醒🖥️——`monitor-wakeup`（模仿 Claude Code 的 Monitor）

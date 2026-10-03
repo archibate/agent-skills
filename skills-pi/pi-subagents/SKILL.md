@@ -20,16 +20,19 @@ job_start
   command: pi -p --fork "$PI_SESSION_ID" --session-id "$PI_SESSION_ID.review" "You are a forked subagent; do not spawn subagents. Task: review the unstaged changes"
 ```
 
-**Fresh** starts empty. Put everything the child needs in the task.
+**Fresh** starts empty. Put everything the child needs in the task. It is only empty if its
+`<name>` is new: `--session-id` continues an existing id, so pick a fresh name per task.
 
 ```
 job_start
   name:    audit
-  command: pi -p --session-id "$PI_SESSION_ID.audit" --append-system-prompt "You are a subagent; do not spawn subagents." "Audit src/ for security issues and report findings"
+  command: pi -p --session-id "$PI_SESSION_ID.audit" --model "$PI_PROVIDER/$PI_MODEL" --thinking "$PI_REASONING_LEVEL" --append-system-prompt "You are a subagent; do not spawn subagents." "Audit src/ for security issues and report findings"
 ```
 
-Fork when your context already holds the relevant observations or the background is long to restate.
-Fresh when a new perspective is the point or the task is self-contained.
+`--model` and `--thinking` keep the child on your current model and effort; change them to give the
+child a different one. Fork when your context already holds the relevant observations or the
+background is long to restate; fresh when a new perspective is the point or the task is
+self-contained.
 
 ## Recursion
 

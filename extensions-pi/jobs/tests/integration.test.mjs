@@ -60,8 +60,9 @@ test("jobs tools through the real pi loader", { skip: !sdkPath }, async (t) => {
 	).session;
 	await session.bindExtensions({ onError: (error) => errors.push(error.error), mode: "print" });
 	assert.deepEqual(errors, []);
-	// Keep the test offline: a completion notification must not start a model turn.
-	registry.notify = () => {};
+	// Keep the test offline: collect notifications instead of letting them start a model turn.
+	const notified = [];
+	registry.notify = (text) => notified.push(text);
 
 	// Only the two in-process tools are declared; the rest is the filesystem.
 	assert.ok(session.getToolDefinition("job_start"));
@@ -80,6 +81,7 @@ test("jobs tools through the real pi loader", { skip: !sdkPath }, async (t) => {
 		name: "quick",
 	});
 	assert.equal(started.isError, undefined);
+	assert.match(started.content[0].text, /You will be notified when it exits/);
 	const { id, dir, pid } = started.details;
 	assert.equal(typeof id, "string");
 	assert.equal(dir, join(base, "pi-jobs", id));
@@ -96,6 +98,40 @@ test("jobs tools through the real pi loader", { skip: !sdkPath }, async (t) => {
 	assert.match(readFileSync(join(dir, "stdout"), "utf8"), /one[\s\S]*two/);
 	assert.match(readFileSync(join(dir, "stderr"), "utf8"), /oops/);
 	assert.match(readFileSync(join(dir, "status"), "utf8"), /exit 0/);
+
+	// One-shot modes hold settlement until pending jobs finish, so completion can trigger a turn.
+	const slow = await call("job_start", "s3", { command: "sleep 0.4", name: "slow" });
+	const holdStart = Date.now();
+	const settle = await session.extensionRunner.emitBoundary({ type: "agent_before_settle" }, () => ({}));
+	assert.equal(settle.continue, true);
+	assert.ok(Date.now() - holdStart >= 200, "settlement was held until the job exited");
+	await waitFor(() => existsSync(join(slow.details.dir, "status")));
+
+	// A watched job notifies exactly once: the live watch owns the exit message, and the completion
+	// handler defers to it instead of delivering a second summary.
+	notified.length = 0;
+	const watchedJob = await call("job_start", "s4", { command: "sleep 0.2; printf 'done\\n'", name: "watched" });
+	await call("job_watch", "s5", { id: watchedJob.details.id, timeout: 5 });
+	await waitFor(() => existsSync(join(watchedJob.details.dir, "status")));
+	await waitFor(() => notified.length >= 1);
+	await new Promise((resolve) => setTimeout(resolve, 120));
+	assert.equal(notified.length, 1, `expected one notification, got ${notified.length}: ${notified.join(" | ")}`);
+	assert.match(notified[0], /watched/);
+
+	// Replay: output produced before the watch attached is still delivered.
+	notified.length = 0;
+	const early = await call("job_start", "s6", {
+		command: "printf 'early-1\\nearly-2\\n'; sleep 0.4; printf 'late\\n'",
+		name: "replay",
+	});
+	await new Promise((resolve) => setTimeout(resolve, 150)); // let the early lines land before watching
+	await call("job_watch", "s7", { id: early.details.id, timeout: 5 });
+	await waitFor(() => existsSync(join(early.details.dir, "status")));
+	await waitFor(() => notified.some((text) => /late/.test(text)));
+	const replayed = notified.join("\n");
+	assert.match(replayed, /early-1/);
+	assert.match(replayed, /early-2/);
+	assert.match(replayed, /late/);
 
 	// job_watch is accepted for any known job (it stops immediately once the job has exited).
 	const watched = await call("job_watch", "s2", { id, timeout: 1 });

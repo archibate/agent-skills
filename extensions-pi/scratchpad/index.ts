@@ -33,8 +33,13 @@ function makeDirectory(path: string, privateAccess: boolean): void {
 	checkDirectory(path, privateAccess);
 }
 
+// Must match Pi's own session-id assertion (dist/core/session-manager.js assertValidSessionId):
+// alphanumerics plus '-', '_', '.', starting and ending with an alphanumeric. No '/' can appear,
+// so the id stays a single path component.
+const VALID_SESSION_ID = /^[A-Za-z0-9](?:[A-Za-z0-9._-]*[A-Za-z0-9])?$/;
+
 function prepareScratchpad(sessionId: string): string {
-	if (!/^[a-zA-Z0-9_-]{1,128}$/.test(sessionId)) {
+	if (!VALID_SESSION_ID.test(sessionId)) {
 		throw new Error("Invalid scratchpad session ID");
 	}
 	const configured = process.env.XDG_CACHE_HOME;

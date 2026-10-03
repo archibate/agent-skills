@@ -239,15 +239,7 @@ set -e
 [ "$status" -eq 1 ] || fail "Pi unsupported target returned $status instead of 1"
 [ ! -e "$CASE_HOME/.agents/skills/monitor-wakeup" ] || fail 'unsupported Pi target installed monitor-wakeup'
 
-printf '15d. Scrapling installs with only the uv runtime\n'
-scrapling_runtimes=$(awk -F '\t' '$1 == "scrapling" { print $8 }' "$ROOT/installer/catalog.tsv")
-[ "$scrapling_runtimes" = uv ] || fail "expected Scrapling runtime checks to be uv, found: $scrapling_runtimes"
-new_case scrapling-install
-run_installer --skills scrapling --targets codex --yes --skip-deps --install-mode copy >/dev/null
-assert_file "$CASE_HOME/.agents/skills/scrapling/scripts/scrapling"
-[ -x "$CASE_HOME/.agents/skills/scrapling/scripts/scrapling" ] || fail 'Scrapling launcher is not executable'
-
-printf '16. Scrapling launcher delegates to uvx\n'
+printf '16. web-fetch anti-bot launcher delegates to uvx\n'
 new_case scrapling-launcher
 mock_bin="$CASE_ROOT/bin"
 mock_log="$CASE_ROOT/uvx"
@@ -262,28 +254,28 @@ chmod +x "$mock_bin/uvx"
 
 HOME="$CASE_HOME" XDG_CACHE_HOME="$CASE_ROOT/cache" UV_CACHE_DIR= UV_TOOL_DIR= \
     MOCK_UVX_LOG="$mock_log" PATH="$mock_bin:$PATH" \
-    "$ROOT/skills/scrapling/scripts/scrapling" extract get https://example.com page.md
+    "$ROOT/skills/web-fetch/scripts/scrapling" extract get https://example.com page.md
 [ "$(< "$mock_log.tool-dir")" = "$CASE_ROOT/cache/uv/tools" ] || fail 'Scrapling launcher chose the wrong default UV_TOOL_DIR'
 expected_args=$(printf '%s\n' --from 'scrapling[all]>=0.4.14' scrapling extract get https://example.com page.md)
 [ "$(< "$mock_log.args")" = "$expected_args" ] || fail 'Scrapling launcher changed forwarded arguments'
 
 custom_tool_dir="$CASE_ROOT/custom-tools"
 HOME="$CASE_HOME" UV_TOOL_DIR="$custom_tool_dir" MOCK_UVX_LOG="$mock_log" PATH="$mock_bin:$PATH" \
-    "$ROOT/skills/scrapling/scripts/scrapling" browser-install
+    "$ROOT/skills/web-fetch/scripts/scrapling" browser-install
 [ "$(< "$mock_log.tool-dir")" = "$custom_tool_dir" ] || fail 'Scrapling launcher replaced an explicit UV_TOOL_DIR'
 expected_args=$(printf '%s\n' --from 'scrapling[all]>=0.4.14' playwright install chromium)
 [ "$(< "$mock_log.args")" = "$expected_args" ] || fail 'browser-install invoked the wrong uvx command'
 
 set +e
 HOME="$CASE_HOME" MOCK_UVX_EXIT=23 MOCK_UVX_LOG="$mock_log" PATH="$mock_bin:$PATH" \
-    "$ROOT/skills/scrapling/scripts/scrapling" --version >/dev/null 2>&1
+    "$ROOT/skills/web-fetch/scripts/scrapling" --version >/dev/null 2>&1
 status=$?
 set -e
 [ "$status" -eq 23 ] || fail "Scrapling launcher returned $status instead of uvx status 23"
 
 set +e
 HOME="$CASE_HOME" MOCK_UVX_LOG="$mock_log" PATH="$mock_bin:$PATH" \
-    "$ROOT/skills/scrapling/scripts/scrapling" browser-install extra >/dev/null 2>&1
+    "$ROOT/skills/web-fetch/scripts/scrapling" browser-install extra >/dev/null 2>&1
 status=$?
 set -e
 [ "$status" -eq 2 ] || fail "browser-install with extra arguments returned $status instead of 2"
@@ -311,5 +303,44 @@ status=$?
 set -e
 [ "$status" -eq 1 ] || fail "extension on codex returned $status instead of 1"
 [ ! -e "$CASE_HOME/.codex/skills/jobs" ] || fail 'extension installed for codex'
+
+printf '18. web skills install independently; fetch keeps backends optional\n'
+for skill in web-search web-fetch; do
+    new_case "$skill"
+    run_installer --skills "$skill" --targets codex,claude --yes --skip-deps --install-mode copy >/dev/null
+    assert_contains "$CASE_HOME/.agents/skills/$skill/SKILL.md" "name: $skill"
+    assert_contains "$CASE_HOME/.claude/skills/$skill/SKILL.md" "name: $skill"
+    assert_not_link "$CASE_HOME/.agents/skills/$skill"
+    web_runtimes=$(awk -F '\t' -v skill="$skill" '$1 == skill { print $8 }' "$ROOT/installer/catalog.tsv")
+    if [ "$skill" = web-fetch ]; then
+        [ "$web_runtimes" = curl,node-npx ] || fail "expected web-fetch runtime checks to be curl,node-npx, found: $web_runtimes"
+        assert_file "$CASE_HOME/.agents/skills/$skill/references/jina.md"
+        assert_file "$CASE_HOME/.agents/skills/$skill/references/ssrn.md"
+        assert_file "$CASE_HOME/.agents/skills/$skill/references/scrapling.md"
+        assert_file "$CASE_HOME/.agents/skills/$skill/references/scrapling-LICENSE.txt"
+        [ -x "$CASE_HOME/.agents/skills/$skill/scripts/scrapling" ] || fail 'copied anti-bot launcher is not executable'
+        assert_file "$CASE_HOME/.claude/skills/$skill/references/scrapling.md"
+        [ -x "$CASE_HOME/.claude/skills/$skill/scripts/scrapling" ] || fail 'copied Claude anti-bot launcher is not executable'
+        [ -x "$CASE_HOME/.agents/skills/$skill/scripts/fetch_zhihu.py" ] || fail 'copied web-fetch script is not executable'
+    else
+        for runtime in uv jina-cli jina-key; do
+            case ",$web_runtimes," in
+                *,$runtime,*) ;;
+                *) fail "$skill is missing runtime check $runtime" ;;
+            esac
+        done
+        assert_file "$CASE_HOME/.agents/skills/$skill/references/academic-research.md"
+        [ -x "$CASE_HOME/.agents/skills/$skill/scripts/dedup_images.py" ] || fail 'copied web-search script is not executable'
+    fi
+done
+
+printf '19. anti-bot backend is not a standalone skill\n'
+new_case backend-only
+set +e
+run_installer --skills scrapling --targets codex --yes --skip-deps --dry-run > "$CASE_ROOT/output" 2>&1
+status=$?
+set -e
+[ "$status" -eq 1 ] || fail "standalone anti-bot skill selection returned $status instead of 1"
+assert_contains "$CASE_ROOT/output" 'unknown skill or guidance item: scrapling'
 
 printf 'All installer tests passed.\n'

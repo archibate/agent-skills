@@ -61,7 +61,7 @@ these cross-cutting behaviors alongside the task-specific skills.
 - `cpp-oop-style` — Archibate's type-rich, ownership-aware C++ design style.
 - `agent-browser` and `chrome-cdp` — headless and user-visible browser
   automation workflows.
-- `context7`, `grep-app`, `jina-ai`, `read-url`, and `scrapling` —
+- `context7`, `grep-app`, `web-search`, and `web-fetch` —
   documentation, code, research, and web-content retrieval.
 - `fresh-arch` and `grill-me` — architecture design and design interrogation.
 - `lark-cli` — Lark/Feishu messaging, documents, calendars, and task workflows.

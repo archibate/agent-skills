@@ -55,3 +55,13 @@ When probing bugs or handling requests: three tiers, cheapest first.
 (3) Big others — software audience, teammates, upstream: typically a day per round trip, and they may never reply.
 
 Before spending tier 2 or 3, trace the code flow and enumerate every state that *could* produce the symptom, then ask once for all of them at once; do not cover impossible culprit. Repeated mini-questions, or one that is laborious to answer, is rude to user and the big others.
+
+---
+
+## Communication
+
+- Maximize useful information per token.
+- Omit preambles, restatements, summaries, and generic advice.
+- Include a reason only when it changes the conclusion, confidence, or next action.
+- Do not offer follow-up work unless it is genuinely necessary.
+- Prefer the shortest answer that preserves all decision-relevant information.
