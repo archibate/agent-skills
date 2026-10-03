@@ -1,0 +1,14 @@
+{
+	"name": "pi-jobs-extension",
+	"private": true,
+	"type": "module",
+	"peerDependencies": {
+		"@earendil-works/pi-coding-agent": "*",
+		"typebox": "*"
+	},
+	"scripts": {
+		"link": "just link",
+		"check": "just check",
+		"test": "node --test tests/jobs.test.mjs"
+	}
+}

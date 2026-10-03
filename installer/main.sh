@@ -329,7 +329,7 @@ validate_catalog() {
             [ "$id" != "${ITEM_IDS[$other]}" ] || die "duplicate item id: $id"
             other=$((other + 1))
         done
-        case "${ITEM_KINDS[$idx]}" in skill|guidance) ;; *) die "$id has invalid kind" ;; esac
+        case "${ITEM_KINDS[$idx]}" in skill|guidance|extension) ;; *) die "$id has invalid kind" ;; esac
         case "${ITEM_DEFAULTS[$idx]}" in yes|no) ;; *) die "$id has invalid default" ;; esac
         source="$SOURCE_ROOT/${ITEM_SOURCES[$idx]}"
         [ -e "$source" ] || die "$id source does not exist: ${ITEM_SOURCES[$idx]}"
@@ -338,6 +338,9 @@ validate_catalog() {
             skill_name=$(awk '/^name:[[:space:]]*/ { sub(/^name:[[:space:]]*/, ""); print; exit }' "$source/SKILL.md")
             [ "$skill_name" = "$id" ] || die "$id does not match SKILL.md name: $skill_name"
         fi
+        if [ "${ITEM_KINDS[$idx]}" = extension ]; then
+            { [ -f "$source/index.ts" ] || [ -f "$source/index.js" ]; } || die "$id extension has no index.ts or index.js"
+        fi
         validate_id_list "$id" "dependency" "${ITEM_REQUIRES[$idx]}"
         validate_id_list "$id" "recommendation" "${ITEM_RECOMMENDS[$idx]}"
         validate_target_list "$id" "${ITEM_TARGETS[$idx]}"
@@ -345,6 +348,18 @@ validate_catalog() {
             case "${ITEM_SOURCES[$idx]}" in
                 skills/*) die "$id is target-restricted; move its source out of skills/ (e.g. skills-<target>/$id)" ;;
             esac
+        fi
+        if [ "${ITEM_KINDS[$idx]}" = extension ]; then
+            case "${ITEM_SOURCES[$idx]}" in
+                extensions-pi/*) ;;
+                *) die "$id is a Pi extension; put its source under extensions-pi/$id" ;;
+            esac
+            [ "${ITEM_TARGETS[$idx]}" != "-" ] || die "$id extension needs targets=pi"
+            extension_targets_here=()
+            IFS=, read -r -a extension_targets_here <<< "${ITEM_TARGETS[$idx]}"
+            for target in "${extension_targets_here[@]}"; do
+                [ "$target" = pi ] || die "$id extension supports only the pi target"
+            done
         fi
         runtimes=${ITEM_RUNTIMES[$idx]}
         if [ "$runtimes" != "-" ]; then
@@ -384,6 +399,13 @@ validate_catalog() {
         [ -f "$skill_dir/SKILL.md" ] || continue
         basename_value=${skill_dir##*/}
         item_index "$basename_value" >/dev/null || die "skill missing from catalog: $basename_value"
+    done
+
+    for extension_dir in "$SOURCE_ROOT"/extensions-*/*; do
+        [ -d "$extension_dir" ] || continue
+        { [ -f "$extension_dir/index.ts" ] || [ -f "$extension_dir/index.js" ]; } || continue
+        basename_value=${extension_dir##*/}
+        item_index "$basename_value" >/dev/null || die "extension missing from catalog: $basename_value"
     done
 }
 
@@ -879,9 +901,9 @@ print_preview() {
     done
     printf '  Source: %s (%s)\n' "$SOURCE_ROOT" "$SOURCE_KIND"
     if [ "$EFFECTIVE_INSTALL_MODE" = link ]; then
-        printf '  Skill files: link to source checkout\n'
+        printf '  Content files: link to source checkout\n'
     else
-        printf '  Skill files: copy into agent directories\n'
+        printf '  Content files: copy into agent directories\n'
     fi
     if [ "${#RUNTIME_IDS[@]}" -gt 0 ]; then
         printf '  Runtime setup:\n'
@@ -1050,6 +1072,43 @@ materialize_skill() {
     fi
 }
 
+materialize_extension() {
+    local source=$1
+    local destination=$2
+    if [ ! -L "$destination" ] && same_directory "$source" "$destination"; then
+        printf 'skip\t%s (source checkout)\n' "$destination"
+    elif [ "$EFFECTIVE_INSTALL_MODE" = link ]; then
+        link_directory "$source" "$destination"
+    else
+        copy_extension "$source" "$destination"
+    fi
+}
+
+# Extensions are runtime code, but node_modules is editor-only (pi aliases its own imports), so a
+# copy must not drag it in.
+copy_extension() {
+    local source=$1
+    local destination=$2
+    local parent=${destination%/*}
+    local stage
+    [ "$parent" != "$destination" ] || parent=.
+    mkdir -p "$parent"
+
+    if [ -d "$destination" ] && [ ! -L "$destination" ] && diff -qr -x node_modules "$source" "$destination" >/dev/null 2>&1; then
+        printf 'skip\t%s\n' "$destination"
+        return 0
+    fi
+
+    stage=$(mktemp -d "$parent/.agent-skills-stage.XXXXXX") || return 1
+    if ! cp -R "$source"/. "$stage"/; then
+        rm -rf -- "$stage"
+        return 1
+    fi
+    rm -rf -- "$stage/node_modules"
+    install_staged_path "$stage" "$destination" || { rm -rf -- "$stage"; return 1; }
+    printf 'install\t%s\n' "$destination"
+}
+
 build_guidance_file() {
     source=$1
     destination=$2
@@ -1148,6 +1207,14 @@ skill_destination() {
     esac
 }
 
+extension_destination() {
+    local target=$1
+    local id=$2
+    case "$target" in
+        pi) printf '%s/extensions/%s\n' "${PI_CODING_AGENT_DIR:-$HOME/.pi/agent}" "$id" ;;
+    esac
+}
+
 install_content() {
     idx=0
     while [ "$idx" -lt "${#ITEM_IDS[@]}" ]; do
@@ -1181,6 +1248,17 @@ install_content() {
                     materialize_skill "$source" "$destination" || return 1
                 fi
             fi
+        elif [ "${SELECTED[$idx]}" -eq 1 ] && [ "${ITEM_KINDS[$idx]}" = extension ]; then
+            source="$SOURCE_ROOT/${ITEM_SOURCES[$idx]}"
+            target_idx=0
+            while [ "$target_idx" -lt "${#TARGET_IDS[@]}" ]; do
+                target=${TARGET_IDS[$target_idx]}
+                if [ "${TARGET_SELECTED[$target_idx]}" -eq 1 ] && item_supports_target "$idx" "$target"; then
+                    destination=$(extension_destination "$target" "${ITEM_IDS[$idx]}")
+                    materialize_extension "$source" "$destination" || return 1
+                fi
+                target_idx=$((target_idx + 1))
+            done
         fi
         idx=$((idx + 1))
     done
@@ -1289,7 +1367,7 @@ main() {
 
     [ "$(selected_target_count)" -gt 0 ] || die "select at least one target agent"
     prune_incompatible_selection
-    [ "$(selected_item_count)" -gt 0 ] || die "select at least one skill or guidance item"
+    [ "$(selected_item_count)" -gt 0 ] || die "select at least one item"
     if [ "$ASSUME_YES" -eq 1 ] && [ -z "$TARGET_ARG" ] && [ "$(selected_target_count)" -eq 0 ]; then
         die "--yes requires --targets when no supported agent is detected"
     fi

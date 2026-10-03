@@ -288,4 +288,28 @@ status=$?
 set -e
 [ "$status" -eq 2 ] || fail "browser-install with extra arguments returned $status instead of 2"
 
+printf '17. Pi extensions install and satisfy hard dependencies\n'
+new_case pi-extensions
+run_installer --skills pi-subagents --targets pi --yes --skip-deps >/dev/null
+assert_dir "$CASE_HOME/.pi/agent/extensions/jobs"
+assert_file "$CASE_HOME/.pi/agent/extensions/jobs/index.ts"
+assert_link_target "$CASE_HOME/.pi/agent/extensions/jobs" "$ROOT/extensions-pi/jobs"
+assert_link_target "$CASE_HOME/.pi/agent/skills/pi-subagents" "$ROOT/skills-pi/pi-subagents"
+[ ! -e "$CASE_HOME/.pi/agent/extensions/scratchpad" ] || fail 'unrequested extension was installed'
+[ ! -e "$CASE_HOME/.agents/skills/pi-subagents" ] || fail 'Pi-only skill leaked into the shared skills directory'
+
+new_case pi-extension-copy
+run_installer --skills scratchpad --targets pi --yes --skip-deps --install-mode copy >/dev/null
+assert_file "$CASE_HOME/.pi/agent/extensions/scratchpad/index.ts"
+assert_not_link "$CASE_HOME/.pi/agent/extensions/scratchpad"
+[ ! -e "$CASE_HOME/.pi/agent/extensions/scratchpad/node_modules" ] || fail 'copied extension kept node_modules'
+
+new_case pi-extension-unsupported-target
+set +e
+run_installer --skills jobs --targets codex --yes --skip-deps >/dev/null 2>&1
+status=$?
+set -e
+[ "$status" -eq 1 ] || fail "extension on codex returned $status instead of 1"
+[ ! -e "$CASE_HOME/.codex/skills/jobs" ] || fail 'extension installed for codex'
+
 printf 'All installer tests passed.\n'
