@@ -1,6 +1,7 @@
 ---
 name: writing-prompt
-description: "Create or edit agent-facing/LLM prompts using modern prompt-engineering practices. Use this skill before editing agent-facing docs, rule files, references, skills, memory, or any form of LLM prompt. Also use it before designing agent-facing JSON Schema, MCP tool prompts, or tool/script/CLI responses, and before writing LLM tests or evaluations. This is mandatory: NEVER skip this skill before writing agent-facing text; MUST use it before editing a file that will be fed to AI agents."
+description: >
+  Create or edit agent-facing/LLM prompts using modern prompt-engineering practices. Use this skill before editing agent-facing docs, rule files, references, skills, memory, or any form of LLM prompt. Also use it before designing agent-facing JSON Schema, MCP tool prompts, or tool/script/CLI responses, and before writing LLM tests or evaluations.
 ---
 
 # Writing Prompt
