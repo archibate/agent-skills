@@ -316,15 +316,6 @@ visit_required() {
     done
 }
 
-# A Git-ignored source directory is a local/private stash (e.g. skills/personal-context),
-# not distributed content, so it needs no catalog entry.
-source_is_ignored() {
-    local path=$1
-    [ -e "$SOURCE_ROOT/.git" ] || return 1
-    command -v git >/dev/null 2>&1 || return 1
-    git -C "$SOURCE_ROOT" check-ignore -q -- "$path" 2>/dev/null
-}
-
 validate_catalog() {
     [ "${#ITEM_IDS[@]}" -gt 0 ] || die "catalog is empty"
     idx=0
@@ -406,7 +397,6 @@ validate_catalog() {
 
     for skill_dir in "$SOURCE_ROOT"/skills/* "$SOURCE_ROOT"/skills-*/*; do
         [ -f "$skill_dir/SKILL.md" ] || continue
-        source_is_ignored "$skill_dir" && continue
         basename_value=${skill_dir##*/}
         item_index "$basename_value" >/dev/null || die "skill missing from catalog: $basename_value"
     done
@@ -414,7 +404,6 @@ validate_catalog() {
     for extension_dir in "$SOURCE_ROOT"/extensions-*/*; do
         [ -d "$extension_dir" ] || continue
         { [ -f "$extension_dir/index.ts" ] || [ -f "$extension_dir/index.js" ]; } || continue
-        source_is_ignored "$extension_dir" && continue
         basename_value=${extension_dir##*/}
         item_index "$basename_value" >/dev/null || die "extension missing from catalog: $basename_value"
     done
