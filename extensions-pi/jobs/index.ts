@@ -155,7 +155,7 @@ function sessionEnv(ctx: ExtensionToolContext): NodeJS.ProcessEnv {
 function jobContract(job: Job): string {
 	return (
 		`Started ${label(job)} (pgid ${job.pid}). Dir: ${job.dir} ` +
-		"(owner-only; stdout, stderr, status inside). You will be notified when it exits."
+		"(stdout, stderr, status inside). You will be notified when it exits."
 	);
 }
 

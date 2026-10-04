@@ -341,4 +341,18 @@ set -e
 [ "$status" -eq 1 ] || fail "standalone anti-bot skill selection returned $status instead of 1"
 assert_contains "$CASE_ROOT/output" 'unknown skill or guidance item: scrapling'
 
+printf '20. execution safety accompanies global guidance for every target\n'
+new_case execution-safety
+run_installer --skills agent-rules --targets codex,opencode,claude,pi --yes --skip-deps >/dev/null
+assert_link_target "$CASE_HOME/.agents/skills/e2e-side-effect-safety" "$ROOT/skills/e2e-side-effect-safety"
+assert_link_target "$CASE_HOME/.claude/skills/e2e-side-effect-safety" "$ROOT/skills/e2e-side-effect-safety"
+for guidance in "$CASE_HOME/.codex/AGENTS.md" "$CASE_HOME/.config/opencode/AGENTS.md" \
+    "$CASE_HOME/.claude/CLAUDE.md" "$CASE_HOME/.pi/agent/AGENTS.md"; do
+    assert_contains "$guidance" 'Before nontrivial execution tests or E2E:'
+    assert_contains "$guidance" 'verified non-disturbing, agent-owned isolation'
+    assert_contains "$guidance" 'Keep test writes and config overrides in an isolated scratchpad or workspace'
+    assert_contains "$guidance" 'does not authorize test-only mutations of global configs or shared services'
+    assert_contains "$guidance" 'verified agent-private desktop'
+done
+
 printf 'All installer tests passed.\n'

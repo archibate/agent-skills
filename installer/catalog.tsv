@@ -1,8 +1,9 @@
 # id	kind	source	group	default	requires	recommends	runtime_checks	targets	label
-agent-rules	guidance	AGENTS.md	core	yes	-	-	-	-	Agent behavior rules
+agent-rules	guidance	AGENTS.md	core	yes	e2e-side-effect-safety	-	-	-	Agent behavior rules
 cpp-oop-style	skill	skills/cpp-oop-style	core	yes	-	cpp-hpc-optimization	-	-	C++ OOP style
 cpp-hpc-optimization	skill	skills/cpp-hpc-optimization	core	yes	cpp-oop-style	-	-	-	C++ HPC optimization
 system-software-audit	skill	skills/system-software-audit	core	yes	-	-	-	-	System software audit
+e2e-side-effect-safety	skill	skills/e2e-side-effect-safety	core	yes	-	-	-	-	Non-disturbing execution tests and E2E
 agent-browser	skill	skills/agent-browser	browser	no	-	-	agent-browser-cli,agent-browser-runtime	-	Headless browser automation
 chrome-cdp	skill	skills/chrome-cdp	browser	no	-	-	node22,chrome-browser,chrome-debug	-	Visible Chrome automation
 visual-qa	skill	skills/visual-qa	browser	no	-	agent-browser	-	-	Visual quality assurance
@@ -20,6 +21,7 @@ prompt-stash	extension	extensions-pi/prompt-stash	integration	no	-	-	-	pi	Stash 
 btw	extension	extensions-pi/btw	integration	no	-	-	-	pi	Side question without disturbing the session
 plan-mode	extension	extensions-pi/plan-mode	integration	no	-	-	-	pi	Read-only planning hint
 rmb-cost	extension	extensions-pi/rmb-cost	integration	no	-	-	-	pi	Session cost in RMB
+rewind	extension	extensions-pi/rewind	integration	no	-	-	-	pi	File checkpoints for code rewind
 pi-subagents	skill	skills-pi/pi-subagents	thinking	no	jobs	-	-	pi	Subagent orchestration
 fresh-arch	skill	skills/fresh-arch	thinking	no	-	grill-me	-	-	Fresh architecture design
 grill-me	skill	skills/grill-me	thinking	no	-	fresh-arch	-	-	Design interview
