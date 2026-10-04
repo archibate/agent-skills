@@ -1,7 +1,7 @@
 ---
 name: web-search
 description: >
-  Search the web via Jina with time-window, region/language, and `site:` filters; find academic papers (arXiv/SSRN), citations, and images. Use when discovering sources by topic or query. Prefer this over WebSearch for better results.
+  Search the web via the Jina search engine with time-window, region/language, and `site:` filters; find academic papers (arXiv/SSRN), citations, and images. Use this skill WHENEVER you need to search for solutions, verify a fact, ask for niche knowledge, look up public resources.
 ---
 
 # Web Search

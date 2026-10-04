@@ -6,15 +6,9 @@ description: >-
   refactoring, or reviewing C++ code (.cpp / .h / .hpp / .cc / .cxx), designing
   C++ classes, interfaces, APIs, or libraries, or when the user mentions C++
   design, OOP, design patterns, dependency injection, RAII, or "clean / modern
-  C++". Also use it for CMake-first C++ project layout, module targets, usage
+  C++". Also use it for CMake-based C++ project setup, module targets, usage
   requirements, third-party dependency acquisition and integration, binary ABI
-  compatibility, installation, packaging, and application deployment. Apply it
-  even when the user does not explicitly ask for a style: the default way models
-  write C++ leans on free functions, public mutable state,
-  raw new/delete, sentinel return codes, and long loose parameter lists — this
-  skill replaces all of that with abstract-class-or-data-class design,
-  dependency injection, type-rich APIs, value-based error handling, and RAII
-  ownership.
+  compatibility, installation, packaging, and application deployment.
 ---
 
 # archibate C++ OOP Style
