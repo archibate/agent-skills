@@ -158,6 +158,12 @@ payload_root="$CASE_ROOT/payload"
 mkdir -p "$payload_root/agent-skills"
 cp -R "$ROOT"/. "$payload_root/agent-skills"/
 rm -rf -- "$payload_root/agent-skills/.git"
+# A real archive only carries tracked files; drop ignored local paths so the payload matches.
+if [ -e "$ROOT/.git" ]; then
+    while IFS= read -r ignored; do
+        rm -rf -- "$payload_root/agent-skills/${ignored%/}"
+    done < <(git -C "$ROOT" ls-files --others --ignored --exclude-standard --directory)
+fi
 archive="$CASE_ROOT/source.tar.gz"
 tar -czf "$archive" -C "$payload_root" agent-skills
 HOME="$CASE_HOME" XDG_STATE_HOME="$CASE_STATE" NO_COLOR=1 \
