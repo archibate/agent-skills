@@ -13,7 +13,7 @@ import { isAbsolute, join } from "node:path";
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 
 const GUIDELINE =
-	"Use this directory for temporary analytical scripts, probes, and intermediate results instead of ad-hoc /tmp paths. In bash, \"$PI_SCRATCHPAD_DIR\" is this path. Use the absolute path with read/write/edit, which do not expand environment variables. Keep project changes and final deliverables in their intended locations.";
+	"Use this directory for temporary analytical scripts, probes, and intermediate results instead of ad-hoc /tmp paths. In bash, use \"$PI_SCRATCHPAD_DIR\" as a shortcut to this path. Use the absolute path with read/write/edit, which do not expand environment variables. Keep project changes and final deliverables in their intended locations.";
 
 function checkDirectory(path: string, privateAccess: boolean): void {
 	const stat = lstatSync(path);

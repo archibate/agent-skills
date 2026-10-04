@@ -80,7 +80,7 @@ test("real Pi loader, jobs, user bash, prompt, reload, new, resume and fork", { 
 	const prompt = buildSystemPrompt(before.systemPromptOptions);
 	assert.match(prompt, /Session scratchpad:/);
 	assert.equal(prompt.includes(JSON.stringify(first)), true);
-	assert.match(prompt, /In bash, "\$PI_SCRATCHPAD_DIR" is this path/);
+	assert.match(prompt, /In bash, use "\$PI_SCRATCHPAD_DIR" as a shortcut to this path/);
 	assert.match(prompt, /absolute path with read\/write\/edit/);
 	assert.match(prompt, /do not expand environment variables/);
 	assert.match(prompt, /Existing rule/);

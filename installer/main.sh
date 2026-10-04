@@ -483,6 +483,18 @@ menu_run() {
             ' ')
                 MENU_SELECTED[cursor]=$((1 - MENU_SELECTED[cursor]))
                 ;;
+            $'\001')
+                selected_count=0
+                for value in "${MENU_SELECTED[@]}"; do
+                    selected_count=$((selected_count + value))
+                done
+                if [ "$selected_count" -eq "${#MENU_SELECTED[@]}" ]; then toggle_to=0; else toggle_to=1; fi
+                idx=0
+                while [ "$idx" -lt "${#MENU_SELECTED[@]}" ]; do
+                    MENU_SELECTED[idx]=$toggle_to
+                    idx=$((idx + 1))
+                done
+                ;;
             $'\033')
                 sequence=''
                 IFS= read -r -s -n 2 -u 3 sequence || true
@@ -515,7 +527,7 @@ detect_targets() {
 
 select_targets_interactively() {
     MENU_TITLE="Choose target agents"
-    MENU_HINT="↑/↓ or j/k move · Space toggle · Enter continue · q cancel"
+    MENU_HINT="↑/↓ or j/k move · Space toggle · Ctrl-A all/none · Enter continue · q cancel"
     MENU_ALLOW_EMPTY=0
     MENU_LABELS=("${TARGET_LABELS[@]}")
     MENU_SELECTED=("${TARGET_SELECTED[@]}")
@@ -595,7 +607,7 @@ prune_incompatible_selection() {
 
 select_items_interactively() {
     MENU_TITLE="Choose your loadout"
-    MENU_HINT="Core items are preselected · hard dependencies are restored automatically"
+    MENU_HINT="Core items are preselected · Ctrl-A toggles all · hard dependencies are restored automatically"
     MENU_ALLOW_EMPTY=0
     MENU_LABELS=()
     MENU_SELECTED=()
