@@ -1,0 +1,10 @@
+{
+  "theme": "dark",
+  "tuiMode": "fullscreen",
+  "quietStartup": false,
+  "showCacheMissNotices": true,
+  "defaultProjectTrust": "always",
+  "terminal": {
+    "showTerminalProgress": true
+  }
+}

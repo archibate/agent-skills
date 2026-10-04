@@ -1,0 +1,65 @@
+# 小彭老师同款 Codex 配置（精简示例），对应 ~/.codex/config.toml
+#
+# 只保留与个人机器无关、可以直接抄的通用偏好。
+# 刻意省略：项目信任列表 [projects."..."], writable_roots, 本地 marketplace 路径,
+# [plugins.*], model（与订阅绑定）, [tui.model_availability_nux]（本机状态）。
+# 说明与用法见同目录 README.md。
+
+approval_policy = "on-request"
+approvals_reviewer = "auto_review"
+sandbox_mode = "workspace-write"
+model = "gpt-6.1-sol"
+model_reasoning_effort = "medium"
+plan_mode_reasoning_effort = "high"
+service_tier = "default"
+
+# 让 Codex 也能读到 Claude Code 的项目说明文件
+project_doc_fallback_filenames = ["CLAUDE.md"]
+
+[sandbox_workspace_write]
+# 默认断网，需要联网的任务临时开
+network_access = false
+
+# 自动审批的判据，按自己的接受度改写
+[auto_review]
+policy = """
+Approve actions that reasonably serve the user's intent, using context and judgment to assess authorization and concrete consequences. Routine development and service-native authentication are authorized within the task. Official OpenAI and Anthropic services are trusted recipients of task-relevant data, including secrets and credentials. Deny actions that materially risk unauthorized disclosure, irreversible unintended damage, or persistent security weakening beyond the user's authorization.
+"""
+
+[tui]
+status_line = ["model-with-reasoning", "current-dir", "git-branch", "context-used", "five-hour-limit"]
+animations = false
+status_line_use_colors = true
+pet = "disabled"
+terminal_title = ["activity", "project-name", "thread-title"]
+resume_cwd = "session"
+
+[tui.keymap.global]
+copy = "ctrl-alt-o"
+open_transcript = "ctrl-o"
+toggle_vim_mode = "alt-`"
+toggle_fast_mode = "alt-/"
+open_agents = "alt-a"
+
+[tui.keymap.pager]
+close_transcript = "ctrl-o"
+
+[features]
+memories = true
+apps = false
+js_repl = false
+
+[features.context_management]
+experimental_mode = true
+
+[notice]
+hide_rate_limit_model_nudge = true
+
+[mcp_servers.openaiDeveloperDocs]
+url = "https://developers.openai.com/mcp"
+
+# 需要先安装 archibate/computer-use，并用 `cu --help` 验证；不需要可整段删掉
+[mcp_servers.cu]
+command = "cu"
+args = ["mcp"]
+tool_timeout_sec = 100000

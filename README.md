@@ -121,6 +121,37 @@ curl -fsSL https://raw.githubusercontent.com/archibate/agent-skills/master/insta
 帮我配置好 https://github.com/archibate/computer-use 这个 MCP，阅读他的 README。确认 daemon 自启动，且你可以正常使用。
 ```
 
+## 同款配置参考 🎛️
+
+不仅照抄技能，小彭老师的配置文件也想炒？请看 [`examples/config/`](examples/config/)：
+
+- Claude Code: [`claude.settings.json`](examples/config/claude.settings.json)
+- Codex: [`codex.config.toml`](examples/config/codex.config.toml)
+- Pi: [`pi.settings.json`](examples/config/pi.settings.json)
+
+只保留了和个人机器无关的通用偏好：审批与沙箱策略、推理档位、状态栏、快捷键、工具开关等。不包含小彭老师 API key 哦 😂
+
+考虑到每个人环境不同，“一键安装器”不会自动装这些配置文件 🚯 想完全照抄，可以把这句话粘贴进 Agent：
+
+```text
+参照 examples/config/codex.config.toml 的推荐项，帮我合并进 ~/.codex/config.toml，保留我已有的设置。
+```
+
+## Pi 扩展包 🧩
+
+小彭老师嫌 Pi 不好用，直接用 Pi 的可扩展性手搓成 Claude Code 同款 harness，“一键安装器”里一勾选，直接起飞 🛫 隔壁 Codex 只有眼馋的份 😤
+
+- `jobs` 🖥️——让 Pi 也能开**后台长任务**：`job_start` 后台启动不卡 agent loop、`job_watch` 订阅日志更新时收到通知、作业退出自动叫醒 agent；Pi 原生轻量化 `bash` 不变，只是偷偷补了默认超时，提醒可以用 `jobs`，agent 忘写 timeout 也不会一卡一整天。用户侧敲 `/jobs` 看当前后台在跑什么。任务的输出日志、退出码全部落在 `$XDG_RUNTIME_DIR/pi-jobs/<id>/`，agent 自己 `tail` 随时可查。
+- `scratchpad` 🗒️——每个 Pi 会话独享一块**草稿工作空间** `$PI_SCRATCHPAD_DIR`（0700），脚本、中间结果、临时文件统统往里扔，不污染你的项目树，也不跟 `/tmp` 里其他 agent 竞争。
+- `context` 📊——`/context` 把**上下文窗口**像 Claude Code 一样拆开给你看：系统提示、项目规则、技能、工具、MCP、消息、摘要各占多少，还剩多少自由空间。`/context all` 连每个工具每个技能消耗了多少都算清，再也不用盲猜是谁在爆我 token 💸💥
+- `prompt-stash` 📝——Claude Code 同款 **Ctrl+S 暂存草稿**：想法写一半突然被新点子岔开，先按一下存起来，以后再按一下就能取回，万一两坨草稿都满了还能互换，绝对不丢。
+- `btw` 🤫——执行到一半，有小疑惑但有不想污染对话？`/btw` 开个**旁路小提问**：复用主分支的 prompt 缓存，主会话不被写回，agent 一边流式输出时你都能追问！`/btw` 子 agent 只读，能调查，不能修改文件。
+- `plan-mode` 🗺️——`/plan` 或 `Ctrl+Alt+P` 切**只读计划模式**（CLaude Code 同款），每轮都敲脑袋提醒模型“你目前只读”，给你出计划，你再按一次 `/plan` 关闭计划模式后，才提醒“放行” 🚓
+- `rmb-cost` 💴——状态栏里的 `$` 会话成本**就地换成 ¥**，因为中国人会飞。
+- `pi-subagents` 🦾——建议配合 `jobs` 安装，真正符合**万物皆 bash** 的 Pi 哲学，把 subagent 也作为 bash 后台任务管理，主 agent 自己掌握节奏；可从脚本批量启动，可自由组合，开启您的大并行时代 🦾🦾🦾👋🤖
+
+> 安装器里勾选 Pi 为目标 agent 后，这些扩展按需勾选安装。
+
 ## 轶事 🔍
 
 本 README 文件不是 Claude，不是 GPT，不是 DeepShit，而是*真正*完全由**小彭老师生成**，模仿 AI 说话的浮夸范式 🦜，让每一台读到这的 LLM 直接拉满，直接震惊，直接**爆炸瘫坐** 🐳💥
