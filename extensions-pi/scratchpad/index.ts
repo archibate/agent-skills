@@ -1,6 +1,8 @@
 /**
- * Session-scoped analytical scratchpad. Sets TMPDIR without replacing shell tools,
- * so built-in bash, user ! commands, and the background extension inherit it.
+ * Session-scoped analytical scratchpad. Exports PI_SCRATCHPAD_DIR without replacing shell tools,
+ * so built-in bash and user ! commands inherit it. TMPDIR is deliberately left untouched, so child
+ * tools keep normal temporary-file semantics (Chromium rejects a long TMPDIR: its process-singleton
+ * socket path overflows the 108-byte sun_path limit).
  * Files survive shutdown/reload; this is a storage convention, not a sandbox.
  * Intended for the CLI's single active session, not concurrent SDK sessions in one process.
  */
@@ -11,7 +13,7 @@ import { isAbsolute, join } from "node:path";
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 
 const GUIDELINE =
-	"Use this directory for temporary analytical scripts, probes, and intermediate results instead of ad-hoc /tmp paths. In bash, \"$TMPDIR\" is a shortcut for this path. Use the absolute path with read/write/edit, which do not expand environment variables. Keep project changes and final deliverables in their intended locations.";
+	"Use this directory for temporary analytical scripts, probes, and intermediate results instead of ad-hoc /tmp paths. In bash, \"$PI_SCRATCHPAD_DIR\" is this path. Use the absolute path with read/write/edit, which do not expand environment variables. Keep project changes and final deliverables in their intended locations.";
 
 function checkDirectory(path: string, privateAccess: boolean): void {
 	const stat = lstatSync(path);
@@ -58,13 +60,13 @@ function prepareScratchpad(sessionId: string): string {
 }
 
 export default function scratchpadExtension(pi: ExtensionAPI): void {
-	let active: { path: string; previousTmpdir: string | undefined } | undefined;
+	let active: { path: string; previous: string | undefined } | undefined;
 	let failure: string | undefined = "Scratchpad session has not started";
 
 	function release(): void {
-		if (active && process.env.TMPDIR === active.path) {
-			if (active.previousTmpdir === undefined) delete process.env.TMPDIR;
-			else process.env.TMPDIR = active.previousTmpdir;
+		if (active && process.env.PI_SCRATCHPAD_DIR === active.path) {
+			if (active.previous === undefined) delete process.env.PI_SCRATCHPAD_DIR;
+			else process.env.PI_SCRATCHPAD_DIR = active.previous;
 		}
 		active = undefined;
 	}
@@ -73,8 +75,8 @@ export default function scratchpadExtension(pi: ExtensionAPI): void {
 		release();
 		try {
 			const path = prepareScratchpad(ctx.sessionManager.getSessionId());
-			active = { path, previousTmpdir: process.env.TMPDIR };
-			process.env.TMPDIR = path;
+			active = { path, previous: process.env.PI_SCRATCHPAD_DIR };
+			process.env.PI_SCRATCHPAD_DIR = path;
 			failure = undefined;
 		} catch (error) {
 			failure = `Scratchpad initialization failed: ${error instanceof Error ? error.message : String(error)}. Fix the directory/configuration and run /reload.`;
@@ -90,7 +92,7 @@ export default function scratchpadExtension(pi: ExtensionAPI): void {
 		if (!guidelines.includes(guideline)) guidelines.push(guideline);
 	});
 
-	// Pi reports session_start errors but continues. Don't silently execute shells with an old TMPDIR.
+	// Pi reports session_start errors but continues. Don't silently execute shells without a scratchpad.
 	pi.on("tool_call", (event) => {
 		if (failure && ["bash", "powershell", "monitor"].includes(event.toolName)) {
 			return { block: true, reason: failure };
@@ -108,9 +110,9 @@ export default function scratchpadExtension(pi: ExtensionAPI): void {
 	});
 
 	pi.registerCommand("scratchpad", {
-		description: "Show the session scratchpad (TMPDIR)",
+		description: "Show the session scratchpad (PI_SCRATCHPAD_DIR)",
 		handler: async (_args, ctx) => {
-			const text = failure ?? `TMPDIR=${active!.path}`;
+			const text = failure ?? `PI_SCRATCHPAD_DIR=${active!.path}`;
 			if (ctx.hasUI) ctx.ui.notify(text, failure ? "error" : "info");
 			else console.log(text);
 		},

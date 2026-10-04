@@ -17,8 +17,12 @@ test("real Pi loader, jobs, user bash, prompt, reload, new, resume and fork", { 
 	const base = mkdtempSync(join(homedir(), ".cache", "pi-scratchpad-integration-"));
 	const savedTmpdir = process.env.TMPDIR;
 	const savedCache = process.env.XDG_CACHE_HOME;
+	const savedRuntimeDir = process.env.XDG_RUNTIME_DIR;
+	const savedScratch = process.env.PI_SCRATCHPAD_DIR;
 	process.env.XDG_CACHE_HOME = join(base, "cache");
 	process.env.TMPDIR = base;
+	process.env.XDG_RUNTIME_DIR = join(base, "runtime");
+	delete process.env.PI_SCRATCHPAD_DIR;
 	const cwd = join(base, "project");
 	const agentDir = join(base, "agent");
 	mkdirSync(cwd);
@@ -46,6 +50,10 @@ test("real Pi loader, jobs, user bash, prompt, reload, new, resume and fork", { 
 			else process.env.TMPDIR = savedTmpdir;
 			if (savedCache === undefined) delete process.env.XDG_CACHE_HOME;
 			else process.env.XDG_CACHE_HOME = savedCache;
+			if (savedRuntimeDir === undefined) delete process.env.XDG_RUNTIME_DIR;
+			else process.env.XDG_RUNTIME_DIR = savedRuntimeDir;
+			if (savedScratch === undefined) delete process.env.PI_SCRATCHPAD_DIR;
+			else process.env.PI_SCRATCHPAD_DIR = savedScratch;
 			rmSync(base, { recursive: true, force: true });
 		}
 	});
@@ -62,8 +70,9 @@ test("real Pi loader, jobs, user bash, prompt, reload, new, resume and fork", { 
 	await bind(runtime.session);
 	assert.deepEqual(errors, []);
 	assert.equal(runtime.session.extensionRunner.getExtensionPaths().length, 2);
-	const first = process.env.TMPDIR;
+	const first = process.env.PI_SCRATCHPAD_DIR;
 	assert.equal(first, join(base, "cache", "pi", "scratchpad", runtime.session.sessionManager.getSessionId()));
+	assert.equal(process.env.TMPDIR, base);
 	writeFileSync(join(first, "result.txt"), "retained");
 
 	const runner = runtime.session.extensionRunner;
@@ -71,18 +80,18 @@ test("real Pi loader, jobs, user bash, prompt, reload, new, resume and fork", { 
 	const prompt = buildSystemPrompt(before.systemPromptOptions);
 	assert.match(prompt, /Session scratchpad:/);
 	assert.equal(prompt.includes(JSON.stringify(first)), true);
-	assert.match(prompt, /In bash, "\$TMPDIR" is a shortcut/);
+	assert.match(prompt, /In bash, "\$PI_SCRATCHPAD_DIR" is this path/);
 	assert.match(prompt, /absolute path with read\/write\/edit/);
 	assert.match(prompt, /do not expand environment variables/);
 	assert.match(prompt, /Existing rule/);
 
 	const definition = runtime.session.getToolDefinition("bash");
-	const tool = await definition.execute("fixture", { command: 'printf "%s\\n" "$TMPDIR" "$PWD"; mktemp' }, undefined, undefined, runner.createToolContext("fixture"));
+	const tool = await definition.execute("fixture", { command: 'printf "%s\\n" "$PI_SCRATCHPAD_DIR" "$PWD"; mktemp' }, undefined, undefined, runner.createToolContext("fixture"));
 	assert.equal(tool.isError, undefined);
 	const [tempEnv, workdir, tempFile] = tool.structuredContent.output.trim().split("\n");
 	assert.equal(tempEnv, first);
 	assert.equal(workdir, cwd);
-	assert.equal(dirname(tempFile), first);
+	assert.equal(dirname(tempFile), base);
 
 	// The advertised absolute path works directly with all three file tools.
 	const filePath = join(first, "file-tool-result.txt");
@@ -96,23 +105,24 @@ test("real Pi loader, jobs, user bash, prompt, reload, new, resume and fork", { 
 	const editedRead = await executeFileTool("read", { path: filePath });
 	assert.equal(editedRead.content[0].text, "after");
 
-	const intercept = await runner.emitUserBash({ type: "user_bash", command: 'printf "%s" "$TMPDIR"', excludeFromContext: true, cwd });
+	const intercept = await runner.emitUserBash({ type: "user_bash", command: 'printf "%s" "$PI_SCRATCHPAD_DIR"', excludeFromContext: true, cwd });
 	assert.equal(intercept, undefined);
-	const userBash = await runtime.session.executeBash('printf "%s" "$TMPDIR"', undefined, { excludeFromContext: true });
+	const userBash = await runtime.session.executeBash('printf "%s" "$PI_SCRATCHPAD_DIR"', undefined, { excludeFromContext: true });
 	assert.equal(userBash.exitCode, 0);
 	assert.equal(userBash.output, first);
 
-	// Pi's own overflow logs should also use the new process-local TMPDIR.
+	// Pi's own overflow logs keep using the untouched process-local TMPDIR.
 	const overflow = await definition.execute("overflow", { command: "printf '%060000d' 0" }, undefined, undefined, runner.createToolContext("overflow"));
 	assert.equal(overflow.isError, undefined);
-	assert.equal(dirname(overflow.details.fullOutputPath), first);
+	assert.equal(dirname(overflow.details.fullOutputPath), base);
 
-	// Background jobs must inherit the scratchpad TMPDIR too.
+	// Background jobs deliberately ignore the scratchpad: they live under XDG_RUNTIME_DIR.
 	const jobStart = runtime.session.getToolDefinition("job_start");
-	const started = await jobStart.execute("fixture-job-start", { command: "printf 'job-output\\n'", name: "tmpdir" }, undefined, undefined, runner.createToolContext("fixture-job-start"));
+	const started = await jobStart.execute("fixture-job-start", { command: "printf 'job-output\\n'", name: "runtime" }, undefined, undefined, runner.createToolContext("fixture-job-start"));
 	assert.equal(started.isError, undefined);
 	const logPath = join(started.details.dir, "stdout");
-	assert.equal(logPath.startsWith(join(first, "pi-jobs") + "/"), true);
+	assert.equal(logPath.startsWith(join(process.env.XDG_RUNTIME_DIR, "pi-jobs") + "/"), true);
+	assert.equal(logPath.startsWith(first), false);
 	const statusPath = join(started.details.dir, "status");
 	for (let i = 0; i < 300 && !existsSync(statusPath); i++) await new Promise((resolve) => setTimeout(resolve, 10));
 	assert.equal(readFileSync(logPath, "utf8").includes("job-output"), true);
@@ -121,22 +131,24 @@ test("real Pi loader, jobs, user bash, prompt, reload, new, resume and fork", { 
 	const firstSession = runtime.session.sessionFile;
 	assert.ok(firstSession);
 	await runtime.session.reload();
-	assert.equal(process.env.TMPDIR, first);
+	assert.equal(process.env.PI_SCRATCHPAD_DIR, first);
+	assert.equal(process.env.TMPDIR, base);
 	assert.equal(readFileSync(join(first, "result.txt"), "utf8"), "retained");
 	assert.deepEqual(errors, []);
 
 	await runtime.newSession();
-	assert.notEqual(process.env.TMPDIR, first);
-	assert.equal(process.env.TMPDIR, join(base, "cache", "pi", "scratchpad", runtime.session.sessionManager.getSessionId()));
+	assert.notEqual(process.env.PI_SCRATCHPAD_DIR, first);
+	assert.equal(process.env.PI_SCRATCHPAD_DIR, join(base, "cache", "pi", "scratchpad", runtime.session.sessionManager.getSessionId()));
+	assert.equal(process.env.TMPDIR, base);
 	const newBefore = await runtime.session.extensionRunner.emitBeforeAgentStart("fixture", undefined, { cwd });
 	const newPrompt = buildSystemPrompt(newBefore.systemPromptOptions);
-	assert.equal(newPrompt.includes(JSON.stringify(process.env.TMPDIR)), true);
+	assert.equal(newPrompt.includes(JSON.stringify(process.env.PI_SCRATCHPAD_DIR)), true);
 	assert.equal(newPrompt.includes(first), false);
 	await runtime.switchSession(firstSession);
-	assert.equal(process.env.TMPDIR, first);
+	assert.equal(process.env.PI_SCRATCHPAD_DIR, first);
 	assert.equal(readFileSync(join(first, "result.txt"), "utf8"), "retained");
 	await runtime.fork(userEntry, { position: "at" });
-	assert.notEqual(process.env.TMPDIR, first);
+	assert.notEqual(process.env.PI_SCRATCHPAD_DIR, first);
 	assert.equal(readFileSync(join(first, "result.txt"), "utf8"), "retained");
 	assert.deepEqual(errors, []);
 

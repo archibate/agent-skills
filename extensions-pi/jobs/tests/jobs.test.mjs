@@ -1,12 +1,12 @@
 import assert from "node:assert/strict";
 import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs";
-import { homedir } from "node:os";
+import { homedir, tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { test } from "node:test";
 
 // Isolate the job root before the engine computes it.
 const base = mkdtempSync(join(homedir(), ".cache", "pi-jobs-test-"));
-process.env.TMPDIR = base;
+process.env.XDG_RUNTIME_DIR = base;
 const { describeStatus, getJob, groupAlive, listJobs, readTail, readTailSeed, registry, rootDir, startJob } = await import("../jobs.ts");
 
 const shell = { shell: "/bin/sh", args: ["-c"], commandTransport: "args" };
@@ -38,7 +38,7 @@ test("runs a command to completion and writes its companion files", async () => 
 	assert.equal(readTail(job.stdoutPath, 10), "hello\nbye");
 	assert.equal(dirname(job.stdoutPath), join(base, "pi-jobs", job.id));
 	assert.equal(statSync(job.dir).mode & 0o777, 0o700);
-	assert.equal(statSync(join(base, "pi-jobs")).mode & 0o1777, 0o1777, "shared root is sticky and world-writable");
+	assert.equal(statSync(join(base, "pi-jobs")).isDirectory(), true);
 
 	assert.equal(readFileSync(job.pgidPath, "utf8").trim(), String(job.pid));
 	assert.equal(readFileSync(job.commandPath, "utf8").trim(), job.command);
@@ -49,6 +49,16 @@ test("runs a command to completion and writes its companion files", async () => 
 
 	assert.equal(getJob(job.id), job);
 	assert.ok(listJobs().includes(job));
+});
+
+test("falls back to a uid-scoped tmpdir when XDG_RUNTIME_DIR is unset", () => {
+	const saved = process.env.XDG_RUNTIME_DIR;
+	delete process.env.XDG_RUNTIME_DIR;
+	try {
+		assert.equal(rootDir(), join(tmpdir(), `pi-jobs-${process.getuid()}`));
+	} finally {
+		process.env.XDG_RUNTIME_DIR = saved;
+	}
 });
 
 test("kills a process group with SIGKILL", async () => {
@@ -76,6 +86,45 @@ test("kills a job after its timeout", async () => {
 	const status = await job.done;
 	assert.equal(status.timedOut, true);
 	assert.equal(groupAlive(job.pid), false);
+});
+
+test("heartbeat backoff arms from job start, doubles, and caps", async () => {
+	const job = await start("sleep 30");
+	job.detach();
+	assert.equal(job.heartbeatAt, undefined);
+	assert.equal(job.heartbeatDue(Date.now()), false);
+
+	// The first heartbeat is anchored to job start, so an older job is reported sooner.
+	job.scheduleHeartbeat(120);
+	assert.equal(job.heartbeatSeconds, 120);
+	assert.equal(job.heartbeatAt, job.startedAt + 120_000);
+	assert.equal(job.heartbeatDue(job.startedAt + 119_999), false);
+	assert.equal(job.heartbeatDue(job.startedAt + 120_000), true);
+
+	const now = job.startedAt + 120_000;
+	job.advanceHeartbeat(now, 3600);
+	assert.equal(job.heartbeatSeconds, 240);
+	assert.equal(job.heartbeatAt, now + 240_000);
+
+	// Doubling stops at the cap.
+	let t = now;
+	for (let i = 0; i < 10; i++) {
+		job.advanceHeartbeat(t, 3600);
+		t = job.heartbeatAt;
+	}
+	assert.equal(job.heartbeatSeconds, 3600);
+	assert.equal(job.heartbeatAt, t);
+
+	// A non-positive base disables scheduling.
+	const idle = await start("sleep 30");
+	idle.detach();
+	idle.scheduleHeartbeat(0);
+	assert.equal(idle.heartbeatAt, undefined);
+
+	job.kill();
+	idle.kill();
+	await job.done;
+	await idle.done;
 });
 
 test("readTail returns the last lines and tolerates a missing file", () => {

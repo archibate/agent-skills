@@ -11,6 +11,7 @@
  * `job_watch` exists because pushing lines into the agent needs the in-process runtime.
  */
 
+import { statSync } from "node:fs";
 import type { ExtensionAPI, ExtensionToolContext } from "@earendil-works/pi-coding-agent";
 import { getShellConfig } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
@@ -23,11 +24,16 @@ import {
 	readTail,
 	readTailSeed,
 	registry,
+	rootDir,
 	startJob,
 	tailFile,
 } from "./jobs.ts";
 
 const DEFAULT_BASH_TIMEOUT_SECONDS = readEnvInt("PI_JOBS_BASH_TIMEOUT_SECONDS", 120);
+/** Per-job liveness backoff: first nudge this many seconds after a job starts, doubling to the cap. */
+const HEARTBEAT_BASE_SECONDS = readEnvInt("PI_JOBS_HEARTBEAT_SECONDS", 120);
+const HEARTBEAT_MAX_SECONDS = 3600;
+const HEARTBEAT_TAIL_LINES = 20;
 const WATCH_DEFAULT_SECONDS = 600;
 const WATCH_MAX_SECONDS = 3600;
 const WATCH_SEED_LINES = 20;
@@ -39,11 +45,14 @@ const POLL_MS = 100;
 const MAX_WATCHERS = 16;
 let activeWatchers = 0;
 
-const GUIDELINE =
-	"Long-running commands: use the job_start tool instead of bash. Each job gets an owner-only " +
-	"directory under $TMPDIR/pi-jobs/<id>/ with command/stdout/stderr/status/pgid/started files; " +
-	"inspect it with bash (grep, tail), wait for the status file, stop with kill -- -<pgid>, and use " +
-	"job_watch to be notified of output instead of polling.";
+function guideline(root: string): string {
+	return (
+		"Long-running commands: use the job_start tool instead of bash. Each job gets an owner-only " +
+		`directory under ${root}/<id>/ with command/stdout/stderr/status/pgid/started files; ` +
+		"inspect it with bash (grep, tail), wait for the status file, stop with kill -- -<pgid>, and use " +
+		"job_watch to be notified of output instead of polling."
+	);
+}
 
 function readEnvInt(name: string, fallback: number): number {
 	const value = Number(process.env[name]);
@@ -70,7 +79,7 @@ function requireJob(id: string): Job {
 	const job = getJob(id);
 	if (!job) {
 		throw new Error(
-			`No job with id ${JSON.stringify(id)}. List jobs with: ls -la "$TMPDIR/pi-jobs"`,
+			`No job with id ${JSON.stringify(id)}. List jobs with: ls -la ${JSON.stringify(rootDir())}`,
 		);
 	}
 	return job;
@@ -90,6 +99,43 @@ function statusLine(job: Job): string {
 
 function truncate(text: string, length: number): string {
 	return text.length <= length ? text : `${text.slice(0, length)}...`;
+}
+
+function formatDuration(ms: number): string {
+	const seconds = Math.max(0, Math.round(ms / 1000));
+	const hours = Math.floor(seconds / 3600);
+	const minutes = Math.floor((seconds % 3600) / 60);
+	if (hours > 0) return `${hours}h${String(minutes).padStart(2, "0")}m`;
+	if (minutes > 0) return `${minutes}m${String(seconds % 60).padStart(2, "0")}s`;
+	return `${seconds}s`;
+}
+
+/** Byte size and modification age of a job file, so the agent can judge progress from the nudge. */
+function fileActivity(path: string, now: number): string {
+	try {
+		const stat = statSync(path);
+		return `${stat.size}B (${formatDuration(now - stat.mtimeMs)} ago)`;
+	} catch {
+		return "absent";
+	}
+}
+
+/** One liveness nudge listing every due job, so the agent can heal or kill the stuck ones. */
+function heartbeatMessage(due: Job[], running: Job[], now: number): string {
+	const lines = [
+		`Liveness check: ${due.length} job(s) still running. Confirm each is making progress — tail its output, then heal or kill if stuck.`,
+	];
+	for (const job of due) {
+		lines.push(
+			`[${label(job)}] ${formatDuration(now - job.startedAt)} elapsed (pgid ${job.pid}) · ` +
+				`stdout ${fileActivity(job.stdoutPath, now)} · stderr ${fileActivity(job.stderrPath, now)}`,
+			`  tail -n ${HEARTBEAT_TAIL_LINES} ${job.stdoutPath}`,
+			`  kill -- -${job.pid}`,
+		);
+	}
+	const other = running.length - due.length;
+	if (other > 0) lines.push(`(${other} other running job(s) not shown)`);
+	return lines.join("\n");
 }
 
 /** Session environment for a job, matching what the bash tool injects (so `$PI_SESSION_ID` etc. work). */
@@ -207,19 +253,55 @@ export default function jobsExtension(pi: ExtensionAPI): void {
 
 	pi.on("before_agent_start", (event) => {
 		const guidelines = event.systemPromptOptions.promptGuidelines;
-		if (!guidelines.includes(GUIDELINE)) guidelines.push(GUIDELINE);
+		const text = guideline(rootDir());
+		if (!guidelines.includes(text)) guidelines.push(text);
 	});
 
 	// One-shot modes (print/json) exit the process as soon as the run settles, which would kill
 	// pending jobs before their completion notification reached the agent. Hold settlement while
-	// jobs run: re-ref their child handles so the process stays alive, wait for the next one to
-	// exit, then force a continuation so the delivered notification becomes a real turn.
+	// jobs run: re-ref their child handles so the process stays alive. Each running job also gets a
+	// per-job liveness heartbeat on an exponential backoff, so a job that never exits surfaces to the
+	// agent for a heal-or-kill decision instead of hanging the run forever.
 	pi.on("agent_before_settle", async (_event, ctx) => {
 		if (ctx.mode !== "print" && ctx.mode !== "json") return;
 		const running = listJobs().filter((job) => job.running);
 		if (running.length === 0) return;
 		for (const job of running) job.keepAlive();
-		await Promise.race(running.map((job) => job.done));
+		if (HEARTBEAT_BASE_SECONDS <= 0) {
+			await Promise.race(running.map((job) => job.done));
+			return { continue: true };
+		}
+
+		const reportDue = (): boolean => {
+			const now = Date.now();
+			const live = listJobs().filter((job) => job.running);
+			const due = live.filter((job) => job.heartbeatDue(now));
+			if (due.length === 0) return false;
+			deliver(heartbeatMessage(due, live, now));
+			for (const job of due) job.advanceHeartbeat(now, HEARTBEAT_MAX_SECONDS);
+			return true;
+		};
+
+		for (const job of running) {
+			if (job.heartbeatAt === undefined) job.scheduleHeartbeat(HEARTBEAT_BASE_SECONDS);
+		}
+		// A job already past its first interval (started several turns ago) is reported immediately.
+		if (reportDue()) return { continue: true };
+
+		const next = Math.min(...running.map((job) => job.heartbeatAt ?? Number.POSITIVE_INFINITY));
+		let timer: NodeJS.Timeout | undefined;
+		const tick = new Promise<"tick">((resolve) => {
+			timer = setTimeout(() => resolve("tick"), Math.max(1, next - Date.now()));
+		});
+		try {
+			const winner = await Promise.race([
+				...running.map((job) => job.done.then(() => "done" as const)),
+				tick,
+			]);
+			if (winner === "tick") reportDue();
+		} finally {
+			if (timer) clearTimeout(timer);
+		}
 		return { continue: true };
 	});
 

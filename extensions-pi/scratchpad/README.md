@@ -1,13 +1,13 @@
 # Session scratchpad
 
-Sets `TMPDIR` to `${XDG_CACHE_HOME:-~/.cache}/pi/scratchpad/<session-id>/`
+Sets `PI_SCRATCHPAD_DIR` to `${XDG_CACHE_HOME:-~/.cache}/pi/scratchpad/<session-id>/`
 and adds a short system-prompt guideline showing the resolved absolute path for
-file tools and advertising `"$TMPDIR"` as the bash shortcut. Relative or empty
-`XDG_CACHE_HOME` values use `~/.cache`.
+file tools and advertising `"$PI_SCRATCHPAD_DIR"` as the bash shortcut. Relative or
+empty `XDG_CACHE_HOME` values use `~/.cache`. `TMPDIR` is left untouched.
 
 Run `/reload` after installing, then `/scratchpad` to show the current location.
-Shell commands can use `"$TMPDIR"` directly. `read`/`write`/`edit` do not expand
-environment variables; use the absolute scratchpad path shown in the prompt.
+Shell commands can use `"$PI_SCRATCHPAD_DIR"` directly. `read`/`write`/`edit` do not
+expand environment variables; use the absolute scratchpad path shown in the prompt.
 
 ## Behavior
 
@@ -17,11 +17,11 @@ environment variables; use the absolute scratchpad path shown in the prompt.
   directories, unsafe permissions, or unwritable directories are rejected. A
   symlinked cache home is allowed after validating its resolved target.
 - Sets the Pi process's environment rather than replacing tools, so existing tool
-  executors keep working. Shell children and Pi's dynamically allocated overflow
-  logs inherit the new temporary location. Tools that cache their temporary
-  location during module loading can retain the old location.
-- Restores the previous `TMPDIR` on session teardown, unless another component
-  has since changed it. The working directory is unchanged.
+  executors keep working. Shell children inherit `PI_SCRATCHPAD_DIR`; `TMPDIR` is
+  untouched, so temp-file behavior is unchanged (Chromium's singleton socket would
+  overflow the 108-byte `sun_path` limit under the deep scratchpad path).
+- Restores the previous `PI_SCRATCHPAD_DIR` on session teardown, unless another
+  component has since changed it. The working directory is unchanged.
 - Initialization failure is reported and blocks `bash`, `powershell`, `monitor`,
   and user `!` commands until the configuration is fixed and Pi is reloaded.
   File tools remain available to inspect/repair the problem.

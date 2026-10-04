@@ -4,8 +4,10 @@ Explicit background jobs for pi, with the filesystem as the API. Replaces the ol
 extension's auto-backgrounding.
 
 `bash` stays native pi: foreground and timeout-gated, with no hidden second mode. This extension
-only (1) injects a default timeout when the model omits one, so a forgotten long command cannot
-hang forever, and (2) appends a `job_start` hint when that timeout fires. Long-running work goes
+(1) injects a default timeout when the model omits one, so a forgotten long command cannot hang
+forever, (2) appends a `job_start` hint when that timeout fires, and (3) holds one-shot (print/JSON)
+runs open while jobs are pending, nudging the agent on a per-job liveness backoff so a job that
+never exits surfaces for a heal-or-kill decision instead of hanging the run. Long-running work goes
 through `job_start`, which returns a job id and notifies the agent when the job exits.
 
 ## Tools
@@ -21,7 +23,7 @@ Only two tools are declared; everything else is the job's files on disk, operate
 
 ## The job directory
 
-Each job gets an owner-only (0700) directory at `$TMPDIR/pi-jobs/<id>/`:
+Each job gets an owner-only (0700) directory at `$XDG_RUNTIME_DIR/pi-jobs/<id>/`:
 
 | File | Contents |
 |---|---|
@@ -32,16 +34,17 @@ Each job gets an owner-only (0700) directory at `$TMPDIR/pi-jobs/<id>/`:
 | `pgid` | process group |
 | `started` | ISO 8601 start time |
 
-The `pi-jobs` root is created sticky and world-writable (`1777`, like `/tmp`), so several users can
-create their own job directories while only the owner of an entry may delete it. Each `<id>/` is
-created `0700` and validated like scratchpad (rejecting a symlink, non-directory, another owner, or
-group/other bits), so job output stays private even when `TMPDIR` is the shared `/tmp`.
+The root sits inside `$XDG_RUNTIME_DIR`, which the system already creates per-user, owner-only,
+and clears at logout, so job output is private by inheritance and the root needs no
+sticky/world-writable mode. Only the `pi-jobs` root and each `<id>/` are created `0700`; an existing
+symlink or foreign owner is rejected. Where `XDG_RUNTIME_DIR` is unset (macOS, minimal containers),
+the root falls back to a uid-scoped `$TMPDIR/pi-jobs-<uid>`.
 
 Because they are plain files, bash composes them:
 
 ```bash
-d="$TMPDIR/pi-jobs/<id>"
-ls -la "$TMPDIR/pi-jobs"                      # list jobs
+d=<job dir printed by job_start>
+ls -la "$(dirname "$d")"                      # list jobs
 cat "$d/command"                              # what it ran
 cat "$d/started"                              # when it started
 grep -i error "$d/stdout"                     # search output
@@ -55,8 +58,8 @@ can run a job end-to-end without extra tool schemas.
 
 ## Behavior
 
-- Every job runs in its own process group with detached stdio; `$TMPDIR` is resolved per call, so
-  logs follow the scratchpad (and any later `TMPDIR` change).
+- Every job runs in its own process group with detached stdio; the jobs root is resolved per call
+  from `$XDG_RUNTIME_DIR`, independent of `TMPDIR` and the scratchpad.
 - The process-global registry lives on `globalThis`, so live jobs survive `/reload`; the newest
   extension load owns notification delivery. On forced exit (SIGTERM, crash) live jobs are killed
   and the files this process created are removed; a graceful one-shot run waits for them instead.
@@ -69,8 +72,15 @@ can run a job end-to-end without extra tool schemas.
   suppressed for that job.
 - `bash` default timeout: `PI_JOBS_BASH_TIMEOUT_SECONDS` (default 120, `0` disables). The timeout
   error points the model at `job_start`.
-- A job with no `timeout` that never finishes will hold a one-shot run open indefinitely; kill it
-  (`kill -- -<pgid>`) or pass `timeout` when starting it.
+- Liveness heartbeats: while a one-shot run is held open, each running job is revisited on a
+  per-job backoff (default 2 min after start, doubling to 1 h) with a nudge listing its elapsed
+  time and stdout/stderr size and age, so the agent can tail, heal, or kill it. Being per job, a
+  freshly started job is checked long before an old one. `PI_JOBS_HEARTBEAT_SECONDS` sets the base
+  (default 120, `0` disables). Heartbeats run only in one-shot modes, where the process would
+  otherwise not wait.
+- A job with no `timeout` that never finishes still holds a one-shot run open, but the liveness
+  heartbeat keeps surfacing it so the agent can heal or kill it instead of hanging silently. Pass
+  `timeout` when starting a job to bound it without agent intervention.
 
 ## Editor setup
 

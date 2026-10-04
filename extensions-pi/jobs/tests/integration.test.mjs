@@ -8,6 +8,8 @@ import { pathToFileURL } from "node:url";
 // Offline tool-layer test: loads the real pi runtime and the extension, then calls the tools.
 // No model request is made. Requires PI_SDK_PATH (the release's dist/index.js).
 const sdkPath = process.env.PI_SDK_PATH;
+// Keep the liveness heartbeat short so the one-shot hold surfaces it within the test.
+process.env.PI_JOBS_HEARTBEAT_SECONDS = "1";
 
 async function waitFor(predicate, timeoutMs = 3000) {
 	const deadline = Date.now() + timeoutMs;
@@ -20,21 +22,21 @@ async function waitFor(predicate, timeoutMs = 3000) {
 
 test("jobs tools through the real pi loader", { skip: !sdkPath }, async (t) => {
 	const sdk = await import(pathToFileURL(sdkPath).href);
-	const { registry } = await import("../jobs.ts");
+	const { getJob, registry } = await import("../jobs.ts");
 	const base = mkdtempSync(join(homedir(), ".cache", "pi-jobs-integration-"));
 	const cwd = join(base, "project");
 	const agentDir = join(base, "agent");
 	mkdirSync(cwd);
 	mkdirSync(agentDir);
-	const previousTmpdir = process.env.TMPDIR;
-	process.env.TMPDIR = base;
+	const previousRuntimeDir = process.env.XDG_RUNTIME_DIR;
+	process.env.XDG_RUNTIME_DIR = base;
 
 	const errors = [];
 	let session;
 	t.after(() => {
 		session?.dispose?.();
-		if (previousTmpdir === undefined) delete process.env.TMPDIR;
-		else process.env.TMPDIR = previousTmpdir;
+		if (previousRuntimeDir === undefined) delete process.env.XDG_RUNTIME_DIR;
+		else process.env.XDG_RUNTIME_DIR = previousRuntimeDir;
 		rmSync(base, { recursive: true, force: true });
 	});
 
@@ -106,6 +108,23 @@ test("jobs tools through the real pi loader", { skip: !sdkPath }, async (t) => {
 	assert.equal(settle.continue, true);
 	assert.ok(Date.now() - holdStart >= 200, "settlement was held until the job exited");
 	await waitFor(() => existsSync(join(slow.details.dir, "status")));
+
+	// A job that outlives its heartbeat interval surfaces a per-job liveness nudge instead of hanging.
+	notified.length = 0;
+	const stuck = await call("job_start", "s8", { command: "sleep 30", name: "stuck" });
+	const hbStart = Date.now();
+	const hb = await session.extensionRunner.emitBoundary({ type: "agent_before_settle" }, () => ({}));
+	assert.equal(hb.continue, true);
+	assert.ok(Date.now() - hbStart >= 800, "settlement held until the heartbeat interval elapsed");
+	assert.ok(
+		notified.some((text) => /Liveness check/.test(text) && /stuck/.test(text)),
+		`expected a liveness heartbeat: ${notified.join(" | ")}`,
+	);
+	// The nudge leaves the job alone; kill it so the process can settle and the test moves on.
+	const stuckJob = getJob(stuck.details.id);
+	stuckJob.kill();
+	await stuckJob.done;
+	await new Promise((resolve) => setTimeout(resolve, 50));
 
 	// A watched job notifies exactly once: the live watch owns the exit message, and the completion
 	// handler defers to it instead of delivering a second summary.

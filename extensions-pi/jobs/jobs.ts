@@ -1,7 +1,8 @@
 /**
  * Job engine for the jobs extension: one background command per job, in its own process group,
- * with output under $TMPDIR/pi-jobs/<id>/. Process-wide state lives on globalThis so it
- * survives /reload. On pi exit, live jobs are killed and the files this process created are removed.
+ * with output under $XDG_RUNTIME_DIR/pi-jobs/<id>/ (or a uid-scoped tmpdir fallback). Process-wide
+ * state lives on globalThis so it survives /reload. On pi exit, live jobs are killed and the files
+ * this process created are removed.
  *
  * Dependency-free on purpose: the shell config is injected (or resolved lazily from pi), so the
  * engine can be unit-tested with `node --test` without resolving the pi package.
@@ -10,10 +11,7 @@
 import { type ChildProcess, spawn } from "node:child_process";
 import { randomBytes } from "node:crypto";
 import {
-	accessSync,
-	chmodSync,
 	closeSync,
-	constants,
 	lstatSync,
 	mkdirSync,
 	openSync,
@@ -24,51 +22,26 @@ import {
 	writeFileSync,
 } from "node:fs";
 import { constants as osConstants, tmpdir } from "node:os";
-import { dirname, join } from "node:path";
+import { dirname, isAbsolute, join } from "node:path";
 
 const MAX_RETAINED_JOBS = 64;
 const LINGER_PRUNE_MS = 10_000;
 
-/** Resolved per call, so job logs follow the current TMPDIR (for example after the scratchpad extension sets it). */
+/**
+ * Jobs root: `$XDG_RUNTIME_DIR/pi-jobs`, the per-user, ephemeral directory the system already owns
+ * and keeps private (0700). Job output is private by inheritance, so no sticky/world-writable mode
+ * or chmod dance is needed. When the variable is unset (macOS, minimal containers), fall back to a
+ * uid-scoped directory under tmpdir(). Resolved per call so tests can point it at a fixture.
+ */
 export function rootDir(): string {
-	return join(tmpdir(), "pi-jobs");
+	const runtime = process.env.XDG_RUNTIME_DIR;
+	if (runtime && isAbsolute(runtime)) return join(runtime, "pi-jobs");
+	return join(tmpdir(), `pi-jobs-${process.getuid?.() ?? "user"}`);
 }
 
-/**
- * Ensure the shared `pi-jobs` root: a real directory (not a symlink) that is sticky and
- * world-writable (1777), like /tmp, so several users can create their own job directories while
- * only the owner of an entry may delete it. If we own it, force 1777 (mkdir is subject to umask).
- */
-export function ensureSharedRoot(root: string): void {
-	try {
-		mkdirSync(root, { recursive: true, mode: 0o1777 });
-	} catch (error) {
-		if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error;
-	}
-	const first = lstatSync(root);
-	if (first.isSymbolicLink() || !first.isDirectory()) {
-		throw new Error(`Expected a directory, not a file or symlink: ${root}`);
-	}
-	if (process.getuid && first.uid === process.getuid() && (first.mode & 0o1777) !== 0o1777) {
-		chmodSync(root, 0o1777);
-	}
-	const mode = lstatSync(root).mode;
-	if ((mode & 0o1003) !== 0o1003) {
-		throw new Error(`Shared job root must be sticky and world-writable (1777): ${root}`);
-	}
-	accessSync(root, constants.R_OK | constants.W_OK | constants.X_OK);
-}
-
-/**
- * Create `path` (and parents) owner-only, or validate an existing directory the way scratchpad
- * does: reject a symlink/file, another owner, or group/other bits.
- */
+/** Create `path` (and parents) owner-only; reject an existing symlink or a foreign owner. */
 export function ensurePrivateDir(path: string): void {
-	try {
-		mkdirSync(path, { recursive: true, mode: 0o700 });
-	} catch (error) {
-		if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error;
-	}
+	mkdirSync(path, { recursive: true, mode: 0o700 });
 	const stat = lstatSync(path);
 	if (stat.isSymbolicLink() || !stat.isDirectory()) {
 		throw new Error(`Expected a directory, not a file or symlink: ${path}`);
@@ -76,10 +49,6 @@ export function ensurePrivateDir(path: string): void {
 	if (process.getuid && stat.uid !== process.getuid()) {
 		throw new Error(`Directory must be owned by you: ${path}`);
 	}
-	if ((stat.mode & 0o077) !== 0) {
-		throw new Error(`Directory must be owner-only (0700): ${path}`);
-	}
-	accessSync(path, constants.R_OK | constants.W_OK | constants.X_OK);
 }
 
 /** Mirrors the host's ShellConfig so the engine stays dependency-free at load time. */
@@ -186,6 +155,10 @@ export class Job {
 	observed = false;
 	/** Live `job_watch` subscriptions; while any is active it owns the job's exit notification. */
 	watchers = 0;
+	/** Absolute ms when the next liveness heartbeat is due; undefined when unscheduled. */
+	heartbeatAt: number | undefined;
+	/** Current liveness backoff in seconds; doubles on each delivered heartbeat up to a cap. */
+	heartbeatSeconds = 0;
 	status: JobStatus | undefined;
 	readonly done: Promise<JobStatus>;
 	private child: ChildProcess;
@@ -221,6 +194,7 @@ export class Job {
 		this.done = new Promise((resolve) => {
 			child.once("exit", (code, signal) => {
 				if (this.deadline) clearTimeout(this.deadline);
+				this.heartbeatAt = undefined;
 				// After our own group kill, members may still be dying; only a natural exit can leave some behind.
 				const leftRunning = !this.killed && groupAlive(this.pid);
 				if (leftRunning) registry.lingeringGroups.add(this.pid);
@@ -288,6 +262,24 @@ export class Job {
 	keepAlive(): void {
 		this.child.ref();
 	}
+
+	/** Arm the first liveness heartbeat relative to job start, so an older job is reported sooner. */
+	scheduleHeartbeat(baseSeconds: number): void {
+		if (baseSeconds <= 0) return;
+		this.heartbeatSeconds = baseSeconds;
+		this.heartbeatAt = this.startedAt + baseSeconds * 1000;
+	}
+
+	/** Whether a liveness heartbeat is scheduled and due at `now`. */
+	heartbeatDue(now: number): boolean {
+		return this.heartbeatAt !== undefined && this.heartbeatAt <= now;
+	}
+
+	/** Advance the backoff after a delivered heartbeat, anchoring the next due time at `now`. */
+	advanceHeartbeat(now: number, capSeconds: number): void {
+		this.heartbeatSeconds = Math.min(this.heartbeatSeconds * 2, capSeconds);
+		this.heartbeatAt = now + this.heartbeatSeconds * 1000;
+	}
 }
 
 export interface StartJobOptions {
@@ -308,7 +300,7 @@ async function resolveShell(): Promise<ShellConfig> {
 export async function startJob(options: StartJobOptions): Promise<Job> {
 	const shell = options.shell ?? (await resolveShell());
 	const root = rootDir();
-	ensureSharedRoot(root);
+	ensurePrivateDir(root);
 	const id = randomBytes(6).toString("hex");
 	const dir = join(root, id);
 	ensurePrivateDir(dir);

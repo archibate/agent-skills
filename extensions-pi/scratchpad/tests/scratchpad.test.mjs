@@ -11,10 +11,18 @@ mkdirSync(fixtureRoot, { recursive: true });
 
 function fixture(t) {
 	const base = mkdtempSync(join(fixtureRoot, "pi-scratchpad-test-"));
-	const original = { TMPDIR: process.env.TMPDIR, XDG_CACHE_HOME: process.env.XDG_CACHE_HOME, HOME: process.env.HOME };
+	const original = {
+		TMPDIR: process.env.TMPDIR,
+		PI_SCRATCHPAD_DIR: process.env.PI_SCRATCHPAD_DIR,
+		XDG_CACHE_HOME: process.env.XDG_CACHE_HOME,
+		HOME: process.env.HOME,
+	};
 	process.env.XDG_CACHE_HOME = join(base, "cache");
 	process.env.HOME = join(base, "home");
-	delete process.env.TMPDIR;
+	// A known temp dir proves the extension leaves TMPDIR alone.
+	process.env.TMPDIR = join(base, "tmp");
+	mkdirSync(process.env.TMPDIR, { recursive: true, mode: 0o700 });
+	delete process.env.PI_SCRATCHPAD_DIR;
 	t.after(() => {
 		for (const [name, value] of Object.entries(original)) {
 			if (value === undefined) delete process.env[name];
@@ -55,23 +63,25 @@ test("registration has no filesystem or environment side effects", (t) => {
 	assert.equal(existsSync(process.env.XDG_CACHE_HOME), false);
 });
 
-test("private directory, inherited TMPDIR, mktemp and unchanged cwd", (t) => {
+test("private directory, exported PI_SCRATCHPAD_DIR, untouched TMPDIR and unchanged cwd", (t) => {
 	fixture(t);
 	const h = harness();
+	const tempRoot = process.env.TMPDIR;
 	h.emit("session_start", { reason: "startup" });
 	const expected = join(process.env.XDG_CACHE_HOME, "pi", "scratchpad", "session-a");
-	assert.equal(process.env.TMPDIR, expected);
-	assert.equal(tmpdir(), expected);
+	assert.equal(process.env.PI_SCRATCHPAD_DIR, expected);
+	assert.equal(process.env.TMPDIR, tempRoot);
+	assert.equal(tmpdir(), tempRoot);
 	for (const path of [expected, dirname(expected), dirname(dirname(expected))]) {
 		assert.equal(statSync(path).mode & 0o777, 0o700);
 		assert.equal(statSync(path).uid, process.getuid());
 	}
-	const [env, cwd, temp] = execFileSync("bash", ["-c", 'printf "%s\\n" "$TMPDIR" "$PWD"; mktemp'], { encoding: "utf8" }).trim().split("\n");
+	const [env, cwd, temp] = execFileSync("bash", ["-c", 'printf "%s\\n" "$PI_SCRATCHPAD_DIR" "$PWD"; mktemp'], { encoding: "utf8" }).trim().split("\n");
 	assert.equal(env, expected);
 	assert.equal(cwd, process.cwd());
-	assert.equal(dirname(temp), expected);
+	assert.equal(dirname(temp), tempRoot);
 	h.emit("session_shutdown", { reason: "quit" });
-	assert.equal(process.env.TMPDIR, undefined);
+	assert.equal(process.env.PI_SCRATCHPAD_DIR, undefined);
 	assert.equal(existsSync(temp), true);
 });
 
@@ -85,43 +95,43 @@ test("prompt advertises the absolute path and bash shortcut, preserves rules and
 	const rules = event.systemPromptOptions.promptGuidelines;
 	assert.equal(rules.length, 2);
 	assert.equal(rules[0], "Existing rule");
-	assert.match(rules[1], /\$TMPDIR/);
+	assert.match(rules[1], /\$PI_SCRATCHPAD_DIR/);
 	assert.match(rules[1], /In bash/);
 	assert.match(rules[1], /absolute path with read\/write\/edit/);
 	assert.match(rules[1], /do not expand environment variables/);
-	assert.equal(rules[1].includes(JSON.stringify(process.env.TMPDIR)), true);
-	assert.equal(rules[1].includes("PI_SCRATCHPAD_DIR"), false);
+	assert.equal(rules[1].includes(JSON.stringify(process.env.PI_SCRATCHPAD_DIR)), true);
+	assert.equal(rules[1].includes("$TMPDIR"), false);
 });
 
 test("reload/resume reuse results; new/fork use separate directories", (t) => {
 	fixture(t);
-	process.env.TMPDIR = "/original-temp";
+	process.env.PI_SCRATCHPAD_DIR = "/original-scratch";
 	let h = harness();
 	h.emit("session_start");
-	const first = process.env.TMPDIR;
+	const first = process.env.PI_SCRATCHPAD_DIR;
 	writeFileSync(join(first, "result.txt"), "keep me");
 	for (const reason of ["reload", "resume"]) {
 		h.emit("session_shutdown", { reason });
-		assert.equal(process.env.TMPDIR, "/original-temp");
+		assert.equal(process.env.PI_SCRATCHPAD_DIR, "/original-scratch");
 		h = harness(); // Pi reloads extension factories as well as the active session.
 		h.emit("session_start", { reason });
-		assert.equal(process.env.TMPDIR, first);
+		assert.equal(process.env.PI_SCRATCHPAD_DIR, first);
 		assert.equal(readFileSync(join(first, "result.txt"), "utf8"), "keep me");
 	}
 	for (const reason of ["new", "fork"]) {
 		h.emit("session_shutdown", { reason });
 		h = harness(`session-${reason}`);
 		h.emit("session_start", { reason });
-		assert.notEqual(process.env.TMPDIR, first);
-		assert.equal(existsSync(join(process.env.TMPDIR, "result.txt")), false);
+		assert.notEqual(process.env.PI_SCRATCHPAD_DIR, first);
+		assert.equal(existsSync(join(process.env.PI_SCRATCHPAD_DIR, "result.txt")), false);
 		const event = { systemPromptOptions: { promptGuidelines: [] } };
 		h.emit("before_agent_start", event);
-		assert.equal(event.systemPromptOptions.promptGuidelines[0].includes(process.env.TMPDIR), true);
+		assert.equal(event.systemPromptOptions.promptGuidelines[0].includes(process.env.PI_SCRATCHPAD_DIR), true);
 		assert.equal(event.systemPromptOptions.promptGuidelines[0].includes(first), false);
 	}
 	h.emit("session_shutdown", { reason: "quit" });
 	h.emit("session_shutdown", { reason: "quit" });
-	assert.equal(process.env.TMPDIR, "/original-temp");
+	assert.equal(process.env.PI_SCRATCHPAD_DIR, "/original-scratch");
 	assert.equal(readFileSync(join(first, "result.txt"), "utf8"), "keep me");
 });
 
@@ -129,9 +139,9 @@ test("shutdown does not overwrite a later environment change", (t) => {
 	fixture(t);
 	const h = harness();
 	h.emit("session_start");
-	process.env.TMPDIR = "/another-extension-temp";
+	process.env.PI_SCRATCHPAD_DIR = "/another-extension-scratch";
 	h.emit("session_shutdown");
-	assert.equal(process.env.TMPDIR, "/another-extension-temp");
+	assert.equal(process.env.PI_SCRATCHPAD_DIR, "/another-extension-scratch");
 });
 
 test("missing, empty and relative XDG_CACHE_HOME fall back to ~/.cache", (t) => {
@@ -141,7 +151,7 @@ test("missing, empty and relative XDG_CACHE_HOME fall back to ~/.cache", (t) => 
 		else process.env.XDG_CACHE_HOME = value;
 		const h = harness();
 		h.emit("session_start");
-		assert.equal(process.env.TMPDIR, join(homedir(), ".cache", "pi", "scratchpad", "session-a"));
+		assert.equal(process.env.PI_SCRATCHPAD_DIR, join(homedir(), ".cache", "pi", "scratchpad", "session-a"));
 		h.emit("session_shutdown");
 	}
 });
@@ -153,7 +163,7 @@ test("cache-home symlink resolves to a trusted directory", (t) => {
 	symlinkSync(target, process.env.XDG_CACHE_HOME);
 	const h = harness();
 	h.emit("session_start");
-	assert.equal(process.env.TMPDIR, join(target, "pi", "scratchpad", "session-a"));
+	assert.equal(process.env.PI_SCRATCHPAD_DIR, join(target, "pi", "scratchpad", "session-a"));
 	h.emit("session_shutdown");
 });
 
@@ -162,7 +172,7 @@ for (const id of ["../escape", ".", "..", "a/b", "", "-lead", "trail-", ".lead",
 		fixture(t);
 		const h = harness(id);
 		assert.throws(() => h.emit("session_start"), /Invalid scratchpad session ID/);
-		assert.equal(process.env.TMPDIR, undefined);
+		assert.equal(process.env.PI_SCRATCHPAD_DIR, undefined);
 		assert.equal(existsSync(process.env.XDG_CACHE_HOME), false);
 	});
 }
@@ -173,7 +183,7 @@ for (const id of ["a", "session-a", "01a0fffc-fed5-7136-b8c2-0c256308a5b9.review
 		fixture(t);
 		const h = harness(id);
 		h.emit("session_start");
-		assert.equal(process.env.TMPDIR, join(process.env.XDG_CACHE_HOME, "pi", "scratchpad", id));
+		assert.equal(process.env.PI_SCRATCHPAD_DIR, join(process.env.XDG_CACHE_HOME, "pi", "scratchpad", id));
 		h.emit("session_shutdown");
 	});
 }
@@ -189,7 +199,7 @@ for (const component of ["pi", "scratchpad", "session-a"]) {
 		symlinkSync(target, path);
 		const h = harness();
 		assert.throws(() => h.emit("session_start"), /not a file or symlink/);
-		assert.equal(process.env.TMPDIR, undefined);
+		assert.equal(process.env.PI_SCRATCHPAD_DIR, undefined);
 		assert.equal(existsSync(join(target, "scratchpad")), false);
 		assert.equal(existsSync(join(target, "session-a")), false);
 	});
@@ -203,7 +213,7 @@ for (const mode of [0o755, 0o777, 0o500]) {
 		chmodSync(path, mode);
 		const h = harness();
 		assert.throws(() => h.emit("session_start"), /permissions|EACCES/);
-		assert.equal(process.env.TMPDIR, undefined);
+		assert.equal(process.env.PI_SCRATCHPAD_DIR, undefined);
 	});
 }
 
@@ -211,10 +221,10 @@ test("initialization failure blocks shell tools, reports recovery and leaves fil
 	fixture(t);
 	mkdirSync(process.env.XDG_CACHE_HOME, { mode: 0o700 });
 	writeFileSync(join(process.env.XDG_CACHE_HOME, "pi"), "not a directory");
-	process.env.TMPDIR = "/original-temp";
+	process.env.PI_SCRATCHPAD_DIR = "/original-scratch";
 	const h = harness();
 	assert.throws(() => h.emit("session_start"), /Scratchpad initialization failed/);
-	assert.equal(process.env.TMPDIR, "/original-temp");
+	assert.equal(process.env.PI_SCRATCHPAD_DIR, "/original-scratch");
 	for (const toolName of ["bash", "powershell", "monitor"]) {
 		assert.equal(h.emit("tool_call", { toolName }).block, true);
 		assert.match(h.emit("tool_call", { toolName }).reason, /\/reload/);
@@ -228,13 +238,13 @@ test("initialization failure blocks shell tools, reports recovery and leaves fil
 	assert.equal(h.notices[0][1], "error");
 });
 
-test("successful setup passes user bash through and /scratchpad shows TMPDIR", async (t) => {
+test("successful setup passes user bash through and /scratchpad shows PI_SCRATCHPAD_DIR", async (t) => {
 	fixture(t);
 	const h = harness();
 	h.emit("session_start");
 	assert.equal(h.emit("user_bash"), undefined);
 	assert.equal(h.emit("tool_call", { toolName: "bash" }), undefined);
 	await h.commands.get("scratchpad").handler("", h.ctx);
-	assert.deepEqual(h.notices, [[`TMPDIR=${process.env.TMPDIR}`, "info"]]);
+	assert.deepEqual(h.notices, [[`PI_SCRATCHPAD_DIR=${process.env.PI_SCRATCHPAD_DIR}`, "info"]]);
 	h.emit("session_shutdown");
 });
