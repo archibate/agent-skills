@@ -62,15 +62,13 @@ new_case core
 run_installer --profile core --targets codex,claude --yes --skip-deps >/dev/null
 assert_file "$CASE_HOME/.agents/skills/cpp-oop-style/SKILL.md"
 assert_file "$CASE_HOME/.agents/skills/cpp-hpc-optimization/SKILL.md"
-assert_file "$CASE_HOME/.agents/skills/artifact-restraint/SKILL.md"
+[ ! -e "$CASE_HOME/.agents/skills/artifact-restraint" ] || fail "non-default skill installed by core profile"
 assert_file "$CASE_HOME/.claude/skills/cpp-oop-style/SKILL.md"
 assert_file "$CASE_HOME/.claude/skills/cpp-hpc-optimization/SKILL.md"
-assert_file "$CASE_HOME/.claude/skills/artifact-restraint/SKILL.md"
 assert_file "$CASE_HOME/.codex/AGENTS.md"
 assert_file "$CASE_HOME/.claude/CLAUDE.md"
 assert_link_target "$CASE_HOME/.agents/skills/cpp-oop-style" "$ROOT/skills/cpp-oop-style"
 assert_link_target "$CASE_HOME/.claude/skills/cpp-hpc-optimization" "$ROOT/skills/cpp-hpc-optimization"
-assert_link_target "$CASE_HOME/.agents/skills/artifact-restraint" "$ROOT/skills/artifact-restraint"
 assert_contains "$CASE_HOME/.codex/AGENTS.md" '<!-- archibate/agent-skills:begin -->'
 assert_contains "$CASE_HOME/.codex/AGENTS.md" '<!-- archibate/agent-skills:end -->'
 
