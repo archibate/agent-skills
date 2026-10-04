@@ -17,6 +17,9 @@ jobs	extension	extensions-pi/jobs	integration	no	-	-	-	pi	Background job tools
 scratchpad	extension	extensions-pi/scratchpad	integration	no	-	-	-	pi	Session scratchpad
 context	extension	extensions-pi/context	integration	no	-	-	-	pi	Context window usage
 prompt-stash	extension	extensions-pi/prompt-stash	integration	no	-	-	-	pi	Stash and restore the prompt draft
+btw	extension	extensions-pi/btw	integration	no	-	-	-	pi	Side question without disturbing the session
+plan-mode	extension	extensions-pi/plan-mode	integration	no	-	-	-	pi	Read-only planning hint
+rmb-cost	extension	extensions-pi/rmb-cost	integration	no	-	-	-	pi	Session cost in RMB
 pi-subagents	skill	skills-pi/pi-subagents	thinking	no	jobs	-	-	pi	Subagent orchestration
 fresh-arch	skill	skills/fresh-arch	thinking	no	-	grill-me	-	-	Fresh architecture design
 grill-me	skill	skills/grill-me	thinking	no	-	fresh-arch	-	-	Design interview
