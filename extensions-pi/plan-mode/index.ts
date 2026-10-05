@@ -6,9 +6,14 @@
  * and to keep the repo/system read-only (scratchpad excepted).
  *
  * Deliberately does NOT swap the tool set, track todos, or grep bash commands:
- * those are what make the upstream example extension expensive. That also keeps
- * the prompt-prefix cache intact - the hint is only appended after the latest
- * turn, and the one-time removal on exit is the only splice.
+ * those are what make the upstream example extension expensive.
+ *
+ * The transcript is strictly append-only: nothing is ever filtered out of
+ * history. Removing a persisted reminder would rewrite the middle of the
+ * transcript and invalidate the provider's prompt-prefix cache from that point
+ * on (measured: ~80k-200k fresh input tokens per exit on deepseek-flash). So
+ * hints are never deleted; instead the newest notice explicitly retires all
+ * earlier ones, which costs a single appended message.
  *
  * Exit is an explicit user toggle (/plan or Ctrl+Alt+P): the model cannot exit
  * itself, and presenting a plan does not end the mode. Toggling off queues a
@@ -25,10 +30,11 @@ import { Key } from "@earendil-works/pi-tui";
 
 const HINT = `[PLAN MODE ACTIVE]
 Read-only planning mode. Investigate as needed, then present a plan for the request and discuss it with the user before executing anything.
-Do not edit files or run commands that mutate system state. The session scratchpad is the only writable place, for analytical temporaries.`;
+Do not edit files or run commands that mutate system state. The session scratchpad is the only writable place, for analytical temporaries.
+This notice supersedes any earlier [PLAN MODE OFF] notice in the conversation.`;
 
 const EXIT_HINT = `[PLAN MODE OFF]
-Plan mode has ended. You may now make changes: edit files, run mutating commands, and execute the approved plan.`;
+Plan mode has ended. Ignore all earlier [PLAN MODE ACTIVE] reminders in the conversation. You may now make changes: edit files, run mutating commands, and execute the approved plan.`;
 
 export default function (pi: ExtensionAPI): void {
 	let enabled = false;
@@ -72,18 +78,10 @@ export default function (pi: ExtensionAPI): void {
 		handler: async (ctx) => toggle(ctx),
 	});
 
-	// Keep the two hints from contradicting each other: drop stale [PLAN MODE
-	// ACTIVE] reminders once off, and any leftover [PLAN MODE OFF] notice once
-	// planning resumes.
-	pi.on("context", async (event) => {
-		const drop = enabled ? "plan-mode-exit" : "plan-mode-hint";
-		return {
-			messages: event.messages.filter((m) => (m as { customType?: string }).customType !== drop),
-		};
-	});
-
 	// Append the hint before each turn while on. Appending (never splicing
 	// history) keeps the cached prefix reusable and keeps the reminder recent.
+	// Stale reminders stay in the transcript on purpose; the newest notice
+	// retires them, so the prefix cache survives every toggle.
 	pi.on("before_agent_start", async () => {
 		if (enabled) return { message: { customType: "plan-mode-hint", content: HINT, display: false } };
 		if (exitPending) {
