@@ -3,21 +3,27 @@
 Explicit background jobs for pi, with the filesystem as the API. Replaces the old `background`
 extension's auto-backgrounding.
 
-`bash` stays native pi: foreground and timeout-gated, with no hidden second mode. This extension
+`bash` stays foreground and timeout-gated, with no hidden second mode. This extension
 (1) injects a default timeout when the model omits one, so a forgotten long command cannot hang
 forever, (2) appends a `job_start` hint when that timeout fires, and (3) holds one-shot (print/JSON)
 runs open while jobs are pending, nudging the agent on a per-job liveness backoff so a job that
 never exits surfaces for a heal-or-kill decision instead of hanging the run. Long-running work goes
 through `job_start`, which returns a job id and notifies the agent when the job exits.
 
+When the [sandbox](../sandbox) extension is loaded, jobs run in its sandbox and `job_start` takes
+the same `sandbox` declaration as `bash`; without it, jobs run unsandboxed. The sandbox's default
+policy forbids signalling host processes, so jobs are stopped with `job_stop`, which signals the
+job's process group from pi itself.
+
 ## Tools
 
-Only two tools are declared; everything else is the job's files on disk, operated with bash.
+Only three tools are declared; everything else is the job's files on disk, read with bash.
 
 | Tool | Purpose |
 |---|---|
 | `job_start` | Run a command in the background; notifies on exit and returns the job's directory. |
 | `job_watch` | Deliver matching stdout lines as messages instead of polling (needs the live runtime). |
+| `job_stop` | Signal a job's process group (default SIGTERM) and report its status. |
 
 `/jobs` lists the jobs this pi process knows about.
 
@@ -50,7 +56,6 @@ cat "$d/started"                              # when it started
 grep -i error "$d/stdout"                     # search output
 tail -f "$d/stdout"                           # follow output
 until [ -e "$d/status" ]; do sleep 1; done; cat "$d/status"   # wait for it
-kill -- -"$(cat "$d/pgid")"                    # SIGTERM the group; -9 to force
 ```
 
 `job_start` returns its directory, and the files inside follow this layout, so a model with bash

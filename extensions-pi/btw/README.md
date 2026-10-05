@@ -11,10 +11,11 @@ while the main agent is still streaming.
 
 ## Read-only sandbox
 
-`read`, `grep`, `find`, and `ls` run normally. `bash` runs inside a bubblewrap
-jail: the filesystem is read-only except the session scratchpad
-(`PI_SCRATCHPAD_DIR`, falling back to `TMPDIR`). Network is denied by default;
-set `BTW_SANDBOX_NET=1` to allow it. All other mutating tools are blocked.
+`read`, `grep`, `find`, and `ls` run normally. `bash` needs the
+[sandbox](../sandbox) extension: calls that declare any access beyond its
+read-only default are blocked; set `BTW_SANDBOX_NET=1` to also allow declared
+network access. Without the sandbox extension, `bash` is blocked. All other
+mutating tools are blocked; every tool stays declared, so the prompt cache is
+shared.
 
-Without `bwrap` (Linux only), `bash` stays disabled. Each invocation reloads the
-session's extensions, which takes a few hundred ms.
+Each invocation reloads the session's extensions, which takes a few hundred ms.

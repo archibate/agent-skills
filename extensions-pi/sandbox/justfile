@@ -1,0 +1,29 @@
+# Dev tasks for the sandbox extension. Runtime loading is done by pi itself (jiti); these recipes
+# only serve editors, type checking, and tests.
+
+version := `cat "$HOME/.pi/agent/install/current-version"`
+release := "$HOME/.pi/agent/install/releases/" + version
+modules := release / "node_modules"
+
+# Symlink the host-provided packages into node_modules so tsc/tsserver can resolve imports.
+# Re-run after a pi upgrade, which moves the release directory.
+link:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    cd "{{justfile_directory()}}"
+    rm -rf node_modules
+    mkdir -p node_modules/@earendil-works node_modules/@types
+    for pkg in pi-coding-agent pi-agent-core pi-tui pi-ai; do
+        ln -s "{{modules}}/@earendil-works/$pkg" "node_modules/@earendil-works/$pkg"
+    done
+    ln -s "{{modules}}/typebox" node_modules/typebox
+    ln -s "{{modules}}/@types/node" node_modules/@types/node
+    echo "linked node_modules -> {{modules}}"
+
+# Type check with no emit. The first run may download typescript.
+check:
+    npx -y -p typescript tsc --noEmit -p "{{justfile_directory()}}"
+
+# Unit tests plus real-bwrap tests (skipped when bwrap is missing) and the pi-loader integration test.
+test:
+    cd "{{justfile_directory()}}" && PI_SDK_PATH="{{release}}/node_modules/@earendil-works/pi-coding-agent/dist/index.js" node --test tests/*.test.mjs

@@ -15,13 +15,12 @@
  *
  * Read-only:
  *   The forked session declares the same tools (needed for the cache prefix). `read`,
- *   `grep`, `find`, and `ls` run normally. `bash` runs inside a bubblewrap jail: the
- *   whole filesystem is mounted read-only except the session scratchpad (PI_SCRATCHPAD_DIR,
- *   falling back to TMPDIR), which stays writable for probes. Network is denied by default; set
- *   `BTW_SANDBOX_NET=1` to allow it. The sandbox replaces the built-in bash tool with
- *   the same declaration and different BashOperations, so the cache prefix is
- *   unchanged. All other mutating tools are blocked. The SDK does not bind extensions,
- *   so the side session calls bindExtensions() explicitly.
+ *   `grep`, `find`, and `ls` run normally. `bash` is whatever the reloaded extensions
+ *   declare, so it matches the main session's. With the sandbox extension (../sandbox)
+ *   loaded, bash calls that declare any access beyond its read-only default are blocked
+ *   (set `BTW_SANDBOX_NET=1` to also allow networkAccess); without it, bash is blocked.
+ *   All other mutating tools are blocked. The SDK does not bind extensions, so the side session calls
+ *   bindExtensions() explicitly.
  *
  * Rendering:
  *   The overlay reuses pi's own transcript components - UserMessageComponent,
@@ -34,8 +33,8 @@
  * still streaming.
  *
  * Caveats: each invocation loads and starts the session's extensions again (a few
- * hundred ms); the bash sandbox needs bubblewrap (`bwrap`) and is Linux-only (without
- * it, bash stays disabled); and disposing the shared session id also clears provider
+ * hundred ms); the bash sandbox is Linux-only (bubblewrap and Landlock) and fails closed
+ * when unavailable; and disposing the shared session id also clears provider
  * session caches keyed by it (currently only OpenAI Codex websockets).
  *
  * Installed as ~/.pi/agent/extensions/btw/ (source: extensions-pi/btw); run /reload.
@@ -45,7 +44,6 @@ import {
 	type AgentSession,
 	type AgentSessionEvent,
 	AssistantMessageComponent,
-	type BashOperations,
 	createAgentSession,
 	createBashToolDefinition,
 	DefaultResourceLoader,
@@ -68,122 +66,46 @@ import {
 	visibleWidth,
 	wrapTextWithAnsi,
 } from "@earendil-works/pi-tui";
-import { spawn } from "node:child_process";
-import { existsSync, statSync } from "node:fs";
-import { join } from "node:path";
+import type { SandboxProvider, SandboxProviderReply } from "../sandbox/sandbox.ts";
 
 const READ_ONLY_TOOLS = new Set(["read", "grep", "find", "ls"]);
 
-/** Set BTW_SANDBOX_NET=1 to allow network access inside the /btw bash sandbox (default: no network). */
+/** Set BTW_SANDBOX_NET=1 to allow declared network access inside the /btw bash sandbox (default: no network). */
 const ALLOW_SANDBOX_NETWORK = process.env.BTW_SANDBOX_NET === "1";
 
-/** Locate bubblewrap, the Linux primitive used to build the read-only sandbox. */
-function resolveBwrap(): string | undefined {
-	const candidates = ["/usr/bin/bwrap", "/usr/local/bin/bwrap", "/bin/bwrap", "/opt/homebrew/bin/bwrap"];
-	for (const candidate of candidates) {
-		if (existsSync(candidate)) return candidate;
-	}
-	for (const dir of (process.env.PATH ?? "").split(":")) {
-		if (!dir) continue;
-		const candidate = join(dir, "bwrap");
-		if (existsSync(candidate)) return candidate;
-	}
-	return undefined;
-}
+/** pi.events channel of the sandbox extension (see ../sandbox/sandbox.ts PROVIDER_CHANNEL). */
+const SANDBOX_CHANNEL = "archibate.sandbox:get";
 
-/**
- * Bash execution inside a bubblewrap jail: the whole filesystem is read-only except the session
- * scratchpad (PI_SCRATCHPAD_DIR, falling back to TMPDIR), which stays writable so probes can drop
- * intermediate files there.
- */
-function createSandboxedBashOps(bwrap: string): BashOperations {
-	return {
-		async exec(command, cwd, { onData, signal, timeout, env }) {
-			if (!existsSync(cwd)) {
-				throw new Error(`Working directory does not exist: ${cwd}`);
-			}
-			const environment = env ?? process.env;
-			const scratchpad = environment.PI_SCRATCHPAD_DIR ?? environment.TMPDIR;
-			const args = ["--die-with-parent", "--ro-bind", "/", "/", "--dev", "/dev", "--proc", "/proc"];
-			if (scratchpad && scratchpad !== "/" && existsSync(scratchpad) && statSync(scratchpad).isDirectory()) {
-				args.push("--bind", scratchpad, scratchpad);
-			}
-			args.push("--chdir", cwd);
-			if (!ALLOW_SANDBOX_NETWORK) args.push("--unshare-net");
-			args.push("--", "bash", "-c", command);
-
-			return new Promise((resolve, reject) => {
-				const child = spawn(bwrap, args, {
-					cwd,
-					env: environment,
-					detached: true,
-					stdio: ["ignore", "pipe", "pipe"],
-				});
-
-				let timedOut = false;
-				let timeoutHandle: NodeJS.Timeout | undefined;
-				if (timeout !== undefined && timeout > 0) {
-					timeoutHandle = setTimeout(() => {
-						timedOut = true;
-						if (child.pid) {
-							try {
-								process.kill(-child.pid, "SIGKILL");
-							} catch {
-								child.kill("SIGKILL");
-							}
-						}
-					}, timeout * 1000);
-				}
-
-				child.stdout?.on("data", onData);
-				child.stderr?.on("data", onData);
-				child.on("error", (error) => {
-					if (timeoutHandle) clearTimeout(timeoutHandle);
-					reject(error);
-				});
-
-				const onAbort = () => {
-					if (child.pid) {
-						try {
-							process.kill(-child.pid, "SIGKILL");
-						} catch {
-							child.kill("SIGKILL");
-						}
-					}
-				};
-				signal?.addEventListener("abort", onAbort, { once: true });
-
-				child.on("close", (code) => {
-					if (timeoutHandle) clearTimeout(timeoutHandle);
-					signal?.removeEventListener("abort", onAbort);
-					if (signal?.aborted) reject(new Error("aborted"));
-					else if (timedOut) reject(new Error(`timeout:${timeout}`));
-					else resolve({ exitCode: code });
-				});
-			});
-		},
+/** The loaded sandbox extension's provider, if any. It answers synchronously. */
+function findSandbox(pi: ExtensionAPI): SandboxProvider | undefined {
+	let found: SandboxProvider | undefined;
+	const reply: SandboxProviderReply = (provider) => {
+		found = provider;
 	};
+	pi.events.emit(SANDBOX_CHANNEL, reply);
+	return found;
 }
 
 /**
  * Injected into the forked session's resource loader:
- * - replace the built-in `bash` with a bubblewrap read-only sandbox (identical declaration, so the
- *   prompt-cache prefix is unchanged); scratchpad stays writable
+ * - allow `bash` only through the sandbox extension's read-only default; scratchpad stays writable
  * - block the remaining mutating tools, keeping their declarations only for prefix/cache identity
  * - forward the main session's prompt cache key so OpenAI-style routing reuses its cache
  */
-function sideTweaks(mainSessionId: string, cwd: string) {
+function sideTweaks(mainSessionId: string) {
 	return (api: ExtensionAPI) => {
-		const bwrap = resolveBwrap();
-		if (bwrap) {
-			api.registerTool(createBashToolDefinition(cwd, { operations: createSandboxedBashOps(bwrap) }));
-		}
 		api.on("tool_call", (event) => {
 			if (event.toolName === "bash") {
-				if (bwrap) return undefined;
+				const sandbox = findSandbox(api);
+				if (!sandbox) {
+					return { block: true, reason: "bash is disabled in /btw: the sandbox extension is not loaded" };
+				}
+				const request = (event.input as { sandbox?: Record<string, unknown> }).sandbox;
+				const { networkAccess, ...rest } = request ?? {};
+				if (sandbox.isReadOnly(ALLOW_SANDBOX_NETWORK ? rest : request)) return undefined;
 				return {
 					block: true,
-					reason: "bash sandbox unavailable (bubblewrap not found); bash is disabled in /btw",
+					reason: `bash in /btw is read-only: drop the sandbox grants (requested ${JSON.stringify(request)})${networkAccess && !ALLOW_SANDBOX_NETWORK ? "; network needs BTW_SANDBOX_NET=1" : ""}`,
 				};
 			}
 			if (!READ_ONLY_TOOLS.has(event.toolName)) {
@@ -211,7 +133,7 @@ async function createSideSession(ctx: ExtensionCommandContext, activeTools: stri
 	const resourceLoader = new DefaultResourceLoader({
 		cwd: ctx.cwd,
 		agentDir: getAgentDir(),
-		extensionFactories: [sideTweaks(mainSessionId, ctx.cwd)],
+		extensionFactories: [sideTweaks(mainSessionId)],
 	});
 	// Reuse the main session's trust decision so project resources match (and no prompt appears).
 	await resourceLoader.reload({ resolveProjectTrust: async () => ctx.isProjectTrusted() });

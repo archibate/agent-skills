@@ -1,0 +1,14 @@
+{
+	"name": "pi-sandbox-extension",
+	"private": true,
+	"type": "module",
+	"peerDependencies": {
+		"@earendil-works/pi-coding-agent": "*",
+		"typebox": "*"
+	},
+	"scripts": {
+		"link": "just link",
+		"check": "just check",
+		"test": "just test"
+	}
+}

@@ -89,7 +89,7 @@ export function describeStatus(status: JobStatus): string {
 }
 
 export function describeLeftRunning(pgid: number): string {
-	return `processes started by this command are still running (process group ${pgid}; stop with \`kill -- -${pgid}\`)`;
+	return `processes started by this command are still running (process group ${pgid}; stop them with job_stop)`;
 }
 
 export function toExitCode(status: JobStatus): number {
@@ -174,6 +174,7 @@ export class Job {
 			name?: string;
 			dir: string;
 			timeoutSeconds?: number;
+			reapGroup?: boolean;
 		},
 	) {
 		if (child.pid === undefined) throw new Error("command failed to start");
@@ -195,8 +196,10 @@ export class Job {
 			child.once("exit", (code, signal) => {
 				if (this.deadline) clearTimeout(this.deadline);
 				this.heartbeatAt = undefined;
+				// Reaping ends background processes with the command, as a sandbox policy may require.
+				if (options.reapGroup) killGroup(this.pid);
 				// After our own group kill, members may still be dying; only a natural exit can leave some behind.
-				const leftRunning = !this.killed && groupAlive(this.pid);
+				const leftRunning = !this.killed && !options.reapGroup && groupAlive(this.pid);
 				if (leftRunning) registry.lingeringGroups.add(this.pid);
 				const status: JobStatus = { code, signal, timedOut: this.timedOut, leftRunning };
 				this.status = status;
@@ -290,6 +293,8 @@ export interface StartJobOptions {
 	env?: NodeJS.ProcessEnv;
 	name?: string;
 	timeoutSeconds?: number;
+	/** Kill the job's process group when its shell exits. */
+	reapGroup?: boolean;
 }
 
 async function resolveShell(): Promise<ShellConfig> {
@@ -340,6 +345,7 @@ export async function startJob(options: StartJobOptions): Promise<Job> {
 				name: options.name,
 				dir,
 				timeoutSeconds: options.timeoutSeconds,
+				reapGroup: options.reapGroup,
 			});
 			registry.files.add(job.pgidPath);
 			registry.files.add(job.commandPath);

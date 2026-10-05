@@ -15,13 +15,15 @@
  * hints are never deleted; instead the newest notice explicitly retires all
  * earlier ones, which costs a single appended message.
  *
- * Exit is an explicit user toggle (/plan or Ctrl+Alt+P): the model cannot exit
- * itself, and presenting a plan does not end the mode. Toggling off queues a
- * one-shot [PLAN MODE OFF] notice on the next turn, so the model gets a positive
- * "you may now mutate" cue instead of only losing the restriction.
+ * Exit is an explicit user toggle (/plan, /plan off, or Ctrl+Alt+P): the model
+ * cannot exit itself, and presenting a plan does not end the mode. Toggling off
+ * queues a one-shot [PLAN MODE OFF] notice on the next turn, so the model gets a
+ * positive "you may now mutate" cue instead of only losing the restriction.
  *
- * Toggle: /plan, Ctrl+Alt+P, or start with --plan. `/plan <prompt>` enables plan
- * mode and sends the prompt in one step. Status shows "⏸ plan".
+ * Toggle: /plan, Ctrl+Alt+P, or start with --plan. `/plan on|off [prompt]`
+ * forces a state and sends the prompt in one step; plain `/plan <prompt>`
+ * enables plan mode and sends the prompt, never disables it - so a planning
+ * follow-up cannot silently authorize execution. Status shows "⏸ plan".
  * This is guidance, not enforcement - the model can still ignore it.
  */
 
@@ -59,17 +61,26 @@ export default function (pi: ExtensionAPI): void {
 	pi.registerFlag("plan", { description: "Start in plan mode (read-only planning hint)", type: "boolean", default: false });
 
 	pi.registerCommand("plan", {
-		description: "Toggle plan mode; with a prompt, enable and send it",
+		description: "Toggle plan mode; '/plan on|off [prompt]' forces a state and sends the prompt",
 		handler: async (args, ctx) => {
-			const prompt = args.trim();
-			if (!prompt) {
+			const trimmed = args.trim();
+			const match = /^(on|off)\b\s*([\s\S]*)$/i.exec(trimmed);
+			const prompt = (match ? match[2] : trimmed).trim();
+
+			if (match) {
+				setEnabled(ctx, match[1].toLowerCase() === "on");
+			} else if (!prompt) {
 				toggle(ctx);
 				return;
+			} else {
+				// `/plan <prompt>` enables plan mode and feeds the prompt to the
+				// agent as if typed. It deliberately never turns plan mode off, so a
+				// planning follow-up cannot silently authorize execution; use
+				// `/plan off` for that.
+				setEnabled(ctx, true);
 			}
-			// `/plan <prompt>` turns plan mode on (idempotent, never off) and
-			// feeds the prompt to the agent as if typed.
-			setEnabled(ctx, true);
-			pi.sendUserMessage(prompt, ctx.isIdle() ? {} : { deliverAs: "followUp" });
+
+			if (prompt) pi.sendUserMessage(prompt, ctx.isIdle() ? {} : { deliverAs: "followUp" });
 		},
 	});
 

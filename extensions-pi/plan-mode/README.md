@@ -17,7 +17,9 @@ still ignore it.
 
 ```text
 /plan              toggle plan mode
-/plan <prompt>     enable plan mode and send <prompt> to the agent
+/plan on [prompt]  enable plan mode, then send <prompt>
+/plan off [prompt] exit plan mode, then send <prompt>
+/plan <prompt>     enable plan mode and send <prompt>
 Ctrl+Alt+P         toggle plan mode
 pi --plan          start in plan mode
 ```

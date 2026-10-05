@@ -8,6 +8,8 @@ compatibility: Pi
 
 Run a subagent with the `job_start` tool. It captures the child's stdout/stderr, returns the job
 directory, and notifies you when the child exits; read the result from the job's `stdout` file.
+When `job_start` takes `sandbox`, pass `{"dangerouslySkipSandbox": true}`: the child is a full pi
+that needs the network and its session files, and it sandboxes its own commands.
 
 ## Fork or fresh
 
@@ -17,6 +19,7 @@ what to do, and leave the system prompt, tools, model, and thinking level unchan
 ```
 job_start
   name:    review
+  sandbox: {"dangerouslySkipSandbox": true}
   command: pi -p --fork "$PI_SESSION_ID" --session-id "$PI_SESSION_ID.review" "You are a forked subagent; do not spawn subagents. Task: review the unstaged changes"
 ```
 
@@ -26,6 +29,7 @@ job_start
 ```
 job_start
   name:    audit
+  sandbox: {"dangerouslySkipSandbox": true}
   command: pi -p --session-id "$PI_SESSION_ID.audit" --model "$PI_PROVIDER/$PI_MODEL" --thinking "$PI_REASONING_LEVEL" --append-system-prompt "You are a subagent; do not spawn subagents." "Audit src/ for security issues and report findings"
 ```
 
@@ -39,10 +43,13 @@ self-contained.
 Delegate only from the main agent. Every child task starts with "You are a ... subagent; do not
 spawn subagents." A task carrying that marker means you are the child: do not delegate further.
 
-## Read-only children
+## Read-only and restricted children
 
-Fork: state "read-only; do not edit files or mutate state" in the task.
-Fresh: add `--tools "read,grep,find,ls"`, or an append-system-prompt instruction.
+Pass `--sandbox-ceiling read-only`: the child keeps read-only bash, and any write, edit, or bash
+grant is blocked. It works with `--fork`, since it does not change the prompt. To bound a child
+that edits, pass a sandbox object instead, e.g. `--sandbox-ceiling '{"writableLocations":["src"]}'`.
+For a handover file, add its directory to the ceiling's `writableLocations`; the child's own
+scratchpad is a different directory.
 
 ## Results
 
@@ -66,6 +73,7 @@ are reused.
 ```
 job_start
   name:    review-2
+  sandbox: {"dangerouslySkipSandbox": true}
   command: pi -p --session "$PI_SESSION_ID.review" "You are a subagent; do not spawn subagents. Task: also check the tests"
 ```
 

@@ -29,7 +29,10 @@ test("jobs tools through the real pi loader", { skip: !sdkPath }, async (t) => {
 	mkdirSync(cwd);
 	mkdirSync(agentDir);
 	const previousRuntimeDir = process.env.XDG_RUNTIME_DIR;
+	const previousCacheHome = process.env.XDG_CACHE_HOME;
 	process.env.XDG_RUNTIME_DIR = base;
+	// Jobs run in the bash sandbox, which builds its helper under the cache home.
+	process.env.XDG_CACHE_HOME = join(base, "cache");
 
 	const errors = [];
 	let session;
@@ -37,6 +40,8 @@ test("jobs tools through the real pi loader", { skip: !sdkPath }, async (t) => {
 		session?.dispose?.();
 		if (previousRuntimeDir === undefined) delete process.env.XDG_RUNTIME_DIR;
 		else process.env.XDG_RUNTIME_DIR = previousRuntimeDir;
+		if (previousCacheHome === undefined) delete process.env.XDG_CACHE_HOME;
+		else process.env.XDG_CACHE_HOME = previousCacheHome;
 		rmSync(base, { recursive: true, force: true });
 	});
 
@@ -66,9 +71,12 @@ test("jobs tools through the real pi loader", { skip: !sdkPath }, async (t) => {
 	const notified = [];
 	registry.notify = (text) => notified.push(text);
 
-	// Only the two in-process tools are declared; the rest is the filesystem.
+	// Only the in-process tools are declared; the rest is the filesystem.
 	assert.ok(session.getToolDefinition("job_start"));
 	assert.ok(session.getToolDefinition("job_watch"));
+	assert.ok(session.getToolDefinition("job_stop"));
+	// Without the sandbox extension, job_start has no sandbox parameter and runs jobs unsandboxed.
+	assert.equal(session.getToolDefinition("job_start").parameters.properties.sandbox, undefined);
 	for (const removed of ["job_logs", "job_wait", "job_kill", "job_signal", "job_stdin"]) {
 		assert.equal(session.getToolDefinition(removed), undefined, `${removed} is no longer a tool`);
 	}

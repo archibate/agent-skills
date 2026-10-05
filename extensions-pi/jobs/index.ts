@@ -6,20 +6,28 @@
  * and holds one-shot (print/JSON) runs open while jobs are pending so their completion reaches the
  * agent instead of being killed by process exit.
  *
- * Only two tools are declared. Everything else is the filesystem: `job_start` returns a job id and
- * its directory, and the model operates it with bash (grep, tail, kill, wait on the `status` file).
- * `job_watch` exists because pushing lines into the agent needs the in-process runtime.
+ * Three tools are declared. Everything else is the filesystem: `job_start` returns a job id and
+ * its directory, and the model inspects it with bash (grep, tail, wait on the `status` file).
+ * `job_watch` exists because pushing lines into the agent needs the in-process runtime; `job_stop`
+ * because jobs may run in the bash sandbox, whose default policy forbids signalling host
+ * processes, so stopping a job the agent started must not need a broader grant.
+ *
+ * The sandbox extension (../sandbox) is optional: when it is loaded, `job_start` gains its
+ * `sandbox` parameter and runs jobs sandboxed; otherwise jobs run like plain bash commands.
  */
 
 import { statSync } from "node:fs";
 import type { ExtensionAPI, ExtensionToolContext } from "@earendil-works/pi-coding-agent";
 import { getShellConfig } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
+import type { SandboxProvider, SandboxProviderReply } from "../sandbox/sandbox.ts";
 import {
 	describeLeftRunning,
 	describeStatus,
 	getJob,
+	groupAlive,
 	type Job,
+	killGroup,
 	listJobs,
 	readTail,
 	readTailSeed,
@@ -43,13 +51,33 @@ const FLOOD_EVENTS = 10;
 const FLOOD_WINDOW_MS = 60_000;
 const POLL_MS = 100;
 const MAX_WATCHERS = 16;
+const STOP_WAIT_MS = 3000;
+/** pi.events channel of the sandbox extension (see ../sandbox/sandbox.ts PROVIDER_CHANNEL). */
+const SANDBOX_CHANNEL = "archibate.sandbox:get";
+
+interface JobStartParams {
+	command: string;
+	name?: string;
+	timeout?: number;
+	sandbox?: unknown;
+}
+
+/** The loaded sandbox extension's provider, if any. It answers synchronously. */
+function findSandbox(pi: ExtensionAPI): SandboxProvider | undefined {
+	let found: SandboxProvider | undefined;
+	const reply: SandboxProviderReply = (provider) => {
+		found = provider;
+	};
+	pi.events.emit(SANDBOX_CHANNEL, reply);
+	return found;
+}
 let activeWatchers = 0;
 
 function guideline(root: string): string {
 	return (
 		"Long-running commands: use the job_start tool instead of bash. Each job gets an owner-only " +
 		`directory under ${root}/<id>/ with command/stdout/stderr/status/pgid/started files; ` +
-		"inspect it with bash (grep, tail), wait for the status file, stop with kill -- -<pgid>, and use " +
+		"inspect it with bash (grep, tail), wait for the status file, stop it with job_stop, and use " +
 		"job_watch to be notified of output instead of polling."
 	);
 }
@@ -130,7 +158,7 @@ function heartbeatMessage(due: Job[], running: Job[], now: number): string {
 			`[${label(job)}] ${formatDuration(now - job.startedAt)} elapsed (pgid ${job.pid}) · ` +
 				`stdout ${fileActivity(job.stdoutPath, now)} · stderr ${fileActivity(job.stderrPath, now)}`,
 			`  tail -n ${HEARTBEAT_TAIL_LINES} ${job.stdoutPath}`,
-			`  kill -- -${job.pid}`,
+			`  job_stop ${job.id}`,
 		);
 	}
 	const other = running.length - due.length;
@@ -305,41 +333,105 @@ export default function jobsExtension(pi: ExtensionAPI): void {
 		return { continue: true };
 	});
 
+	/** (Re)declare job_start; with the sandbox extension loaded, jobs run in its sandbox. */
+	const registerJobStart = (sandbox: SandboxProvider | undefined): void => {
+		pi.registerTool({
+			name: "job_start",
+			label: "job_start",
+			description:
+				"Start a shell command in the background and return its job id, process group, and file " +
+				"directory. The command outlives this call and you are notified when it exits. Inspect it " +
+				"with bash: grep/tail the stdout file, wait on the status file. Stop it with job_stop. Only " +
+				`for long-running work; use bash for quick commands.${sandbox ? ` ${sandbox.note}` : ""}`,
+			parameters: Type.Object({
+				command: Type.String({ description: "Shell command to run in the background." }),
+				name: Type.Optional(Type.String({ description: "Short label used in notifications (e.g. \"build\")." })),
+				timeout: Type.Optional(
+					Type.Number({ minimum: 1, description: "Seconds until the job is killed (optional, no default)." }),
+				),
+				...(sandbox ? { sandbox: Type.Optional(sandbox.parameter) } : {}),
+			}),
+			async execute(_toolCallId, params: JobStartParams, _signal, _onUpdate, ctx: ExtensionToolContext) {
+				const prepared = sandbox ? await sandbox.prepare(params.sandbox, ctx.cwd) : undefined;
+				let job: Job;
+				try {
+					job = await startJob({
+						command: params.command,
+						cwd: ctx.cwd,
+						shell: prepared ? prepared.shell(getShellConfig()) : getShellConfig(),
+						env: prepared ? prepared.env(sessionEnv(ctx)) : sessionEnv(ctx),
+						name: params.name,
+						timeoutSeconds: params.timeout,
+						reapGroup: prepared?.reapGroup ?? false,
+					});
+				} catch (error) {
+					await prepared?.dispose();
+					throw error;
+				}
+				if (prepared) void job.done.then(() => prepared.dispose());
+				job.detach();
+				void job.done.then((status) => {
+					// A live watch delivers its own exit message (with matched output), so defer to it.
+					if (job.observed || job.watchers > 0) return;
+					job.observed = true;
+					deliver(`[${label(job)}] finished: ${statusLine(job)}\n${readTail(job.stdoutPath, 20)}`);
+				});
+				return {
+					content: [{ type: "text", text: jobContract(job) }],
+					details: { id: job.id, pid: job.pid, dir: job.dir },
+				};
+			},
+		});
+	};
+	// Declared at load so tool allowlists and activation apply as usual; redeclared with the
+	// `sandbox` parameter once every extension has loaded and the sandbox extension can answer.
+	// Redeclaring an existing tool keeps its activation state.
+	registerJobStart(undefined);
+	pi.on("session_start", () => {
+		const sandbox = findSandbox(pi);
+		if (sandbox) registerJobStart(sandbox);
+	});
+
 	pi.registerTool({
-		name: "job_start",
-		label: "job_start",
+		name: "job_stop",
+		label: "job_stop",
 		description:
-			"Start a shell command in the background and return its job id, process group, and file " +
-			"directory. The command outlives this call and you are notified when it exits. Inspect and " +
-			"control it with bash: grep/tail the stdout file, wait on the status file, `kill -- -<pgid>` " +
-			"to stop the group. Only for long-running work; use bash for quick commands.",
+			"Stop a job started with job_start by signalling its whole process group, then report its " +
+			"status. Also stops processes a finished job left running.",
 		parameters: Type.Object({
-			command: Type.String({ description: "Shell command to run in the background." }),
-			name: Type.Optional(Type.String({ description: "Short label used in notifications (e.g. \"build\")." })),
-			timeout: Type.Optional(
-				Type.Number({ minimum: 1, description: "Seconds until the job is killed (optional, no default)." }),
+			id: Type.String({ description: "Job id from job_start." }),
+			signal: Type.Optional(
+				Type.Unsafe<"SIGTERM" | "SIGINT" | "SIGHUP" | "SIGKILL">({
+					type: "string",
+					enum: ["SIGTERM", "SIGINT", "SIGHUP", "SIGKILL"],
+					description: 'Default "SIGTERM". Use "SIGKILL" when the job ignores SIGTERM.',
+				}),
 			),
 		}),
-		async execute(_toolCallId, params, _signal, _onUpdate, ctx: ExtensionToolContext) {
-			const job = await startJob({
-				command: params.command,
-				cwd: ctx.cwd,
-				shell: getShellConfig(),
-				env: sessionEnv(ctx),
-				name: params.name,
-				timeoutSeconds: params.timeout,
-			});
-			job.detach();
-			void job.done.then((status) => {
-				// A live watch delivers its own exit message (with matched output), so defer to it.
-				if (job.observed || job.watchers > 0) return;
-				job.observed = true;
-				deliver(`[${label(job)}] finished: ${statusLine(job)}\n${readTail(job.stdoutPath, 20)}`);
-			});
-			return {
-				content: [{ type: "text", text: jobContract(job) }],
-				details: { id: job.id, pid: job.pid, dir: job.dir },
-			};
+		async execute(_toolCallId, params) {
+			const job = requireJob(params.id);
+			const signal = params.signal ?? "SIGTERM";
+			if (!job.running) {
+				if (!registry.lingeringGroups.has(job.pid)) {
+					return { content: [{ type: "text", text: `${label(job)} already finished: ${statusLine(job)}` }], details: { id: job.id } };
+				}
+				killGroup(job.pid, signal);
+				if (!groupAlive(job.pid)) registry.lingeringGroups.delete(job.pid);
+				return {
+					content: [{ type: "text", text: `Sent ${signal} to the processes ${label(job)} left running (process group ${job.pid}).` }],
+					details: { id: job.id },
+				};
+			}
+			if (signal === "SIGKILL") job.kill();
+			else job.signal(signal);
+			const exited = await Promise.race([
+				job.done.then(() => true),
+				new Promise<false>((resolve) => setTimeout(() => resolve(false), STOP_WAIT_MS).unref()),
+			]);
+			const text = exited
+				? `${label(job)} stopped: ${statusLine(job)}`
+				: `Sent ${signal} to ${label(job)}; it is still running after ${STOP_WAIT_MS / 1000}s. Retry with signal "SIGKILL" to force.`;
+			return { content: [{ type: "text", text }], details: { id: job.id } };
 		},
 	});
 
