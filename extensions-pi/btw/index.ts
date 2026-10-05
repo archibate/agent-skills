@@ -17,9 +17,9 @@
  *   The forked session declares the same tools (needed for the cache prefix). `read`,
  *   `grep`, `find`, and `ls` run normally. `bash` is whatever the reloaded extensions
  *   declare, so it matches the main session's. With the sandbox extension (../sandbox)
- *   loaded, the side session's permissions are fixed to read-only with the deny reviewer,
- *   so bash calls that declare any grant are blocked (set `BTW_SANDBOX_NET=1` to also allow
- *   networkAccess); without it, bash is blocked.
+ *   loaded and enabled, the side session's permissions are fixed to read-only with the deny
+ *   reviewer, so bash calls that declare any grant are blocked (set `BTW_SANDBOX_NET=1` to also
+ *   allow networkAccess); otherwise bash is blocked.
  *   All other mutating tools are blocked. The SDK does not bind extensions, so the side session calls
  *   bindExtensions() explicitly.
  *
@@ -90,8 +90,8 @@ function findSandbox(pi: ExtensionAPI): SandboxProvider | undefined {
  * Injected into the forked session's resource loader:
  * - fix the side session's sandbox permissions to read-only with the deny reviewer, so `bash` runs
  *   only within the sandbox's read-only default; the scratchpad stays writable
- * - block bash without the sandbox extension, and the remaining mutating tools, keeping their
- *   declarations only for prefix/cache identity
+ * - block bash without the sandbox extension or with it disabled, and the remaining mutating
+ *   tools, keeping their declarations only for prefix/cache identity
  * - forward the main session's prompt cache key so OpenAI-style routing reuses its cache
  */
 function sideTweaks(mainSessionId: string) {
@@ -105,7 +105,7 @@ function sideTweaks(mainSessionId: string) {
 			if (event.toolName === "bash") {
 				// The sandbox extension reviews bash against SIDE_PERMISSIONS and denies the rest.
 				if (sandbox) return undefined;
-				return { block: true, reason: "bash is disabled in /btw: the sandbox extension is not loaded" };
+				return { block: true, reason: "bash is disabled in /btw: the sandbox extension is not loaded or not enabled" };
 			}
 			if (!READ_ONLY_TOOLS.has(event.toolName)) {
 				return {

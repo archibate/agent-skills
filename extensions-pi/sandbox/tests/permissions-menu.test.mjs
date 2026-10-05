@@ -12,6 +12,7 @@ async function runMenu({ keys = [], answers = [], mode = "tui" } = {}) {
 	const entries = [];
 	sandboxExtension({
 		registerTool() {}, registerFlag() {}, registerToolRenderer() {}, on() {},
+		getFlag: (name) => (name === "enable-sandbox" ? true : undefined),
 		events: { on() {} },
 		registerCommand(name, definition) { if (name === "permissions") command = definition.handler; },
 		appendEntry(type, data) { entries.push({ type, data }); },

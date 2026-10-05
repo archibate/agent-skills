@@ -64,6 +64,8 @@ test("sandboxed bash and job tools through the real pi loader", { skip: !sdkPath
 	session = (
 		await sdk.createAgentSession({ cwd, agentDir, resourceLoader: loader, sessionManager: sdk.SessionManager.inMemory() })
 	).session;
+	// The sandbox is opt-in: this test drives its behavior through the runtime flag the CLI sets.
+	session.extensionRunner.setFlagValue("enable-sandbox", true);
 	const errors = [];
 	await session.bindExtensions({ onError: (error) => errors.push(error.error), mode: "print" });
 	assert.deepEqual(errors, []);
@@ -153,4 +155,46 @@ test("sandboxed bash and job tools through the real pi loader", { skip: !sdkPath
 	assert.match(again.content[0].text, /already finished/);
 
 	assert.deepEqual(errors, []);
+});
+
+test("without the flag the extension stays inert", { skip: !sdkPath }, async (t) => {
+	const sdk = await import(pathToFileURL(sdkPath).href);
+	const base = mkdtempSync(join(homedir(), ".cache", "pi-sandbox-off-"));
+	const cwd = join(base, "project");
+	const agentDir = join(base, "agent");
+	mkdirSync(cwd);
+	mkdirSync(agentDir);
+	t.after(() => rmSync(base, { recursive: true, force: true }));
+
+	const loader = new sdk.DefaultResourceLoader({
+		cwd,
+		agentDir,
+		noExtensions: true,
+		noSkills: true,
+		noPromptTemplates: true,
+		noThemes: true,
+		noContextFiles: true,
+		additionalExtensionPaths: [
+			new URL("../index.ts", import.meta.url).pathname,
+			new URL("../../jobs/index.ts", import.meta.url).pathname,
+		],
+	});
+	await loader.reload();
+	const { session } = await sdk.createAgentSession({
+		cwd,
+		agentDir,
+		resourceLoader: loader,
+		sessionManager: sdk.SessionManager.inMemory(),
+	});
+	t.after(() => session.dispose?.());
+
+	const errors = [];
+	await session.bindExtensions({ onError: (error) => errors.push(error.error), mode: "print" });
+	assert.deepEqual(errors, []);
+
+	// pi's built-in bash is untouched, and jobs did not redeclare job_start with a sandbox.
+	const bash = session.getToolDefinition("bash");
+	assert.equal(bash.parameters.properties.sandbox, undefined, "bash has no sandbox parameter");
+	assert.doesNotMatch(bash.description, /Runs in a sandbox/);
+	assert.equal(session.getToolDefinition("job_start").parameters.properties.sandbox, undefined);
 });

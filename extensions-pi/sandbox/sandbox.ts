@@ -31,8 +31,9 @@ export const SANDBOX_NOTE =
 
 /**
  * Private interface between this extension and jobs/btw, which must work without it. They emit a
- * reply callback on this pi.events channel; the loaded sandbox extension answers synchronously.
- * pi.events is per runtime, so a /reload that drops this extension also drops the answer.
+ * reply callback on this pi.events channel; the loaded sandbox extension answers synchronously
+ * while enabled (enable.ts). pi.events is per runtime, so a /reload that drops this extension also
+ * drops the answer.
  */
 export const PROVIDER_CHANNEL = "archibate.sandbox:get";
 

@@ -87,7 +87,7 @@ async function setup(t) {
 
 test("print mode: the default permissions run, the rest is denied", { skip: !sdkPath }, async (t) => {
 	const { base, cwd, open } = await setup(t);
-	const { call, errors } = await open();
+	const { call, errors } = await open({ flags: { "enable-sandbox": true } });
 	assert.deepEqual(errors, []);
 	assert.equal(await call("bash", { command: "make", sandbox: { writableLocations: [cwd], networkAccess: "fetch-only" } }), undefined);
 	assert.equal(await call("write", { path: join(cwd, "a.txt"), content: "" }), undefined);
@@ -113,7 +113,7 @@ test("--permissions replaces the default and is recorded in the session", { skip
 test("manual review: approve, always, deny with feedback; marks and permissions persist", { skip: !sdkPath }, async (t) => {
 	const { base, open } = await setup(t);
 	const other = join(base, "other");
-	const { session, call, shown, customs, statuses } = await open({ mode: "tui", answers: ["y", "a", "f", "y"] });
+	const { session, call, shown, customs, statuses } = await open({ mode: "tui", flags: { "enable-sandbox": true }, answers: ["y", "a", "f", "y"] });
 	const initialStatus = statuses.get("sandbox-permissions");
 	assert.match(initialStatus, /^⛶ rw .*project · net fetch-only · tools all$/);
 	const grant = { command: "uv sync", sandbox: { writableLocations: [other] } };
@@ -181,7 +181,7 @@ test("footer shows the effective fail-closed permissions on configuration errors
 
 test("restrict() fixes read-only with the deny reviewer, even in the TUI", { skip: !sdkPath }, async (t) => {
 	const { cwd, open } = await setup(t);
-	const { call, shown, eventBus, statuses } = await open({ mode: "tui", answers: ["y"] });
+	const { call, shown, eventBus, statuses } = await open({ mode: "tui", flags: { "enable-sandbox": true }, answers: ["y"] });
 	let provider;
 	// The provider channel is the extension's internal interface (see sandbox.ts PROVIDER_CHANNEL).
 	eventBus.emit("archibate.sandbox:get", (p) => {

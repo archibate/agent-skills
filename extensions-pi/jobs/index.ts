@@ -12,8 +12,8 @@
  * because jobs may run in the bash sandbox, whose default policy forbids signalling host
  * processes, so stopping a job the agent started must not need a broader grant.
  *
- * The sandbox extension (../sandbox) is optional: when it is loaded, `job_start` gains its
- * `sandbox` parameter and runs jobs sandboxed; otherwise jobs run like plain bash commands.
+ * The sandbox extension (../sandbox) is optional: when it is loaded and enabled, `job_start` gains
+ * its `sandbox` parameter and runs jobs sandboxed; otherwise jobs run like plain bash commands.
  */
 
 import { statSync } from "node:fs";
@@ -333,7 +333,7 @@ export default function jobsExtension(pi: ExtensionAPI): void {
 		return { continue: true };
 	});
 
-	/** (Re)declare job_start; with the sandbox extension loaded, jobs run in its sandbox. */
+	/** (Re)declare job_start; with the sandbox extension loaded and enabled, jobs run in its sandbox. */
 	const registerJobStart = (sandbox: SandboxProvider | undefined): void => {
 		pi.registerTool({
 			name: "job_start",
@@ -384,8 +384,9 @@ export default function jobsExtension(pi: ExtensionAPI): void {
 		});
 	};
 	// Declared at load so tool allowlists and activation apply as usual; redeclared with the
-	// `sandbox` parameter once every extension has loaded and the sandbox extension can answer.
-	// Redeclaring an existing tool keeps its activation state.
+	// `sandbox` parameter once every extension has loaded and the sandbox extension can answer for
+	// this session (it is silent while disabled). Redeclaring an existing tool keeps its activation
+	// state.
 	registerJobStart(undefined);
 	pi.on("session_start", () => {
 		const sandbox = findSandbox(pi);

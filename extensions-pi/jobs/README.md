@@ -10,10 +10,10 @@ runs open while jobs are pending, nudging the agent on a per-job liveness backof
 never exits surfaces for a heal-or-kill decision instead of hanging the run. Long-running work goes
 through `job_start`, which returns a job id and notifies the agent when the job exits.
 
-When the [sandbox](../sandbox) extension is loaded, jobs run in its sandbox and `job_start` takes
-the same `sandbox` declaration as `bash`; without it, jobs run unsandboxed. The sandbox's default
-policy forbids signalling host processes, so jobs are stopped with `job_stop`, which signals the
-job's process group from pi itself.
+When the [sandbox](../sandbox) extension is loaded and enabled, jobs run in its sandbox and
+`job_start` takes the same `sandbox` declaration as `bash`; otherwise jobs run unsandboxed. The
+sandbox's default policy forbids signalling host processes, so jobs are stopped with `job_stop`,
+which signals the job's process group from pi itself.
 
 ## Tools
 

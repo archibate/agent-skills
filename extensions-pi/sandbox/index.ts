@@ -13,13 +13,18 @@
  * TUI. "Always" adds the call's grants to the session permissions. Permissions and review marks are
  * session entries. The agent's prompt does not mention any of this.
  *
+ * Opt-in: the sandbox applies only when the launch asked for it, with `--enable-sandbox`,
+ * `--permissions`, or `--reviewer` (see enable.ts). Otherwise the extension stays inert: `bash` is
+ * pi's built-in, `job_start` is not redeclared, and no call is reviewed.
+ *
  * User `!` commands are not sandboxed. The jobs extension (`job_start`) and `/btw` find this
- * extension through PROVIDER_CHANNEL and run without it when it is not loaded.
+ * extension through PROVIDER_CHANNEL and run without it when it is not loaded or not enabled.
  */
 
 import { homedir } from "node:os";
 import { DynamicBorder, type ExtensionAPI, type ExtensionCommandContext, type ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { Container, SelectList, Spacer, Text } from "@earendil-works/pi-tui";
+import { ENABLE_SANDBOX_FLAG, sandboxRequested } from "./enable.ts";
 import { MARK_ENTRY, type ReviewMark, registerReviewMarks } from "./marks.ts";
 import {
 	type Allowance,
@@ -64,8 +69,21 @@ import { createSandboxBashDefinition, renderAllowanceBadge, renderSandboxCall } 
 const PERMISSIONS_ENTRY = "sandbox-permissions";
 
 export default function sandboxExtension(pi: ExtensionAPI): void {
-	pi.registerTool(createSandboxBashDefinition(process.cwd()));
+	/** Read live: pi sets runtime flag values after loading, and a /btw side session has its own. */
+	const requested = (): boolean =>
+		sandboxRequested(
+			{
+				enable: pi.getFlag(ENABLE_SANDBOX_FLAG),
+				permissions: pi.getFlag(PERMISSIONS_FLAG),
+				reviewer: pi.getFlag(REVIEWER_FLAG),
+			},
+			process.argv,
+		);
 
+	pi.registerFlag(ENABLE_SANDBOX_FLAG, {
+		type: "boolean",
+		description: `Run bash and job_start in the access sandbox, and review calls beyond the permissions. Without this (or --${PERMISSIONS_FLAG} / --${REVIEWER_FLAG}), the sandbox stays off and pi's normal tools run.`,
+	});
 	pi.registerFlag(PERMISSIONS_FLAG, {
 		type: "string",
 		description: `What runs without review: ${PERMISSION_PRESETS.join(" or ")}, or a JSON sandbox object such as '{"writableLocations":["src"]}'. Default: the git work tree is writable, network fetch-only.`,
@@ -155,7 +173,7 @@ export default function sandboxExtension(pi: ExtensionAPI): void {
 	// Keep this here rather than in jobs: sandbox is optional there, including at runtime.
 	pi.registerToolRenderer((toolName, next) => {
 		const base = next();
-		return toolName === "job_start" ? { ...base, renderCall: renderSandboxCall } : base;
+		return toolName === "job_start" && requested() ? { ...base, renderCall: renderSandboxCall } : base;
 	});
 
 	const provider: SandboxProvider = {
@@ -172,21 +190,25 @@ export default function sandboxExtension(pi: ExtensionAPI): void {
 		},
 	};
 	pi.events.on(PROVIDER_CHANNEL, (reply) => {
-		if (typeof reply === "function") (reply as (provider: SandboxProvider) => void)(provider);
+		if (typeof reply === "function" && requested()) (reply as (provider: SandboxProvider) => void)(provider);
 	});
 
 	pi.on("session_start", (_event, ctx) => {
+		if (!requested()) return;
+		// Declared here rather than at load so a disabled sandbox leaves pi's built-in bash in place.
+		pi.registerTool(createSandboxBashDefinition(ctx.cwd));
 		warmSandbox();
 		restore(ctx, "start");
 	});
 	pi.on("session_tree", (_event, ctx) => {
-		restore(ctx, "tree");
+		if (requested()) restore(ctx, "tree");
 	});
 
 	// One review at a time; each re-checks the permissions, which an earlier "always" may have widened.
 	let queue: Promise<unknown> = Promise.resolve();
 
 	pi.on("tool_call", async (event, ctx) => {
+		if (!requested()) return undefined;
 		const call = {
 			toolName: event.toolName,
 			input: event.input as Record<string, unknown>,
@@ -226,6 +248,13 @@ export default function sandboxExtension(pi: ExtensionAPI): void {
 	pi.registerCommand("permissions", {
 		description: "Show or edit what runs without review in this session",
 		handler: async (args, ctx) => {
+			if (!requested()) {
+				ctx.ui.notify(
+					`The sandbox is off for this session. Start pi with --${ENABLE_SANDBOX_FLAG}, --${PERMISSIONS_FLAG}, or --${REVIEWER_FLAG} to use it.`,
+					"info",
+				);
+				return;
+			}
 			statusUI = ctx.mode === "tui" ? ctx.ui : undefined;
 			await permissionsCommand(args.trim(), ctx);
 		},

@@ -7,6 +7,14 @@ the command, so a reviewer sees what every call asked for, and plain read-only c
 Calls that need more than the session's permissions go to a reviewer: a modal in the TUI, a
 denial in headless runs. See [Permissions and review](#permissions-and-review).
 
+## Opt-in
+
+The sandbox applies only when the launch asks for it: `--enable-sandbox`, `--permissions`, or
+`--reviewer`. Without one the extension stays inert: `bash` is pi's built-in tool, `job_start`
+keeps its plain form, and no call is reviewed. The flags are read from the runtime (pi applies CLI
+and SDK flag values after the extensions load), with a fallback to `argv` so a `/btw` side session
+and other reloaded runtimes match the launch. `/permissions` reports that the sandbox is off.
+
 ## Declaration
 
 `bash` takes an optional `sandbox` object; `job_start` takes the same object but declares only a
@@ -63,9 +71,9 @@ filesystem, missing network, display, or D-Bus gets a one-line hint naming the f
 
 ## Permissions and review
 
-The permissions are what runs without review; the reviewer decides the rest. Pre-approval only
-skips review: a call still gets exactly what it declares, and the agent's prompt does not mention
-either.
+The permissions are what runs without review; the reviewer decides the rest. They apply only while
+the sandbox is enabled (see [Opt-in](#opt-in)). Pre-approval only skips review: a call still gets
+exactly what it declares, and the agent's prompt does not mention either.
 
 | Setting | Values | Default |
 |---|---|---|
@@ -122,7 +130,8 @@ no sandbox API): they emit a reply callback, and this extension answers synchron
 nothing answers.
 
 - jobs declares `job_start` at load, then redeclares it with the `sandbox` parameter at
-  `session_start` if the provider answers. The sandbox extension applies the same command and
+  `session_start` if the provider answers. A disabled sandbox answers nothing, so jobs keeps its
+  plain form. The sandbox extension applies the same command and
   access-badge renderer as `bash`; job status/results stay unchanged.
 - btw's side session reloads the main session's extensions, so its `bash` is the same declaration
   (prompt-cache prefix). It calls `restrict("read-only")`, which fixes that runtime's permissions
@@ -139,6 +148,7 @@ Each check fails closed with an explanatory error. Overhead is about 15 ms per c
 | File | Role |
 |---|---|
 | `policy.ts` | Schema, defaults, path resolution, badge text (pure). |
+| `enable.ts` | The opt-in gate: whether a launch asked for the sandbox (pure). |
 | `permissions.ts` | Permissions: presets, `--permissions` parsing, per-call assessment (pure). |
 | `subagent.ts` | Recognizes a bounded `pi -p --permissions` launch (pure). |
 | `review.ts` | Reviewer interface, `deny` and `manual` reviewers, denial reasons. |

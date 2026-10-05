@@ -15,7 +15,7 @@ while the main agent is still streaming.
 [sandbox](../sandbox) extension, whose permissions are fixed to read-only with
 the deny reviewer in the side session: calls that declare any access beyond its
 read-only default are blocked; set `BTW_SANDBOX_NET=1` to also allow declared
-network access. Without the sandbox extension, `bash` is blocked. All other
+network access. Without the sandbox extension, or with it disabled, `bash` is blocked. All other
 mutating tools are blocked; every tool stays declared, so the prompt cache is
 shared.
 
