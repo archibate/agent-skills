@@ -143,7 +143,7 @@ curl -fsSL https://raw.githubusercontent.com/archibate/agent-skills/master/insta
 小彭老师嫌 Pi 不好用，直接用 Pi 的可扩展性手搓成 Claude Code 同款 harness，“一键安装器”里一勾选，直接起飞 🛫 隔壁 Codex 只有眼馋的份 😤
 
 - `jobs` 🖥️——让 Pi 也能开**后台长任务**：`job_start` 后台启动不卡 agent loop、`job_watch` 订阅日志更新时收到通知、作业退出自动叫醒 agent；Pi 原生轻量化 `bash` 不变，只是偷偷补了默认超时，提醒可以用 `jobs`，agent 忘写 timeout 也不会一卡一整天。用户侧敲 `/jobs` 看当前后台在跑什么。任务的输出日志、退出码全部落在 `$XDG_RUNTIME_DIR/pi-jobs/<id>/`，agent 自己 `tail` 随时可查。
-- `sandbox` 🛡️——启用后让 agent 的 `bash` 和 `job_start` 按声明的权限运行在 **bubblewrap + Landlock 沙箱**里：默认不启用，启动时 `--enable-sandbox`（或 `--permissions` / `--reviewer`）才开；开启后默认只读、无网络，需要写目录、联网或访问桌面时显式声明；超出会话预授权的调用弹窗审批，后台运行直接拒绝 😤 `/permissions` 随时调整预授权，也可从命令行指定 `--permissions read-only`。详见 [运行要求与限制](extensions-pi/sandbox/README.md#requirements)。
+- `sandbox` 🛡️——启用 `--enable-sandbox` 后让 agent 的 `bash` 和 `job_start` 按声明的权限运行在 **bubblewrap + Landlock 沙箱**里：默认只读、无网络，需要写目录、联网或访问桌面时显式声明；超出会话预授权的调用弹窗审批，后台运行直接拒绝 😤 `/permissions` 随时调整预授权，也可从命令行指定 `--permissions read-only`。详见 [运行要求与限制](extensions-pi/sandbox/README.md#requirements)。
 - `scratchpad` 🗒️——每个 Pi 会话独享一块**草稿工作空间** `~/.cache/pi/scratchpad/<session_id>`，脚本、中间结果、临时文件统统往里扔，不污染你的项目树，也不跟 `/tmp` 里其他 agent 竞争。
 - `context` 📊——`/context` 把**上下文窗口**像 Claude Code 一样拆开给你看：系统提示、项目规则、技能、工具、MCP、消息、摘要各占多少，还剩多少自由空间。`/context all` 连每个工具每个技能消耗了多少都算清，再也不用盲猜是谁在爆我 token 💸💥
 - `prompt-stash` 📝——Claude Code 同款 **Ctrl+S 暂存草稿**：想法写一半突然被新点子岔开，先按一下存起来，以后再按一下就能取回，万一两坨草稿都满了还能互换，绝对不丢。
