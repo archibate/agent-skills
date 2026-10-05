@@ -10,7 +10,9 @@ import rewindExtension from "../index.ts";
 function createPiMock() {
 	const handlers = new Map();
 	const commands = new Map();
+	const shortcuts = new Map();
 	const appended = [];
+	const sentMessages = [];
 	return {
 		on(event, handler) {
 			const list = handlers.get(event) ?? [];
@@ -20,8 +22,14 @@ function createPiMock() {
 		registerCommand(name, options) {
 			commands.set(name, options);
 		},
+		registerShortcut(shortcut, options) {
+			shortcuts.set(shortcut, options);
+		},
 		appendEntry(customType, data) {
 			appended.push({ customType, data });
+		},
+		sendUserMessage(content, options) {
+			sentMessages.push({ content, options });
 		},
 		async emit(event, payload, ctx) {
 			let result;
@@ -32,7 +40,9 @@ function createPiMock() {
 			return result;
 		},
 		commands,
+		shortcuts,
 		appended,
+		sentMessages,
 	};
 }
 
@@ -112,11 +122,11 @@ async function captureOnePrompt(t, env) {
 	sessionManager.append({ ...draft, id: "cp1", parentId: sessionManager.getLeafId(), timestamp: new Date().toISOString() });
 	await pi.emit("agent_settled", { type: "agent_settled" }, ctx);
 
-	return { sessionManager, commands: pi.commands };
+	return { sessionManager, commands: pi.commands, shortcuts: pi.shortcuts, sentMessages: pi.sentMessages };
 }
 
 function commandContext(env, sessionManager, action) {
-	const calls = { navigated: [], notifications: [] };
+	const calls = { navigated: [], notifications: [], selections: [] };
 	return {
 		calls,
 		ctx: {
@@ -128,7 +138,10 @@ function commandContext(env, sessionManager, action) {
 				return { cancelled: false };
 			},
 			ui: {
-				select: async (_title, options) => (_title.startsWith("Rewind to which") ? options[0] : action),
+				select: async (title, options) => {
+					calls.selections.push({ title, options });
+					return title.startsWith("Rewind to which") ? options[0] : action;
+				},
 				notify: (text) => calls.notifications.push(text),
 			},
 		},
@@ -145,6 +158,12 @@ test("captures a per-prompt checkpoint and restores code and conversation", asyn
 
 	const { ctx, calls } = commandContext(env, sessionManager, "Restore code and conversation");
 	await commands.get("rewind").handler("", ctx);
+
+	// The picker labels each checkpoint with its user prompt as well as its files.
+	assert.match(calls.selections[0].options[0], /"do work"/);
+	assert.match(calls.selections[0].options[0], /a\.txt/);
+	assert.match(calls.selections[0].options[0], /\+2 -1/);
+	assert.match(calls.selections[1].title, /"do work"/);
 
 	assert.equal(readFileSync(join(env.cwd, "a.txt"), "utf8"), "initial");
 	assert.equal(existsSync(join(env.cwd, "b.txt")), false);
@@ -172,6 +191,56 @@ test("code-only restore does not navigate the conversation", async (t) => {
 
 	assert.equal(readFileSync(join(env.cwd, "a.txt"), "utf8"), "initial");
 	assert.deepEqual(calls.navigated, []);
+});
+
+test("ctrl+alt+r dispatches /rewind through the command pipeline", async (t) => {
+	const env = freshEnv(t);
+	const { shortcuts, sentMessages } = await captureOnePrompt(t, env);
+
+	const shortcut = shortcuts.get("ctrl+alt+r");
+	assert.ok(shortcut, "ctrl+alt+r is registered");
+
+	const notifications = [];
+	const baseCtx = { hasUI: true, isIdle: () => true, ui: { notify: (text) => notifications.push(text) } };
+	shortcut.handler(baseCtx);
+	assert.deepEqual(sentMessages, [{ content: "/rewind", options: { expandPromptTemplates: true } }]);
+	assert.deepEqual(notifications, []);
+
+	// While streaming, the shortcut refuses instead of re-dispatching.
+	sentMessages.length = 0;
+	shortcut.handler({ ...baseCtx, isIdle: () => false });
+	assert.deepEqual(sentMessages, []);
+	assert.equal(notifications.length, 1);
+});
+
+test("picker shows a single-line, truncated user-prompt preview", async (t) => {
+	const env = freshEnv(t);
+	const { sessionManager, commands } = await captureOnePrompt(t, env);
+
+	// Long prompt with a hard line break must collapse to one truncated line.
+	sessionManager.getEntry("u1").message.content = `first line\nsecond line ${"x".repeat(200)}`;
+	const { ctx, calls } = commandContext(env, sessionManager, "Restore code only");
+	await commands.get("rewind").handler("", ctx);
+
+	const option = calls.selections[0].options[0];
+	assert.ok(option.includes("first line second line"), option);
+	assert.ok(option.includes("…"), option);
+	assert.ok(!option.includes("\n"), option);
+	assert.ok(option.length < 120, option);
+});
+
+test("picker tolerates a checkpoint whose prompt entry is gone", async (t) => {
+	const env = freshEnv(t);
+	const { sessionManager, commands } = await captureOnePrompt(t, env);
+
+	// The prompt entry may no longer be resolvable, e.g. after compaction.
+	sessionManager.getEntry = () => undefined;
+	const { ctx, calls } = commandContext(env, sessionManager, "Restore code only");
+	await commands.get("rewind").handler("", ctx);
+
+	const option = calls.selections[0].options[0];
+	assert.ok(option.includes("a.txt"), option);
+	assert.ok(!option.includes("do work"), option);
 });
 
 test("checkpoints survive a reload and are reconstructed from session entries", async (t) => {
@@ -235,6 +304,7 @@ test("real pi runtime: a user prompt produces a checkpoint anchored to that user
 	const errors = [];
 	await runtime.session.bindExtensions({ onError: (error) => errors.push(error.error), mode: "print" });
 	const runner = runtime.session.extensionRunner;
+	assert.ok(runner.getShortcuts({}).has("ctrl+alt+r"), "ctrl+alt+r is registered in the real runtime");
 
 	const userEntry = runtime.session.sessionManager.appendMessage({ role: "user", content: "edit a.txt", timestamp: Date.now() });
 	await runner.emitBeforeAgentStart("edit a.txt", undefined, { cwd });

@@ -2,8 +2,8 @@
  * Rewind: per-prompt file checkpoints for pi.
  *
  * Captures the pre-image of every file pi's `edit`/`write` tools touch, keyed by
- * the user prompt that started the agent run. `/rewind` then offers to restore
- * code, conversation, or both.
+ * the user prompt that started the agent run. `/rewind` (or `Ctrl+Alt+R`) then
+ * offers to restore code, conversation, or both.
  *
  * Conversation rewind stays exactly as pi's own `/tree` and `/fork`: this
  * extension never restores files unless you pick that action. It is an added
@@ -20,13 +20,16 @@ import type { ExtensionAPI, ExtensionCommandContext, ExtensionContext } from "@e
 import {
 	BlobStore,
 	type Checkpoint,
+	type CheckpointStat,
 	type RestoreReport,
 	type SnapshotFile,
 	applyRestore,
 	isRestorableFile,
 	planRestore,
+	summarizeCheckpoints,
 	toWorkspaceRelative,
 } from "./store.ts";
+import { type MenuEntry, pickCheckpoint } from "./menu.ts";
 
 const REWIND_ENTRY_TYPE = "rewind";
 const DEFAULT_MAX_CHECKPOINTS = 100;
@@ -39,6 +42,9 @@ const ACTIONS = [
 	"Restore code only",
 	"Never mind",
 ] as const;
+
+/** Longest user-prompt preview shown in the picker, in characters. */
+const PROMPT_PREVIEW_MAX = 60;
 
 interface Config {
 	enabled: boolean;
@@ -81,11 +87,65 @@ function resolveUserEntryId(ctx: ExtensionContext): string | undefined {
 	return ctx.sessionManager.getLeafId() ?? undefined;
 }
 
-function label(checkpoint: Checkpoint, index: number): string {
+/** One-line preview of the user prompt that anchored a checkpoint, if it is still in the session. */
+function promptPreview(ctx: ExtensionCommandContext, entryId: string): string | undefined {
+	const entry = ctx.sessionManager.getEntry(entryId);
+	if (entry?.type !== "message" || entry.message.role !== "user") return undefined;
+	const content = entry.message.content;
+	const text =
+		typeof content === "string"
+			? content
+			: content.map((part) => (part.type === "text" ? part.text : "")).join(" ");
+	const oneLine = text.replace(/\s+/g, " ").trim();
+	if (!oneLine) return undefined;
+	return oneLine.length > PROMPT_PREVIEW_MAX ? `${oneLine.slice(0, PROMPT_PREVIEW_MAX - 1)}…` : oneLine;
+}
+
+function label(checkpoint: Checkpoint, index: number, prompt: string | undefined, stat: CheckpointStat | undefined): string {
 	const time = new Date(checkpoint.timestamp).toLocaleTimeString();
 	const names = checkpoint.files.slice(0, 3).map((file) => file.path).join(", ");
 	const more = checkpoint.files.length > 3 ? `, +${checkpoint.files.length - 3}` : "";
-	return `${index + 1}. ${time} · ${names}${more}`;
+	const parts = [`${index + 1}. ${time}`];
+	if (prompt) parts.push(`"${prompt}"`);
+	if (stat) parts.push(`+${stat.totalAdded} -${stat.totalRemoved}`);
+	parts.push(`${names}${more}`);
+	return parts.join(" · ");
+}
+
+/**
+ * Ask which checkpoint to rewind to.
+ *
+ * TUI mode gets a multi-line, colored picker; other UI modes (RPC, print) keep
+ * the one-line selector. The pi-tui helpers are imported lazily so this module
+ * and its tests never need the terminal runtime.
+ */
+async function pickTarget(
+	ctx: ExtensionCommandContext,
+	ordered: Checkpoint[],
+	prompts: Map<Checkpoint, string | undefined>,
+	stats: Map<Checkpoint, CheckpointStat> | undefined,
+): Promise<Checkpoint | undefined> {
+	if (ctx.mode === "tui") {
+		const lib = await import("@earendil-works/pi-tui");
+		const entries: MenuEntry[] = ordered.map((checkpoint) => {
+			const stat = stats?.get(checkpoint);
+			return {
+				time: new Date(checkpoint.timestamp).toLocaleTimeString(),
+				prompt: prompts.get(checkpoint),
+				added: stat?.totalAdded ?? 0,
+				removed: stat?.totalRemoved ?? 0,
+				files: stat?.files ?? checkpoint.files.map((file) => ({ path: file.path, added: 0, removed: 0 })),
+			};
+		});
+		const picked = await pickCheckpoint(ctx, { truncateToWidth: lib.truncateToWidth }, entries);
+		return picked === undefined ? undefined : ordered[picked];
+	}
+	const labels = ordered.map((checkpoint, index) =>
+		label(checkpoint, index, prompts.get(checkpoint), stats?.get(checkpoint)),
+	);
+	const picked = await ctx.ui.select("Rewind to which prompt?", labels);
+	if (picked === undefined) return undefined;
+	return ordered[labels.indexOf(picked)];
 }
 
 function describe(report: RestoreReport): string {
@@ -222,12 +282,11 @@ export default function rewindExtension(pi: ExtensionAPI): void {
 				return;
 			}
 			const ordered = [...checkpoints].reverse();
-			const labels = ordered.map((checkpoint, index) => label(checkpoint, index));
-			const picked = await ctx.ui.select("Rewind to which prompt?", labels);
-			if (picked === undefined) return;
-			const target = ordered[labels.indexOf(picked)];
+			const prompts = new Map(ordered.map((checkpoint) => [checkpoint, promptPreview(ctx, checkpoint.entryId)]));
+			const stats = blobs ? summarizeCheckpoints(ctx.cwd, checkpoints, blobs) : undefined;
+			const target = await pickTarget(ctx, ordered, prompts, stats);
 			if (!target) return;
-			const action = await ctx.ui.select(`Rewind to ${label(target, 0)}`, [...ACTIONS]);
+			const action = await ctx.ui.select(label(target, 0, prompts.get(target), stats?.get(target)), [...ACTIONS]);
 			if (!action || action === "Never mind") return;
 
 			const restoreCode = action !== "Restore conversation only";
@@ -246,6 +305,20 @@ export default function rewindExtension(pi: ExtensionAPI): void {
 					notify(ctx, `Conversation rewind failed: ${error instanceof Error ? error.message : String(error)}`, "error");
 				}
 			}
+		},
+	});
+
+	// Shortcut handlers only get a base ExtensionContext, which has no
+	// navigateTree. Re-dispatch through the command pipeline so the shortcut
+	// runs with the same command context as typing /rewind.
+	pi.registerShortcut("ctrl+alt+r", {
+		description: "Restore files to a previous prompt (file checkpoints)",
+		handler: (ctx) => {
+			if (!ctx.isIdle()) {
+				notify(ctx, "Wait for the current response to finish before rewinding.", "warning");
+				return;
+			}
+			pi.sendUserMessage("/rewind", { expandPromptTemplates: true });
 		},
 	});
 }

@@ -9,7 +9,20 @@ an explicit choice and never changes files on its own.
 
 ## Usage
 
-Run `/rewind`, pick a prompt, then pick an action:
+Run `/rewind` (or press `Ctrl+Alt+R`), pick a prompt, then pick an action. In
+the TUI each entry is a colored block with the prompt time, a one-line preview
+of your prompt, the total added/removed lines, and one line per changed file:
+
+```
+10:42:07 "fix the login redirect" +4 -5
+  src/auth.ts +1 -3
+  src/routes.ts +3 -2
+```
+
+The added/removed counts are the lines that prompt introduced, computed from
+the captured pre-image and the file's content afterwards (the next checkpoint
+that touched it, or its current content). Other UI modes fall back to a
+single-line selector with the same information.
 
 - **Restore code and conversation** — roll files back to the state before that
   prompt, then navigate the session tree to that prompt.
@@ -62,10 +75,12 @@ Optional `<agent-dir>/rewind.json`:
 
 ## Verification
 
-Unit tests cover the snapshot store and restore planning:
+Unit tests cover the snapshot store, restore planning, line change counts, and
+the picker component:
 
 ```bash
 node --test ~/.pi/agent/extensions/rewind/tests/rewind.test.mjs
+node --test ~/.pi/agent/extensions/rewind/tests/menu.test.mjs
 ```
 
 The integration test drives the extension through a fake pi runtime (events,

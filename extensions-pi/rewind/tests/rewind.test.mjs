@@ -3,7 +3,7 @@ import { existsSync, linkSync, mkdirSync, mkdtempSync, readFileSync, rmSync, sym
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
-import { BlobStore, applyRestore, isRestorableFile, planRestore, toWorkspaceRelative } from "../store.ts";
+import { BlobStore, applyRestore, countChangedLines, isRestorableFile, planRestore, summarizeCheckpoints, toWorkspaceRelative } from "../store.ts";
 
 function tempDir(t) {
 	const dir = mkdtempSync(join(tmpdir(), "pi-rewind-"));
@@ -133,4 +133,50 @@ test("applyRestore recreates a file deleted after the checkpoint", (t) => {
 	const report = applyRestore(cwd, plan, blobs);
 	assert.deepEqual(report.restored, ["nested/file.txt"]);
 	assert.equal(readFileSync(join(cwd, "nested/file.txt"), "utf8"), "restored");
+});
+
+test("countChangedLines counts added and removed lines", () => {
+	assert.deepEqual(countChangedLines("a\nb\nc\n", "a\nB\nc\n"), { added: 1, removed: 1 });
+	assert.deepEqual(countChangedLines("", "x\ny\n"), { added: 2, removed: 0 });
+	assert.deepEqual(countChangedLines("x\ny\n", ""), { added: 0, removed: 2 });
+	assert.deepEqual(countChangedLines("same\n", "same\n"), { added: 0, removed: 0 });
+	assert.deepEqual(countChangedLines("a\nb\nc\nd\n", "a\nd\n"), { added: 0, removed: 2 });
+});
+
+test("summarizeCheckpoints attributes each prompt's line changes", (t) => {
+	const cwd = tempDir(t);
+	const blobs = new BlobStore(join(cwd, ".store"));
+	// Prompt 1 changes a.txt, prompt 2 removes its last line and creates b.txt.
+	const before1 = { path: "a.txt", hash: blobs.put(Buffer.from("one\ntwo\n")), existed: true };
+	const after1 = blobs.put(Buffer.from("one\nTWO\nthree\n"));
+	const checkpoint1 = {
+		entryId: "u1",
+		seq: 1,
+		timestamp: 1,
+		files: [before1, { path: "b.txt", hash: "", existed: false }],
+	};
+	const checkpoint2 = {
+		entryId: "u2",
+		seq: 2,
+		timestamp: 2,
+		files: [{ path: "a.txt", hash: after1, existed: true }],
+	};
+	writeFileSync(join(cwd, "a.txt"), "one\nTWO\n");
+	writeFileSync(join(cwd, "b.txt"), "hello\n");
+
+	// Order of the input array must not matter; the summary is chronological.
+	const stats = summarizeCheckpoints(cwd, [checkpoint2, checkpoint1], blobs);
+
+	const first = stats.get(checkpoint1);
+	assert.equal(first.totalAdded, 3);
+	assert.equal(first.totalRemoved, 1);
+	assert.deepEqual(first.files, [
+		{ path: "a.txt", added: 2, removed: 1 },
+		{ path: "b.txt", added: 1, removed: 0 },
+	]);
+
+	const second = stats.get(checkpoint2);
+	assert.equal(second.totalAdded, 0);
+	assert.equal(second.totalRemoved, 1);
+	assert.deepEqual(second.files, [{ path: "a.txt", added: 0, removed: 1 }]);
 });
