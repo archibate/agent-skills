@@ -8,6 +8,7 @@ import { canonicalPath, describeRequest, isReadOnlyRequest, resolvePolicy } from
 
 const facts = {
 	landlockExec: "/cache/landlock-exec",
+	gitControlPaths: [],
 	scratchpad: "/scratch",
 	resolverDir: "/run/systemd/resolve",
 	busSockets: ["/run/user/1000/bus", "/run/dbus/system_bus_socket"],
@@ -79,11 +80,15 @@ test("default command: read-only root, private TMPDIR, scratchpad, landlock with
 });
 
 test("writable repository roots keep .git hooks and config read-only, after the writable bind", () => {
-	const { bwrapArgs } = buildSandboxCommand(policy({ writableLocations: ["/work"] }), facts, "/work");
+	const { bwrapArgs } = buildSandboxCommand(
+		policy({ writableLocations: ["/work"] }),
+		{ ...facts, gitControlPaths: ["/work/.git/hooks", "/work/.git/config"] },
+		"/work",
+	);
 	const bind = indexOfTriple(bwrapArgs, "--bind", "/work", "/work");
 	assert.ok(bind >= 0);
-	assert.ok(indexOfTriple(bwrapArgs, "--ro-bind-try", "/work/.git/hooks", "/work/.git/hooks") > bind);
-	assert.ok(indexOfTriple(bwrapArgs, "--ro-bind-try", "/work/.git/config", "/work/.git/config") > bind);
+	assert.ok(indexOfTriple(bwrapArgs, "--ro-bind", "/work/.git/hooks", "/work/.git/hooks") > bind);
+	assert.ok(indexOfTriple(bwrapArgs, "--ro-bind", "/work/.git/config", "/work/.git/config") > bind);
 });
 
 test("grants map to namespaces, devices, and landlock socket allowances", () => {

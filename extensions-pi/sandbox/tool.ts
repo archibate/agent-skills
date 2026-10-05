@@ -10,9 +10,11 @@ import {
 	createBashToolDefinition,
 	getShellConfig,
 	type ToolDefinition,
+	type ToolRenderers,
 } from "@earendil-works/pi-coding-agent";
 import { Text } from "@earendil-works/pi-tui";
 import { Type } from "typebox";
+import type { Allowance } from "./permissions.ts";
 import {
 	describeRequest,
 	execShell,
@@ -21,7 +23,6 @@ import {
 	SANDBOX_NOTE,
 	sandboxSchema,
 } from "./sandbox.ts";
-
 
 function sandboxOperations(prepared: PreparedSandbox): BashOperations {
 	return {
@@ -43,6 +44,34 @@ export function renderBadge(request: unknown, theme: BadgeTheme): string {
 	const parts = describeRequest(request).map((part) => theme.fg(part.tone, part.text));
 	return `${theme.fg("dim", "⛶")} ${parts.join(theme.fg("dim", " · "))}`;
 }
+
+/** Session permissions, using the call badge's access labels and colours. */
+export function renderAllowanceBadge(allowance: Allowance, theme: BadgeTheme): string {
+	const p = allowance.policy;
+	const badge = renderBadge({
+		writableLocations: p.writable,
+		networkAccess: p.network,
+		socketAccess: p.sockets,
+		sessionBusAccess: p.bus,
+		displayAccess: p.display,
+		processAccess: p.process,
+		deviceAccess: p.device,
+		dangerouslySkipSandbox: p.skip,
+	}, theme);
+	if (p.skip || (Array.isArray(allowance.tools) && allowance.tools.length === 0)) return badge;
+	const tools = allowance.tools === "all" ? "all" : allowance.tools.join(", ");
+	return `${badge}${theme.fg("dim", " · ")}${theme.fg("accent", `tools ${tools}`)}`;
+}
+
+/** Shared command + access badge for foreground bash and background job_start calls. */
+export const renderSandboxCall: NonNullable<ToolRenderers["renderCall"]> = (args, theme, context) => {
+	const input = (args ?? {}) as { command?: unknown; timeout?: unknown; sandbox?: unknown };
+	const text = (context.lastComponent as Text | undefined) ?? new Text("", 0, 0);
+	const command = typeof input.command === "string" && input.command ? input.command : "...";
+	const timeout = typeof input.timeout === "number" ? theme.fg("muted", ` (timeout ${input.timeout}s)`) : "";
+	text.setText(`${theme.fg("toolTitle", theme.bold(`$ ${command}`))}${timeout}\n${renderBadge(input.sandbox, theme)}`);
+	return text;
+};
 
 const HINTS: Array<{ pattern: RegExp; applies: (p: PreparedSandbox) => boolean; text: string }> = [
 	{
@@ -124,11 +153,7 @@ export function createSandboxBashDefinition(cwd: string): ToolDefinition {
 				state.startedAt = Date.now();
 				state.endedAt = undefined;
 			}
-			const text = (context.lastComponent as Text | undefined) ?? new Text("", 0, 0);
-			const command = typeof args?.command === "string" && args.command ? args.command : "...";
-			const timeout = typeof args?.timeout === "number" ? theme.fg("muted", ` (timeout ${args.timeout}s)`) : "";
-			text.setText(`${theme.fg("toolTitle", theme.bold(`$ ${command}`))}${timeout}\n${renderBadge(args?.sandbox, theme)}`);
-			return text;
+			return renderSandboxCall(args, theme, context);
 		},
 	};
 	return definition as unknown as ToolDefinition;

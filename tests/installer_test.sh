@@ -289,15 +289,20 @@ run_installer --skills pi-subagents --targets pi --yes --skip-deps >/dev/null
 assert_dir "$CASE_HOME/.pi/agent/extensions/jobs"
 assert_file "$CASE_HOME/.pi/agent/extensions/jobs/index.ts"
 assert_link_target "$CASE_HOME/.pi/agent/extensions/jobs" "$ROOT/extensions-pi/jobs"
+assert_file "$CASE_HOME/.pi/agent/extensions/sandbox/index.ts"
+assert_link_target "$CASE_HOME/.pi/agent/extensions/sandbox" "$ROOT/extensions-pi/sandbox"
 assert_link_target "$CASE_HOME/.pi/agent/skills/pi-subagents" "$ROOT/skills-pi/pi-subagents"
 [ ! -e "$CASE_HOME/.pi/agent/extensions/scratchpad" ] || fail 'unrequested extension was installed'
 [ ! -e "$CASE_HOME/.agents/skills/pi-subagents" ] || fail 'Pi-only skill leaked into the shared skills directory'
 
 new_case pi-extension-copy
-run_installer --skills scratchpad --targets pi --yes --skip-deps --install-mode copy >/dev/null
-assert_file "$CASE_HOME/.pi/agent/extensions/scratchpad/index.ts"
-assert_not_link "$CASE_HOME/.pi/agent/extensions/scratchpad"
-[ ! -e "$CASE_HOME/.pi/agent/extensions/scratchpad/node_modules" ] || fail 'copied extension kept node_modules'
+run_installer --skills scratchpad,sandbox --targets pi --yes --skip-deps --install-mode copy >/dev/null
+for extension in scratchpad sandbox; do
+    assert_file "$CASE_HOME/.pi/agent/extensions/$extension/index.ts"
+    assert_not_link "$CASE_HOME/.pi/agent/extensions/$extension"
+    [ ! -e "$CASE_HOME/.pi/agent/extensions/$extension/node_modules" ] || fail 'copied extension kept node_modules'
+done
+assert_file "$CASE_HOME/.pi/agent/extensions/sandbox/landlock-exec.c"
 
 new_case pi-extension-unsupported-target
 set +e

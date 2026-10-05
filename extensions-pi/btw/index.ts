@@ -17,8 +17,9 @@
  *   The forked session declares the same tools (needed for the cache prefix). `read`,
  *   `grep`, `find`, and `ls` run normally. `bash` is whatever the reloaded extensions
  *   declare, so it matches the main session's. With the sandbox extension (../sandbox)
- *   loaded, bash calls that declare any access beyond its read-only default are blocked
- *   (set `BTW_SANDBOX_NET=1` to also allow networkAccess); without it, bash is blocked.
+ *   loaded, the side session's permissions are fixed to read-only with the deny reviewer,
+ *   so bash calls that declare any grant are blocked (set `BTW_SANDBOX_NET=1` to also allow
+ *   networkAccess); without it, bash is blocked.
  *   All other mutating tools are blocked. The SDK does not bind extensions, so the side session calls
  *   bindExtensions() explicitly.
  *
@@ -45,7 +46,6 @@ import {
 	type AgentSessionEvent,
 	AssistantMessageComponent,
 	createAgentSession,
-	createBashToolDefinition,
 	DefaultResourceLoader,
 	type ExtensionAPI,
 	type ExtensionCommandContext,
@@ -71,7 +71,7 @@ import type { SandboxProvider, SandboxProviderReply } from "../sandbox/sandbox.t
 const READ_ONLY_TOOLS = new Set(["read", "grep", "find", "ls"]);
 
 /** Set BTW_SANDBOX_NET=1 to allow declared network access inside the /btw bash sandbox (default: no network). */
-const ALLOW_SANDBOX_NETWORK = process.env.BTW_SANDBOX_NET === "1";
+const SIDE_PERMISSIONS = process.env.BTW_SANDBOX_NET === "1" ? '{"networkAccess":"full"}' : "read-only";
 
 /** pi.events channel of the sandbox extension (see ../sandbox/sandbox.ts PROVIDER_CHANNEL). */
 const SANDBOX_CHANNEL = "archibate.sandbox:get";
@@ -88,25 +88,24 @@ function findSandbox(pi: ExtensionAPI): SandboxProvider | undefined {
 
 /**
  * Injected into the forked session's resource loader:
- * - allow `bash` only through the sandbox extension's read-only default; scratchpad stays writable
- * - block the remaining mutating tools, keeping their declarations only for prefix/cache identity
+ * - fix the side session's sandbox permissions to read-only with the deny reviewer, so `bash` runs
+ *   only within the sandbox's read-only default; the scratchpad stays writable
+ * - block bash without the sandbox extension, and the remaining mutating tools, keeping their
+ *   declarations only for prefix/cache identity
  * - forward the main session's prompt cache key so OpenAI-style routing reuses its cache
  */
 function sideTweaks(mainSessionId: string) {
 	return (api: ExtensionAPI) => {
+		let sandbox: SandboxProvider | undefined;
+		api.on("session_start", () => {
+			sandbox = findSandbox(api);
+			sandbox?.restrict(SIDE_PERMISSIONS);
+		});
 		api.on("tool_call", (event) => {
 			if (event.toolName === "bash") {
-				const sandbox = findSandbox(api);
-				if (!sandbox) {
-					return { block: true, reason: "bash is disabled in /btw: the sandbox extension is not loaded" };
-				}
-				const request = (event.input as { sandbox?: Record<string, unknown> }).sandbox;
-				const { networkAccess, ...rest } = request ?? {};
-				if (sandbox.isReadOnly(ALLOW_SANDBOX_NETWORK ? rest : request)) return undefined;
-				return {
-					block: true,
-					reason: `bash in /btw is read-only: drop the sandbox grants (requested ${JSON.stringify(request)})${networkAccess && !ALLOW_SANDBOX_NETWORK ? "; network needs BTW_SANDBOX_NET=1" : ""}`,
-				};
+				// The sandbox extension reviews bash against SIDE_PERMISSIONS and denies the rest.
+				if (sandbox) return undefined;
+				return { block: true, reason: "bash is disabled in /btw: the sandbox extension is not loaded" };
 			}
 			if (!READ_ONLY_TOOLS.has(event.toolName)) {
 				return {

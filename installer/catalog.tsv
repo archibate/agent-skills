@@ -14,6 +14,7 @@ web-search	skill	skills/web-search	web	no	-	web-fetch	uv,jina-cli,jina-key	-	Web
 web-fetch	skill	skills/web-fetch	web	no	-	web-search,agent-browser,chrome-cdp	curl,node-npx	-	Resilient URL reader
 lark-cli	skill	skills/lark-cli	integration	no	-	-	node-npx,lark-auth	-	Lark and Feishu CLI
 monitor-wakeup	skill	skills-codex/monitor-wakeup	integration	no	-	-	-	codex	Session monitoring and wake-up
+sandbox	extension	extensions-pi/sandbox	integration	no	-	-	-	pi	Declared access sandbox and permission review
 jobs	extension	extensions-pi/jobs	integration	no	-	-	-	pi	Background job tools
 scratchpad	extension	extensions-pi/scratchpad	integration	no	-	-	-	pi	Session scratchpad
 context	extension	extensions-pi/context	integration	no	-	-	-	pi	Context window usage
@@ -22,7 +23,7 @@ btw	extension	extensions-pi/btw	integration	no	-	-	-	pi	Side question without di
 plan-mode	extension	extensions-pi/plan-mode	integration	no	-	-	-	pi	Read-only planning hint
 rmb-cost	extension	extensions-pi/rmb-cost	integration	no	-	-	-	pi	Session cost in RMB
 rewind	extension	extensions-pi/rewind	integration	no	-	-	-	pi	File checkpoints for code rewind
-pi-subagents	skill	skills-pi/pi-subagents	thinking	no	jobs	-	-	pi	Subagent orchestration
+pi-subagents	skill	skills-pi/pi-subagents	thinking	no	jobs,sandbox	-	-	pi	Subagent orchestration
 fresh-arch	skill	skills/fresh-arch	thinking	no	-	grill-me	-	-	Fresh architecture design
 grill-me	skill	skills/grill-me	thinking	no	-	fresh-arch	-	-	Design interview
 writing-prompt	skill	skills/writing-prompt	writing	no	-	-	-	-	Modern prompt engineering

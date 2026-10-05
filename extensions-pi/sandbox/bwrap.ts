@@ -12,7 +12,6 @@
  *   escapes such as tmux send-keys, nvim --remote-send, D-Bus, or agent daemons.
  */
 
-import { join } from "node:path";
 import type { SandboxPolicy } from "./policy.ts";
 
 /** Set inside every sandbox. Nesting is impossible: Landlock forbids the mounts bwrap needs. */
@@ -29,6 +28,8 @@ export interface HostFacts {
 	landlockExec: string;
 	/** Session scratchpad; always writable. */
 	scratchpad?: string;
+	/** Existing hooks/config under declared writable paths; must be rebound read-only. */
+	gitControlPaths: string[];
 	/** systemd-resolved directory; its varlink socket is allowed only with full network. */
 	resolverDir?: string;
 	busSockets: string[];
@@ -67,11 +68,7 @@ export function buildSandboxCommand(policy: SandboxPolicy, facts: HostFacts, cwd
 	const writable = facts.scratchpad ? [facts.scratchpad, ...policy.writable] : [...policy.writable];
 	for (const path of writable) args.push("--bind", path, path);
 	// A writable repository must not gain hooks or config that later run outside the sandbox.
-	for (const root of policy.writable) {
-		for (const path of [join(root, ".git", "hooks"), join(root, ".git", "config")]) {
-			args.push("--ro-bind-try", path, path);
-		}
-	}
+	for (const path of facts.gitControlPaths) args.push("--ro-bind", path, path);
 
 	const allowUnix: string[] = [...policy.sockets];
 	if (policy.bus) allowUnix.push(...facts.busSockets);

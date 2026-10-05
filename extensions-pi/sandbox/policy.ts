@@ -25,7 +25,7 @@ export const sandboxSchema = Type.Object(
 		writableLocations: Type.Optional(
 			Type.Array(Type.String(), {
 				description:
-					"Paths the command writes to, such as the workspace or a tool cache (~/.cache/uv). The session scratchpad and $TMPDIR are always writable. Missing paths are created as directories.",
+					"Writable directories or existing files (e.g. workspace, ~/.cache/uv). File grants allow in-place writes; creation, deletion, or replacement needs the parent directory. Missing paths are created as directories. The session scratchpad and $TMPDIR are always writable.",
 			}),
 		),
 		networkAccess: Type.Optional(

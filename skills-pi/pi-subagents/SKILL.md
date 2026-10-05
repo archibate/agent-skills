@@ -9,7 +9,8 @@ compatibility: Pi
 Run a subagent with the `job_start` tool. It captures the child's stdout/stderr, returns the job
 directory, and notifies you when the child exits; read the result from the job's `stdout` file.
 When `job_start` takes `sandbox`, pass `{"dangerouslySkipSandbox": true}`: the child is a full pi
-that needs the network and its session files, and it sandboxes its own commands.
+that needs the network and its session files. Bound what it may do with `--permissions` (see
+below), and keep the command a single `pi -p ...` so the bound is recognized.
 
 ## Fork or fresh
 
@@ -20,7 +21,7 @@ what to do, and leave the system prompt, tools, model, and thinking level unchan
 job_start
   name:    review
   sandbox: {"dangerouslySkipSandbox": true}
-  command: pi -p --fork "$PI_SESSION_ID" --session-id "$PI_SESSION_ID.review" "You are a forked subagent; do not spawn subagents. Task: review the unstaged changes"
+  command: pi -p --fork "$PI_SESSION_ID" --session-id "$PI_SESSION_ID.review" --permissions read-only "You are a forked subagent; do not spawn subagents. Task: review the unstaged changes"
 ```
 
 **Fresh** starts empty. Put everything the child needs in the task. It is only empty if its
@@ -30,7 +31,7 @@ job_start
 job_start
   name:    audit
   sandbox: {"dangerouslySkipSandbox": true}
-  command: pi -p --session-id "$PI_SESSION_ID.audit" --model "$PI_PROVIDER/$PI_MODEL" --thinking "$PI_REASONING_LEVEL" --append-system-prompt "You are a subagent; do not spawn subagents." "Audit src/ for security issues and report findings"
+  command: pi -p --session-id "$PI_SESSION_ID.audit" --model "$PI_PROVIDER/$PI_MODEL" --thinking "$PI_REASONING_LEVEL" --append-system-prompt "You are a subagent; do not spawn subagents." --permissions read-only "Audit src/ for security issues and report findings"
 ```
 
 `--model` and `--thinking` keep the child on your current model and effort; change them to give the
@@ -45,11 +46,10 @@ spawn subagents." A task carrying that marker means you are the child: do not de
 
 ## Read-only and restricted children
 
-Pass `--sandbox-ceiling read-only`: the child keeps read-only bash, and any write, edit, or bash
-grant is blocked. It works with `--fork`, since it does not change the prompt. To bound a child
-that edits, pass a sandbox object instead, e.g. `--sandbox-ceiling '{"writableLocations":["src"]}'`.
-For a handover file, add its directory to the ceiling's `writableLocations`; the child's own
-scratchpad is a different directory.
+`--permissions read-only` keeps the child's read-only bash and blocks any write, edit, or bash
+grant. It works with `--fork`, since it does not change the prompt. For a child that edits, pass a
+sandbox object instead, e.g. `--permissions '{"writableLocations":["src"]}'`. For a handover file,
+add its directory to `writableLocations`; the child's own scratchpad is a different directory.
 
 ## Results
 
@@ -74,7 +74,7 @@ are reused.
 job_start
   name:    review-2
   sandbox: {"dangerouslySkipSandbox": true}
-  command: pi -p --session "$PI_SESSION_ID.review" "You are a subagent; do not spawn subagents. Task: also check the tests"
+  command: pi -p --session "$PI_SESSION_ID.review" --permissions read-only "You are a subagent; do not spawn subagents. Task: also check the tests"
 ```
 
 `<name>` must end with a letter or digit. `--fork` refuses an id that already exists, so pick a

@@ -111,6 +111,24 @@ test("sandboxed bash and job tools through the real pi loader", { skip: !sdkPath
 	assert.match(rendered, /\$ uv run x\.py/);
 	assert.match(rendered, /⛶ rw ~\/\.cache\/uv · net fetch-only/);
 
+	// The sandbox owns job_start's renderer; jobs has no runtime dependency on it.
+	const jobStart = session.getToolDefinition("job_start");
+	const jobRenderers = session.extensionRunner.resolveToolRenderers("job_start", () => ({
+		renderCall: jobStart.renderCall,
+		renderResult: jobStart.renderResult,
+	}));
+	const callArgs = {
+		command: "uv run x.py",
+		name: "build",
+		timeout: 60,
+		sandbox: { writableLocations: ["~/.cache/uv"], networkAccess: "fetch-only" },
+	};
+	const renderContext = () => ({ toolCallId: "render-test", state: {}, executionStarted: false, lastComponent: undefined });
+	const jobRow = jobRenderers.renderCall(callArgs, plainTheme, renderContext());
+	assert.deepEqual(jobRow.render(80), bash.renderCall(callArgs, plainTheme, renderContext()).render(80));
+	assert.match(jobRow.render(80).join("\n"), /\$ uv run x\.py \(timeout 60s\)[\s\S]*⛶ rw ~\/\.cache\/uv · net fetch-only/);
+	assert.equal(jobRenderers.renderResult, jobStart.renderResult, "job status/results are unchanged");
+
 	// Jobs run in the same sandbox, and their files stay readable from sandboxed bash.
 	const job = await call("job_start", "j1", { command: `echo job > ${join(cwd, "job.txt")}`, name: "ro" });
 	await waitFor(() => existsSync(join(job.details.dir, "status")));

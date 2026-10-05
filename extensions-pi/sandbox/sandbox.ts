@@ -43,6 +43,11 @@ export interface SandboxProvider {
 	parameter: TSchema;
 	prepare(request: unknown, cwd: string): Promise<PreparedSandbox>;
 	isReadOnly(request: unknown): boolean;
+	/**
+	 * Fix this runtime's permissions to `permissions` (a --permissions value) with the deny
+	 * reviewer, overriding flags and stored permissions. Throws if the value is invalid.
+	 */
+	restrict(permissions: string): void;
 }
 
 export type SandboxProviderReply = (provider: SandboxProvider) => void;
@@ -143,7 +148,7 @@ export async function prepareSandbox(request: SandboxRequest | undefined, cwd: s
 	const opened = policy.network === "fetch-only" ? await openProxy() : undefined;
 	let command: SandboxCommand;
 	try {
-		command = buildSandboxCommand(policy, await gatherHostFacts(opened?.proxy.socketPath), cwd);
+		command = buildSandboxCommand(policy, await gatherHostFacts(policy.writable, opened?.proxy.socketPath), cwd);
 	} catch (error) {
 		await opened?.proxy.close();
 		if (opened) rmSync(opened.dir, { recursive: true, force: true });

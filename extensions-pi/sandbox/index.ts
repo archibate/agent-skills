@@ -1,23 +1,56 @@
 /**
- * sandbox extension: runs the agent's `bash` inside bubblewrap with a declared access policy.
+ * sandbox extension: runs the agent's `bash` inside bubblewrap with a declared access policy, and
+ * reviews calls that need more than this session's permissions.
  *
  * The `bash` tool gains an optional `sandbox` declaration (see policy.ts). Omitted, a command runs
  * read-only: writable only in the session scratchpad and $TMPDIR, no network, no connecting
  * to host Unix sockets (so no D-Bus, display, tmux, or editor IPC), host processes visible but not
- * signallable. The declaration
- * is rendered under the command so a reviewer sees what each call asked for. Stage 1 grants
- * whatever is declared; review gating comes later.
+ * signallable. The declaration is rendered under the command so a reviewer sees what each call
+ * asked for.
  *
- * `--sandbox-ceiling` (ceiling.ts) bounds every tool call of a headless run such as a subagent.
+ * Review: the permissions (permissions.ts; --permissions, /permissions) are what runs without
+ * review. A call beyond them goes to the reviewer (review.ts; --reviewer): deny, or manual in the
+ * TUI. "Always" adds the call's grants to the session permissions. Permissions and review marks are
+ * session entries. The agent's prompt does not mention any of this.
  *
  * User `!` commands are not sandboxed. The jobs extension (`job_start`) and `/btw` find this
  * extension through PROVIDER_CHANNEL and run without it when it is not loaded.
  */
 
 import { homedir } from "node:os";
-import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
-import { CEILING_FLAG, type Ceiling, ceilingViolation, parseCeiling } from "./ceiling.ts";
-import { isReadOnlyRequest, sandboxReferenceSchema } from "./policy.ts";
+import { DynamicBorder, type ExtensionAPI, type ExtensionCommandContext, type ExtensionContext } from "@earendil-works/pi-coding-agent";
+import { Container, SelectList, Spacer, Text } from "@earendil-works/pi-tui";
+import { MARK_ENTRY, type ReviewMark, registerReviewMarks } from "./marks.ts";
+import {
+	type Allowance,
+	assessCall,
+	describeAllowance,
+	excessGrants,
+	isAllowance,
+	NO_ACCESS,
+	PERMISSION_PRESETS,
+	PERMISSIONS_FLAG,
+	parsePermissions,
+	presetAllowance,
+	unionAllowance,
+} from "./permissions.ts";
+import {
+	canonicalPath,
+	DEVICE_MODES,
+	expandPath,
+	isReadOnlyRequest,
+	NETWORK_MODES,
+	PROCESS_MODES,
+	sandboxReferenceSchema,
+} from "./policy.ts";
+import {
+	createReviewer,
+	defaultReviewerName,
+	denialReason,
+	REVIEWER_FLAG,
+	type Reviewer,
+	type ReviewRequest,
+} from "./review.ts";
 import {
 	PROVIDER_CHANNEL,
 	prepareSandbox,
@@ -26,53 +59,337 @@ import {
 	type SandboxRequest,
 	warmSandbox,
 } from "./sandbox.ts";
-import { createSandboxBashDefinition } from "./tool.ts";
+import { createSandboxBashDefinition, renderAllowanceBadge, renderSandboxCall } from "./tool.ts";
+
+const PERMISSIONS_ENTRY = "sandbox-permissions";
 
 export default function sandboxExtension(pi: ExtensionAPI): void {
 	pi.registerTool(createSandboxBashDefinition(process.cwd()));
 
+	pi.registerFlag(PERMISSIONS_FLAG, {
+		type: "string",
+		description: `What runs without review: ${PERMISSION_PRESETS.join(" or ")}, or a JSON sandbox object such as '{"writableLocations":["src"]}'. Default: the git work tree is writable, network fetch-only.`,
+	});
+	pi.registerFlag(REVIEWER_FLAG, {
+		type: "string",
+		description: `Who decides calls beyond the permissions: deny, or manual (TUI only). Default: manual in the TUI, deny otherwise.`,
+	});
+
+	let allowance: Allowance = NO_ACCESS;
+	let reviewer: Reviewer = createReviewer("deny", "print");
+	/** Startup problems; while set, calls beyond read-only are denied and the reason names them. */
+	let configError: string | undefined;
+	/** Set by restrict(): fixed permissions for this runtime, e.g. a /btw side session. */
+	let restricted: string | undefined;
+	let flagApplied = false;
+	let cwd = process.cwd();
+	let statusUI: ExtensionContext["ui"] | undefined;
+	const marks = new Map<string, ReviewMark>();
+
+	const home = homedir();
+
+	function restore(ctx: ExtensionContext, reason: "start" | "tree"): void {
+		cwd = ctx.cwd;
+		statusUI = ctx.mode === "tui" ? ctx.ui : undefined;
+		marks.clear();
+		let stored: Allowance | undefined;
+		for (const entry of ctx.sessionManager.getBranch()) {
+			if (entry.type !== "custom") continue;
+			if (entry.customType === PERMISSIONS_ENTRY && isAllowance(entry.data)) stored = entry.data;
+			if (entry.customType === MARK_ENTRY) {
+				const { toolCallId, mark } = (entry.data ?? {}) as { toolCallId?: unknown; mark?: unknown };
+				if (typeof toolCallId === "string" && (mark === "approved" || mark === "always" || mark === "denied")) {
+					marks.set(toolCallId, mark);
+				}
+			}
+		}
+		const errors: string[] = [];
+		const flag = pi.getFlag(PERMISSIONS_FLAG);
+		try {
+			if (restricted !== undefined) allowance = parsePermissions(restricted, cwd, home);
+			else if (typeof flag === "string" && flag !== "" && !flagApplied && reason === "start") {
+				// The flag replaces stored permissions once, at startup; /permissions edits after that
+				// survive /reload. A fork child given --permissions read-only is read-only.
+				allowance = parsePermissions(flag, cwd, home);
+				flagApplied = true;
+				pi.appendEntry(PERMISSIONS_ENTRY, allowance);
+			} else if (stored) allowance = stored;
+			else if (typeof flag === "string" && flag !== "") allowance = parsePermissions(flag, cwd, home);
+			else allowance = presetAllowance("default", cwd, home);
+		} catch (error) {
+			allowance = presetAllowance("read-only", cwd, home);
+			errors.push(error instanceof Error ? error.message : String(error));
+		}
+		const name = restricted !== undefined ? "deny" : pi.getFlag(REVIEWER_FLAG);
+		try {
+			reviewer = createReviewer(typeof name === "string" && name !== "" ? name : defaultReviewerName(ctx.mode), ctx.mode);
+		} catch (error) {
+			reviewer = createReviewer("deny", ctx.mode);
+			errors.push(error instanceof Error ? error.message : String(error));
+		}
+		configError = errors.length > 0 ? errors.join("; ") : undefined;
+		updateStatus();
+		if (configError) throw new Error(`sandbox: ${configError}. Calls beyond read-only are denied.`);
+	}
+
+	function updateStatus(): void {
+		if (!statusUI) return;
+		const effective = configError ? presetAllowance("read-only", cwd, home) : allowance;
+		const badge = renderAllowanceBadge(effective, statusUI.theme);
+		statusUI.setStatus("sandbox-permissions", configError ? `${badge} ${statusUI.theme.fg("warning", "(config error)")}` : badge);
+	}
+
+	function setAllowance(next: Allowance): void {
+		allowance = next;
+		pi.appendEntry(PERMISSIONS_ENTRY, allowance);
+		updateStatus();
+	}
+
+	function setMark(toolCallId: string, mark: ReviewMark): void {
+		marks.set(toolCallId, mark);
+		pi.appendEntry(MARK_ENTRY, { toolCallId, mark });
+	}
+
+	registerReviewMarks(pi, (toolCallId) => marks.get(toolCallId));
+	// After the marks resolver so its wrapper includes the shared command and access badge.
+	// Keep this here rather than in jobs: sandbox is optional there, including at runtime.
+	pi.registerToolRenderer((toolName, next) => {
+		const base = next();
+		return toolName === "job_start" ? { ...base, renderCall: renderSandboxCall } : base;
+	});
+
 	const provider: SandboxProvider = {
 		note: SANDBOX_NOTE,
 		parameter: sandboxReferenceSchema,
-		prepare: (request, cwd) => prepareSandbox(request as SandboxRequest | undefined, cwd),
+		prepare: (request, workdir) => prepareSandbox(request as SandboxRequest | undefined, workdir),
 		isReadOnly: (request) => isReadOnlyRequest(request as SandboxRequest | undefined),
+		restrict(permissions) {
+			allowance = parsePermissions(permissions, cwd, home);
+			restricted = permissions;
+			reviewer = createReviewer("deny", "print");
+			configError = undefined;
+			updateStatus();
+		},
 	};
 	pi.events.on(PROVIDER_CHANNEL, (reply) => {
 		if (typeof reply === "function") (reply as (provider: SandboxProvider) => void)(provider);
 	});
 
-	pi.registerFlag(CEILING_FLAG, {
-		type: "string",
-		description:
-			'Most access tool calls in this run may use: "read-only", or a JSON sandbox object such as \'{"writableLocations":["src"]}\'. Calls beyond it are blocked.',
+	pi.on("session_start", (_event, ctx) => {
+		warmSandbox();
+		restore(ctx, "start");
 	});
-	// Parsed once per cwd. An invalid value fails closed: every call that is not read-only is blocked.
-	let ceiling: { cwd: string; value: Ceiling | Error } | undefined;
-	pi.on("tool_call", (event, ctx) => {
-		const flag = pi.getFlag(CEILING_FLAG);
-		if (typeof flag !== "string" || flag === "") return undefined;
-		if (ceiling?.cwd !== ctx.cwd) {
-			let value: Ceiling | Error;
-			try {
-				value = parseCeiling(flag, ctx.cwd, homedir());
-			} catch (error) {
-				value = error instanceof Error ? error : new Error(String(error));
-			}
-			ceiling = { cwd: ctx.cwd, value };
-		}
-		const active = ceiling.value instanceof Error ? parseCeiling("read-only", ctx.cwd, homedir()) : ceiling.value;
-		const reason = ceilingViolation(active, {
+	pi.on("session_tree", (_event, ctx) => {
+		restore(ctx, "tree");
+	});
+
+	// One review at a time; each re-checks the permissions, which an earlier "always" may have widened.
+	let queue: Promise<unknown> = Promise.resolve();
+
+	pi.on("tool_call", async (event, ctx) => {
+		const call = {
 			toolName: event.toolName,
 			input: event.input as Record<string, unknown>,
 			cwd: ctx.cwd,
-			home: homedir(),
+			home,
 			scratchpad: process.env.PI_SCRATCHPAD_DIR,
+		};
+		const effective = () => (configError ? presetAllowance("read-only", ctx.cwd, home) : allowance);
+		if (assessCall(effective(), call).kind === "allow") return undefined;
+		const turn = queue.then(async () => {
+			const assessment = assessCall(effective(), call);
+			if (assessment.kind === "allow") return undefined;
+			if (assessment.kind === "invalid") return { block: true, reason: assessment.message };
+			const request: ReviewRequest = {
+				toolName: call.toolName,
+				input: call.input,
+				cwd: ctx.cwd,
+				subject: assessment.subject,
+				excess: assessment.excess,
+				always: assessment.always ? alwaysLabel(allowance, assessment.always) : undefined,
+			};
+			const active = configError ? createReviewer("deny", ctx.mode) : reviewer;
+			const verdict = await active.review(request, ctx);
+			if (verdict.kind === "approve" || verdict.kind === "always") {
+				if (verdict.kind === "always" && assessment.always) setAllowance(unionAllowance(allowance, assessment.always));
+				setMark(event.toolCallId, verdict.kind === "always" ? "always" : "approved");
+				return undefined;
+			}
+			if (active.name !== "deny") setMark(event.toolCallId, "denied");
+			const reason = denialReason(request, verdict, active.name, describeAllowance(effective()));
+			return { block: true, reason: configError ? `${reason} (${configError})` : reason };
 		});
-		if (!reason) return undefined;
-		return { block: true, reason: ceiling.value instanceof Error ? `${ceiling.value.message}. ${reason}` : reason };
+		queue = turn.catch(() => {});
+		return turn;
 	});
 
-	pi.on("session_start", () => {
-		warmSandbox();
+	pi.registerCommand("permissions", {
+		description: "Show or edit what runs without review in this session",
+		handler: async (args, ctx) => {
+			statusUI = ctx.mode === "tui" ? ctx.ui : undefined;
+			await permissionsCommand(args.trim(), ctx);
+		},
 	});
+
+	async function permissionsCommand(args: string, ctx: ExtensionCommandContext): Promise<void> {
+		if (restricted !== undefined) {
+			ctx.ui.notify(`Permissions are fixed in this session: ${describeAllowance(allowance)}`, "info");
+			return;
+		}
+		if (args !== "") {
+			try {
+				setAllowance(parsePermissions(args, ctx.cwd, home));
+				ctx.ui.notify(`Permissions: ${describeAllowance(allowance)}`, "info");
+			} catch (error) {
+				ctx.ui.notify(error instanceof Error ? error.message : String(error), "error");
+			}
+			return;
+		}
+		if (!ctx.hasUI) return;
+		await editPermissions(ctx);
+	}
+
+	async function editPermissions(ctx: ExtensionCommandContext): Promise<void> {
+		let selected = 0;
+		for (;;) {
+			const p = allowance.policy;
+			const onOff = (value: boolean) => (value ? "on" : "off");
+			const list = (paths: string[]) => (paths.length > 0 ? paths.join(", ") : "none");
+			const tools = allowance.tools === "all" ? "all" : list(allowance.tools);
+			const rows: Array<[string, () => Promise<void>]> = [
+				[`Writable locations: ${list(p.writable)}`, () => editPaths(ctx, "writable", "Writable location")],
+				[`Network: ${p.network}`, () => pickMode(ctx, "Network", NETWORK_MODES, (network) => ({ network }))],
+				[`Sockets: ${list(p.sockets)}`, () => editPaths(ctx, "sockets", "Socket or socket directory")],
+				[`Session and system bus: ${onOff(p.bus)}`, async () => setPolicy({ bus: !p.bus })],
+				[`Display: ${onOff(p.display)}`, async () => setPolicy({ display: !p.display })],
+				[`Processes: ${p.process}`, () => pickMode(ctx, "Processes", PROCESS_MODES, (process) => ({ process }))],
+				[`Devices: ${p.device}`, () => pickMode(ctx, "Devices", DEVICE_MODES, (device) => ({ device }))],
+				[`Other tools: ${tools}`, () => editTools(ctx)],
+				[`Skip sandbox (review off): ${onOff(p.skip)}`, async () => setPolicy({ skip: !p.skip })],
+			];
+			const choice = await selectPermissionRow(
+				ctx,
+				`Permissions: what runs without review (reviewer: ${reviewer.name})`,
+				rows.map(([label]) => label),
+				selected,
+			);
+			if (choice === undefined) return;
+			if (typeof choice === "string") {
+				setAllowance(presetAllowance(choice, ctx.cwd, home));
+				continue;
+			}
+			const row = rows[choice];
+			if (!row) return;
+			selected = choice;
+			await row[1]();
+		}
+	}
+
+	function setPolicy(change: Partial<Allowance["policy"]>): void {
+		setAllowance({ ...allowance, policy: { ...allowance.policy, ...change } });
+	}
+
+	async function pickMode<T extends string>(
+		ctx: ExtensionCommandContext,
+		title: string,
+		modes: readonly T[],
+		change: (mode: T) => Partial<Allowance["policy"]>,
+	): Promise<void> {
+		const choice = await ctx.ui.select(title, [...modes]);
+		if (choice) setPolicy(change(choice as T));
+	}
+
+	async function editPaths(ctx: ExtensionCommandContext, field: "writable" | "sockets", what: string): Promise<void> {
+		const paths = allowance.policy[field];
+		const add = `Add ${what.toLowerCase()}…`;
+		const choice = await ctx.ui.select(`${what}s (select one to remove it)`, [add, ...paths]);
+		if (!choice) return;
+		if (choice !== add) {
+			setPolicy({ [field]: paths.filter((path) => path !== choice) });
+			return;
+		}
+		const input = (await ctx.ui.input(what, "path; ~ and relative paths resolve against the cwd"))?.trim();
+		if (!input) return;
+		const path = canonicalPath(expandPath(input, ctx.cwd, home));
+		if (path === "/") {
+			ctx.ui.notify('"/" cannot be pre-approved; use "Skip sandbox" instead', "error");
+			return;
+		}
+		setPolicy({ [field]: [...new Set([...paths, path])] });
+	}
+
+	async function editTools(ctx: ExtensionCommandContext): Promise<void> {
+		const all = "Allow all other tools";
+		const none = "Review all other tools";
+		const current = allowance.tools === "all" ? [] : allowance.tools;
+		const choice = await ctx.ui.select("Other tools (select one to remove it)", [all, none, ...current]);
+		if (!choice) return;
+		const tools = choice === all ? "all" : choice === none ? [] : current.filter((tool) => tool !== choice);
+		setAllowance({ ...allowance, tools });
+	}
+}
+
+type PermissionChoice = number | (typeof PERMISSION_PRESETS)[number];
+
+/** The built-in select dialog always starts at row zero; keep the TUI cursor by row, not label. */
+async function selectPermissionRow(
+	ctx: ExtensionCommandContext,
+	title: string,
+	labels: string[],
+	selected: number,
+): Promise<PermissionChoice | undefined> {
+	if (ctx.mode !== "tui") {
+		const options = [...labels, ...PERMISSION_PRESETS.map((preset) => `Reset to ${preset}`)];
+		const choice = await ctx.ui.select(title, options);
+		if (choice === undefined) return undefined;
+		const index = options.indexOf(choice);
+		return index < labels.length ? index : PERMISSION_PRESETS[index - labels.length];
+	}
+	return ctx.ui.custom<PermissionChoice | undefined>((tui, theme, kb, done) => {
+		const container = new Container();
+		const border = () => new DynamicBorder((text) => theme.fg("border", text));
+		container.addChild(border());
+		container.addChild(new Spacer(1));
+		container.addChild(new Text(theme.fg("accent", theme.bold(title)), 1, 0));
+		container.addChild(new Spacer(1));
+		const list = new SelectList(labels.map((label, index) => ({ label, value: String(index) })), labels.length, {
+			selectedPrefix: (text) => theme.fg("accent", text),
+			selectedText: (text) => theme.fg("accent", text),
+			description: (text) => theme.fg("muted", text),
+			scrollInfo: (text) => theme.fg("dim", text),
+			noMatch: (text) => theme.fg("warning", text),
+		});
+		list.setSelectedIndex(selected);
+		list.onSelect = (item) => done(Number(item.value));
+		list.onCancel = () => done(undefined);
+		container.addChild(list);
+		container.addChild(new Spacer(1));
+		const hints = `↑↓ navigate  ${kb.getKeys("tui.select.confirm").join("/")} select  ${kb.getKeys("tui.select.cancel").join("/")} cancel  d reset to default  r reset to read-only`;
+		container.addChild(new Text(theme.fg("dim", hints), 1, 0));
+		container.addChild(new Spacer(1));
+		container.addChild(border());
+		return {
+			render: (width) => container.render(width),
+			invalidate: () => container.invalidate(),
+			handleInput(data) {
+				if (data === "d" || data === "r") {
+					done(data === "d" ? "default" : "read-only");
+					return;
+				}
+				list.handleInput(data === "j" ? "\x1b[B" : data === "k" ? "\x1b[A" : data === "\n" ? "\r" : data);
+				tui.requestRender();
+			},
+		};
+	});
+}
+
+/** What "always" adds beyond `current`, for the modal. */
+function alwaysLabel(current: Allowance, grant: Allowance): string {
+	const added = excessGrants(grant.policy, current.policy);
+	if (grant.tools === "all" && current.tools !== "all") added.push("every other tool");
+	else if (Array.isArray(grant.tools) && current.tools !== "all") {
+		const tools = grant.tools.filter((tool) => !(current.tools as string[]).includes(tool));
+		if (tools.length > 0) added.push(`tools ${tools.join(", ")}`);
+	}
+	return added.join("; ") || "nothing new";
 }

@@ -4,8 +4,8 @@ Runs the agent's `bash` (and `job_start`, and `/btw`'s bash) inside bubblewrap p
 with the access each command needs declared in the tool call. The declaration is rendered under
 the command, so a reviewer sees what every call asked for, and plain read-only calls stay terse.
 
-Stage 1 grants whatever is declared. Review gating (`/permission`, pre-approved access, the
-approval modal) is planned on top of the same declaration.
+Calls that need more than the session's permissions go to a reviewer: a modal in the TUI, a
+denial in headless runs. See [Permissions and review](#permissions-and-review).
 
 ## Declaration
 
@@ -15,7 +15,7 @@ run time either way. Omitted, a command runs read-only:
 
 | Field | Default | Grant |
 |---|---|---|
-| `writableLocations` | none | Paths made writable; missing ones are created as directories. `/` is refused. |
+| `writableLocations` | none | Writable directories or existing files. File grants allow in-place writes; creation, deletion, or replacement needs the parent directory. Missing paths are created as directories. `/` is refused. |
 | `networkAccess` | `disable` | `fetch-only`: HTTP(S) via a per-call proxy, local/private destinations refused. `full`: host network. |
 | `socketAccess` | none | Host Unix sockets (or directories of them) the command may connect to. |
 | `sessionBusAccess` | `false` | Session and system D-Bus. |
@@ -61,25 +61,52 @@ signalling, full devices, unsandboxed) are highlighted as warnings.
 Failure recovery is surfaced through results: a failing command whose output shows a read-only
 filesystem, missing network, display, or D-Bus gets a one-line hint naming the field to declare.
 
-## Ceiling for headless runs
+## Permissions and review
 
-`--sandbox-ceiling <value>` sets the most access any tool call in the run may use. Calls beyond it
-are blocked with the reason, and nothing asks, so it suits subagents (`pi -p`). The value is
-`read-only`, or a JSON sandbox object whose paths resolve against the run's cwd, such as
-`'{"writableLocations":["src"],"networkAccess":"fetch-only"}'`.
+The permissions are what runs without review; the reviewer decides the rest. Pre-approval only
+skips review: a call still gets exactly what it declares, and the agent's prompt does not mention
+either.
 
-- `bash` and `job_start`: the `sandbox` declaration must fit inside the ceiling.
-- `write` and `edit`: the path must be inside the ceiling's `writableLocations` or the scratchpad,
-  and not under `.git/hooks` or `.git/config`.
-- `read`, `grep`, `find`, `ls`, `job_watch`, `job_stop` run; every other tool is blocked.
-- An invalid value blocks everything except those read-only tools.
+| Setting | Values | Default |
+|---|---|---|
+| `--permissions`, `/permissions` | `default`, `read-only`, or a JSON sandbox object plus optional `"tools": [...]` | `default`: the git work tree is writable, network `fetch-only`, other tools run |
+| `--reviewer` | `deny`; `manual` (TUI only). `auto` and `auto-manual` are reserved | `manual` in the TUI, `deny` otherwise |
 
-The flag adds no prompt text, so a fork child keeps the parent's prompt cache.
+A call needs review when:
+
+- `bash` / `job_start`: its `sandbox` declaration exceeds the permissions.
+- `write` / `edit`: the path is outside the writable locations and the scratchpad, or is a git
+  control file (`.git/hooks`, `.git/config`), which is never pre-approved.
+- Any other tool except `read`, `grep`, `find`, `ls`, `job_watch`, `job_stop`: it is not in the
+  permitted tools.
+
+The footer shows the current session permissions with the same access badge as `bash`, plus any
+allowed other tools. It updates on permission changes and session restore; call badges still show
+each command's own declaration.
+
+The manual reviewer's modal shows the command, edit diff, or written file, and what it needs beyond
+the permissions. Keys: Enter/`y` yes, `a` always (adds those grants to the session's permissions),
+Esc/`n` no, `f` no with a feedback note for the agent. Keys are ignored for 300 ms after it opens.
+Reviewed calls get a mark under the call: `✓ approved`, `✓ always`, `✗ denied`.
+
+`/permissions` edits the permissions, or sets them from a value (`/permissions read-only`). Edits,
+"always" approvals, and marks are session entries: they survive `/reload` and resume, and fork
+children inherit them. `--permissions` replaces the stored permissions at startup. There is no
+global default.
+
+A `job_start` that declares `dangerouslySkipSandbox` and whose command is exactly one
+`[cd DIR &&] pi -p ... --permissions VALUE ...` with the default (`deny`) reviewer is reviewed as
+`VALUE`: the child pi runs unsandboxed but bounds its own calls by `VALUE`. Anything else in the
+command (other shell syntax, unknown pi flags, a `$VAR` where pi reads access or a prompt) makes it
+an ordinary `dangerouslySkipSandbox` review.
+
+Invalid `--permissions` or `--reviewer` values are reported at startup; calls beyond read-only are
+then denied with the error in the reason.
 
 ## Limits
 
 - Reading is not restricted: anything the user can read (`~/.ssh`, credentials) is readable, and
-  `fetch-only` can still send it out in a URL. Hidden paths are a planned stage-2 control.
+  `fetch-only` can still send it out in a URL. Hiding paths is not implemented.
 - Sandboxes do not nest: Landlock forbids the mounts bwrap needs. A pi started from a sandboxed
   command fails with a clear error; subagents (`pi -p` via `job_start`) declare
   `dangerouslySkipSandbox` and sandbox their own commands.
@@ -90,14 +117,16 @@ The flag adds no prompt text, so a fork child keeps the parent's prompt cache.
 jobs and btw work without this extension, so they do not import it at run time. They find it on
 the `pi.events` channel `archibate.sandbox:get`, an interface private to these extensions (pi has
 no sandbox API): they emit a reply callback, and this extension answers synchronously with a
-`SandboxProvider` (`sandbox.ts`) holding `prepare`, `isReadOnly`, the reference `parameter` schema,
-and the description `note`. pi.events is per runtime, so after a `/reload` without this extension
+`SandboxProvider` (`sandbox.ts`) holding `prepare`, `isReadOnly`, `restrict`, the reference
+`parameter` schema, and the description `note`. pi.events is per runtime, so after a `/reload` without this extension
 nothing answers.
 
 - jobs declares `job_start` at load, then redeclares it with the `sandbox` parameter at
-  `session_start` if the provider answers.
+  `session_start` if the provider answers. The sandbox extension applies the same command and
+  access-badge renderer as `bash`; job status/results stay unchanged.
 - btw's side session reloads the main session's extensions, so its `bash` is the same declaration
-  (prompt-cache prefix). It allows only `isReadOnly` calls, and blocks bash when nothing answers.
+  (prompt-cache prefix). It calls `restrict("read-only")`, which fixes that runtime's permissions
+  with the deny reviewer, and blocks bash when nothing answers.
 
 ## Requirements
 
@@ -110,7 +139,11 @@ Each check fails closed with an explanatory error. Overhead is about 15 ms per c
 | File | Role |
 |---|---|
 | `policy.ts` | Schema, defaults, path resolution, badge text (pure). |
-| `ceiling.ts` | `--sandbox-ceiling` parsing and per-call checks (pure). |
+| `permissions.ts` | Permissions: presets, `--permissions` parsing, per-call assessment (pure). |
+| `subagent.ts` | Recognizes a bounded `pi -p --permissions` launch (pure). |
+| `review.ts` | Reviewer interface, `deny` and `manual` reviewers, denial reasons. |
+| `modal.ts` | The manual reviewer's modal. |
+| `marks.ts` | Review marks under reviewed calls. |
 | `bwrap.ts` | Policy + host facts → bwrap arguments, landlock-exec entry, environment (pure). |
 | `host.ts` | Host facts, helper build. |
 | `landlock-exec.c` | Applies the Landlock IPC rules, then execs the shell. |

@@ -12,7 +12,8 @@ while the main agent is still streaming.
 ## Read-only sandbox
 
 `read`, `grep`, `find`, and `ls` run normally. `bash` needs the
-[sandbox](../sandbox) extension: calls that declare any access beyond its
+[sandbox](../sandbox) extension, whose permissions are fixed to read-only with
+the deny reviewer in the side session: calls that declare any access beyond its
 read-only default are blocked; set `BTW_SANDBOX_NET=1` to also allow declared
 network access. Without the sandbox extension, `bash` is blocked. All other
 mutating tools are blocked; every tool stays declared, so the prompt cache is

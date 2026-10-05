@@ -8,7 +8,7 @@
 
 import { execFile } from "node:child_process";
 import { createHash } from "node:crypto";
-import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, statSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, isAbsolute, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -98,11 +98,29 @@ function displaySockets(runtime: string | undefined): string[] {
 	return sockets;
 }
 
-export async function gatherHostFacts(proxySocket?: string): Promise<HostFacts> {
+/** Missing children (including children of a regular file) need no protection mount. */
+export function gitControlPaths(writable: readonly string[]): string[] {
+	const paths: string[] = [];
+	for (const root of writable) {
+		for (const path of [join(root, ".git", "hooks"), join(root, ".git", "config")]) {
+			try {
+				statSync(path);
+				paths.push(path);
+			} catch (error) {
+				const code = (error as NodeJS.ErrnoException).code;
+				if (code !== "ENOENT" && code !== "ENOTDIR") throw error;
+			}
+		}
+	}
+	return paths;
+}
+
+export async function gatherHostFacts(writable: readonly string[], proxySocket?: string): Promise<HostFacts> {
 	const runtime = runtimeDir();
 	const scratchpad = process.env.PI_SCRATCHPAD_DIR;
 	return {
 		landlockExec: await landlockExec(),
+		gitControlPaths: gitControlPaths(writable),
 		scratchpad: scratchpad && isAbsolute(scratchpad) && existsSync(scratchpad) ? scratchpad : undefined,
 		resolverDir: existsSync("/run/systemd/resolve") ? "/run/systemd/resolve" : undefined,
 		busSockets: [...(runtime ? [join(runtime, "bus")] : []), "/run/dbus/system_bus_socket"],

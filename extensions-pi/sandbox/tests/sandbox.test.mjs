@@ -80,6 +80,54 @@ test("real sandbox", { skip: !hasBwrap }, async (t) => {
 		assert.equal(readFileSync(join(repo, ".git", "config"), "utf8"), "[core]\n");
 	});
 
+	await t.test("file-only grants allow in-place writes but not siblings or deletion", async () => {
+		const dir = join(base, "file-only");
+		mkdirSync(dir);
+		const file = join(dir, "target");
+		const sibling = join(dir, "sibling");
+		writeFileSync(file, "before\n");
+		writeFileSync(sibling, "untouched\n");
+		const { code, out } = await run(
+			{ writableLocations: [file], processAccess: "disable" },
+			`echo after > ${file} && echo file-ok; echo changed > ${sibling} 2>&1; rm -- ${file} 2>&1`,
+		);
+		assert.equal(code, 1, "rm needs parent-directory access");
+		assert.match(out, /file-ok/);
+		assert.match(out, /Read-only file system/);
+		assert.doesNotMatch(out, /Can't find source path/);
+		assert.equal(readFileSync(file, "utf8"), "after\n");
+		assert.equal(readFileSync(sibling, "utf8"), "untouched\n", "file grant never broadens to its parent");
+
+		const removed = await run({ writableLocations: [dir] }, `rm -- ${file}`);
+		assert.equal(removed.code, 0);
+		assert.equal(existsSync(file), false);
+		assert.equal(readFileSync(sibling, "utf8"), "untouched\n");
+	});
+
+	await t.test("a vanished git protection source fails closed at spawn", async () => {
+		const repo = join(base, "vanished-git");
+		mkdirSync(join(repo, ".git"), { recursive: true });
+		const config = join(repo, ".git", "config");
+		writeFileSync(config, "[core]\n");
+		const sandbox = await prepareSandbox({ writableLocations: [repo] }, base);
+		rmSync(config);
+		let out = "";
+		try {
+			const { exitCode } = await execShell(
+				sandbox.shell({ shell: "/usr/bin/bash", args: ["-c"] }),
+				`echo changed > ${config}; echo command-ran`,
+				base,
+				{ onData: (data) => (out += data), env: sandbox.env(process.env), timeout: 5, reapGroup: true },
+			);
+			assert.notEqual(exitCode, 0);
+			assert.match(out, /Can't find source path/);
+			assert.doesNotMatch(out, /command-ran/);
+			assert.equal(existsSync(config), false);
+		} finally {
+			await sandbox.dispose();
+		}
+	});
+
 	await t.test("host Unix sockets are unreachable unless granted", async (t) => {
 		const dir = join(base, "sock");
 		mkdirSync(dir);
