@@ -15,6 +15,8 @@ export interface MenuFile {
 	path: string;
 	added: number;
 	removed: number;
+	/** The checkpoint has no pre-image for this file, so it cannot be restored. */
+	skipped?: boolean;
 }
 
 export interface MenuEntry {
@@ -43,7 +45,10 @@ function renderEntry(entry: MenuEntry, theme: Theme, width: number, lib: MenuLib
 	const lines = [`${marker}${lib.truncateToWidth(head, contentWidth, "…")}`];
 	const shown = entry.files.slice(0, MAX_FILES_PER_ENTRY);
 	for (const file of shown) {
-		const body = `${theme.fg("muted", file.path)} ${theme.fg("toolDiffAdded", `+${file.added}`)} ${theme.fg("toolDiffRemoved", `-${file.removed}`)}`;
+		const change = file.skipped
+			? theme.fg("warning", "not captured")
+			: `${theme.fg("toolDiffAdded", `+${file.added}`)} ${theme.fg("toolDiffRemoved", `-${file.removed}`)}`;
+		const body = `${theme.fg("muted", file.path)} ${change}`;
 		lines.push(`${indent}${lib.truncateToWidth(body, contentWidth, "…")}`);
 	}
 	if (entry.files.length > shown.length) {

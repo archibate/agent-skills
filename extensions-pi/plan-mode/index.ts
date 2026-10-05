@@ -15,7 +15,8 @@
  * one-shot [PLAN MODE OFF] notice on the next turn, so the model gets a positive
  * "you may now mutate" cue instead of only losing the restriction.
  *
- * Toggle: /plan, Ctrl+Alt+P, or start with --plan. Status shows "⏸ plan".
+ * Toggle: /plan, Ctrl+Alt+P, or start with --plan. `/plan <prompt>` enables plan
+ * mode and sends the prompt in one step. Status shows "⏸ plan".
  * This is guidance, not enforcement - the model can still ignore it.
  */
 
@@ -37,18 +38,33 @@ export default function (pi: ExtensionAPI): void {
 		ctx.ui.setStatus("plan-mode", enabled ? ctx.ui.theme.fg("warning", "⏸ plan") : undefined);
 	}
 
-	function toggle(ctx: ExtensionContext): void {
-		enabled = !enabled;
+	function setEnabled(ctx: ExtensionContext, value: boolean): void {
+		if (enabled === value) return;
+		enabled = value;
 		if (!enabled) exitPending = true;
 		updateStatus(ctx);
 		ctx.ui.notify(enabled ? "Plan mode on — planning only, no edits." : "Plan mode off — changes allowed.");
 	}
 
+	function toggle(ctx: ExtensionContext): void {
+		setEnabled(ctx, !enabled);
+	}
+
 	pi.registerFlag("plan", { description: "Start in plan mode (read-only planning hint)", type: "boolean", default: false });
 
 	pi.registerCommand("plan", {
-		description: "Toggle plan mode (read-only planning hint)",
-		handler: async (_args, ctx) => toggle(ctx),
+		description: "Toggle plan mode; with a prompt, enable and send it",
+		handler: async (args, ctx) => {
+			const prompt = args.trim();
+			if (!prompt) {
+				toggle(ctx);
+				return;
+			}
+			// `/plan <prompt>` turns plan mode on (idempotent, never off) and
+			// feeds the prompt to the agent as if typed.
+			setEnabled(ctx, true);
+			pi.sendUserMessage(prompt, ctx.isIdle() ? {} : { deliverAs: "followUp" });
+		},
 	});
 
 	pi.registerShortcut(Key.ctrlAlt("p"), {

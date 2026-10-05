@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -148,6 +148,26 @@ function commandContext(env, sessionManager, action) {
 	};
 }
 
+/** Commits the settle boundary's checkpoint draft the way the pi runtime does. */
+async function appendDraft(pi, sessionManager, ctx, id) {
+	const boundary = await pi.emit("agent_before_settle", { type: "agent_before_settle" }, ctx);
+	sessionManager.append({
+		...boundary.entries[0],
+		id,
+		parentId: sessionManager.getLeafId(),
+		timestamp: new Date().toISOString(),
+	});
+	await pi.emit("agent_settled", { type: "agent_settled" }, ctx);
+}
+
+function writeConfig(config) {
+	writeFileSync(join(process.env.PI_CODING_AGENT_DIR, "rewind.json"), JSON.stringify(config));
+}
+
+function blobDir(env) {
+	return join(process.env.PI_CODING_AGENT_DIR, "rewind", "session-1", "blobs");
+}
+
 test("captures a per-prompt checkpoint and restores code and conversation", async (t) => {
 	const env = freshEnv(t);
 	const { sessionManager, commands } = await captureOnePrompt(t, env);
@@ -259,6 +279,99 @@ test("checkpoints survive a reload and are reconstructed from session entries", 
 	assert.equal(readFileSync(join(env.cwd, "a.txt"), "utf8"), "initial");
 	assert.equal(existsSync(join(env.cwd, "b.txt")), false);
 	assert.ok(calls.notifications.some((text) => text.startsWith("Code rewind:")));
+});
+
+test("oversized files are recorded as uncaptured instead of silently skipped", async (t) => {
+	const env = freshEnv(t);
+	writeConfig({ maxFileBytes: 4 });
+	mkdirSync(env.cwd, { recursive: true });
+	const sessionManager = createSessionManager();
+	sessionManager.append(userEntry("u1"));
+	const ctx = { hasUI: false, cwd: env.cwd, sessionManager };
+	const pi = createPiMock();
+	rewindExtension(pi);
+
+	await pi.emit("session_start", { type: "session_start" }, ctx);
+	await pi.emit("before_agent_start", { type: "before_agent_start" }, ctx);
+	writeFileSync(join(env.cwd, "big.txt"), "12345");
+	await pi.emit("tool_call", { toolName: "edit", input: { path: "big.txt" } }, ctx);
+	writeFileSync(join(env.cwd, "big.txt"), "changed");
+	await appendDraft(pi, sessionManager, ctx, "cp1");
+
+	const { ctx: commandCtx, calls } = commandContext(env, sessionManager, "Restore code only");
+	await pi.commands.get("rewind").handler("", commandCtx);
+
+	assert.match(calls.selections[0].options[0], /big\.txt/);
+	assert.equal(readFileSync(join(env.cwd, "big.txt"), "utf8"), "changed");
+	assert.ok(calls.notifications.some((text) => /1 not captured/.test(text)), calls.notifications.join(" | "));
+});
+
+test("the byte budget evicts the oldest checkpoints and frees their blobs", async (t) => {
+	const env = freshEnv(t);
+	writeConfig({ maxBytes: 10, maxFileBytes: 1000 });
+	mkdirSync(env.cwd, { recursive: true });
+	const sessionManager = createSessionManager();
+	const pi = createPiMock();
+	rewindExtension(pi);
+	const ctx = { hasUI: false, cwd: env.cwd, sessionManager };
+	await pi.emit("session_start", { type: "session_start" }, ctx);
+
+	// Prompt 1 stores an 8-byte pre-image.
+	sessionManager.append(userEntry("u1"));
+	await pi.emit("before_agent_start", { type: "before_agent_start" }, ctx);
+	writeFileSync(join(env.cwd, "a.txt"), "11111111");
+	await pi.emit("tool_call", { toolName: "edit", input: { path: "a.txt" } }, ctx);
+	writeFileSync(join(env.cwd, "a.txt"), "222222222");
+	await appendDraft(pi, sessionManager, ctx, "cp1");
+
+	// Prompt 2 stores 9 more bytes, so the session goes over maxBytes.
+	sessionManager.append(userEntry("u2", sessionManager.getLeafId()));
+	await pi.emit("before_agent_start", { type: "before_agent_start" }, ctx);
+	await pi.emit("tool_call", { toolName: "edit", input: { path: "a.txt" } }, ctx);
+	writeFileSync(join(env.cwd, "a.txt"), "333333333");
+	await appendDraft(pi, sessionManager, ctx, "cp2");
+
+	// The evicted checkpoint's blob is gone, the surviving one remains.
+	assert.deepEqual(readdirSync(blobDir(env)).length, 1);
+
+	const { ctx: commandCtx, calls } = commandContext(env, sessionManager, "Restore code only");
+	await pi.commands.get("rewind").handler("", commandCtx);
+
+	assert.equal(calls.selections[0].options.length, 1);
+	assert.equal(readFileSync(join(env.cwd, "a.txt"), "utf8"), "222222222");
+});
+
+test("session start collects blobs no checkpoint references", async (t) => {
+	const env = freshEnv(t);
+	mkdirSync(env.cwd, { recursive: true });
+	const sessionManager = createSessionManager();
+	sessionManager.append(userEntry("u1"));
+	const ctx = { hasUI: false, cwd: env.cwd, sessionManager };
+	const pi = createPiMock();
+	rewindExtension(pi);
+
+	await pi.emit("session_start", { type: "session_start" }, ctx);
+	await pi.emit("before_agent_start", { type: "before_agent_start" }, ctx);
+	writeFileSync(join(env.cwd, "a.txt"), "initial");
+	await pi.emit("tool_call", { toolName: "edit", input: { path: "a.txt" } }, ctx);
+	writeFileSync(join(env.cwd, "a.txt"), "modified");
+	await appendDraft(pi, sessionManager, ctx, "cp1");
+
+	// A blob left behind by a run that crashed before committing its checkpoint.
+	writeFileSync(join(blobDir(env), "f".repeat(64)), "orphan");
+
+	const reloaded = createPiMock();
+	rewindExtension(reloaded);
+	await reloaded.emit("session_start", { type: "session_start" }, ctx);
+
+	const remaining = readdirSync(blobDir(env));
+	assert.equal(remaining.includes("f".repeat(64)), false);
+	assert.equal(remaining.length, 1);
+
+	// The referenced blob survived, so the checkpoint still restores.
+	const { ctx: commandCtx } = commandContext(env, sessionManager, "Restore code only");
+	await reloaded.commands.get("rewind").handler("", commandCtx);
+	assert.equal(readFileSync(join(env.cwd, "a.txt"), "utf8"), "initial");
 });
 
 // Optional real-runtime check. Set PI_SDK_PATH to the release's dist/index.js to run it.

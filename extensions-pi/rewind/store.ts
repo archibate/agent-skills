@@ -18,6 +18,7 @@ import {
 	readdirSync,
 	renameSync,
 	rmSync,
+	statSync,
 	writeFileSync,
 } from "node:fs";
 import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
@@ -29,6 +30,8 @@ export interface SnapshotFile {
 	hash: string;
 	/** False when the captured tool call created the file. */
 	existed: boolean;
+	/** Set when no pre-image could be stored, so this file cannot be restored. */
+	skipped?: "too-large" | "over-budget";
 }
 
 export interface Checkpoint {
@@ -101,6 +104,15 @@ export class BlobStore {
 		}
 	}
 
+	/** Stored bytes, or 0 when the blob is absent. Used for the session byte budget. */
+	sizeOf(hash: string): number {
+		try {
+			return statSync(this.blobPath(hash)).size;
+		} catch {
+			return 0;
+		}
+	}
+
 	/** Delete every blob not in `referenced`. Returns the number of blobs removed. */
 	gc(referenced: Set<string>): number {
 		let removed = 0;
@@ -123,6 +135,9 @@ export class BlobStore {
  * Every file touched by the target prompt or a later one is rolled back to the
  * pre-image of its earliest such call. Files never touched after the target are
  * left alone, because their current content already matches the target state.
+ *
+ * Files that were never captured (oversized or over budget) stay in the plan so
+ * that the restore can report them instead of claiming a complete rollback.
  */
 export function planRestore(checkpoints: Checkpoint[], target: Checkpoint): Map<string, SnapshotFile> {
 	const plan = new Map<string, SnapshotFile>();
@@ -141,15 +156,21 @@ export interface RestoreReport {
 	restored: string[];
 	deleted: string[];
 	skipped: string[];
+	/** Files in range that have no pre-image, so rewinding them was impossible. */
+	unrestorable: string[];
 	missing: string[];
 }
 export function applyRestore(cwd: string, plan: Map<string, SnapshotFile>, blobs: BlobStore): RestoreReport {
-	const report: RestoreReport = { restored: [], deleted: [], skipped: [], missing: [] };
+	const report: RestoreReport = { restored: [], deleted: [], skipped: [], unrestorable: [], missing: [] };
 	const root = resolve(cwd);
 	for (const [relPath, file] of plan) {
 		const absolute = resolve(root, relPath);
 		if (absolute !== root && !absolute.startsWith(root + sep)) {
 			report.skipped.push(relPath);
+			continue;
+		}
+		if (file.skipped) {
+			report.unrestorable.push(relPath);
 			continue;
 		}
 		if (file.existed) {
@@ -192,6 +213,8 @@ export interface FileChangeStat {
 	path: string;
 	added: number;
 	removed: number;
+	/** True when the checkpoint has no pre-image for this file, so the counts are unknown. */
+	skipped?: boolean;
 }
 
 export interface CheckpointStat {
@@ -314,6 +337,12 @@ export function summarizeCheckpoints(
 		let totalAdded = 0;
 		let totalRemoved = 0;
 		for (const file of checkpoint.files) {
+			if (file.skipped) {
+				// No pre-image was stored. The counts are unknown, and the file cannot serve as
+				// the next checkpoint's post-image; earlier checkpoints fall back to disk content.
+				files.push({ path: file.path, added: 0, removed: 0, skipped: true });
+				continue;
+			}
 			const before = file.existed ? blobText(file.hash) : undefined;
 			const afterCapture = next.get(file.path);
 			const after = afterCapture

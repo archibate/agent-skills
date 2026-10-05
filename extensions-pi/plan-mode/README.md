@@ -13,6 +13,7 @@ still ignore it.
 
 ```text
 /plan              toggle plan mode
+/plan <prompt>     enable plan mode and send <prompt> to the agent
 Ctrl+Alt+P         toggle plan mode
 pi --plan          start in plan mode
 ```

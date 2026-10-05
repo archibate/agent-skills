@@ -45,6 +45,8 @@ test("BlobStore deduplicates content and garbage-collects unreferenced blobs", (
 	assert.notEqual(first, other);
 	assert.deepEqual(blobs.get(first).toString(), "hello");
 	assert.equal(blobs.get("0".repeat(64)), undefined);
+	assert.equal(blobs.sizeOf(first), 5);
+	assert.equal(blobs.sizeOf("0".repeat(64)), 0);
 
 	assert.equal(blobs.gc(new Set([first])), 1);
 	assert.deepEqual(blobs.hashes().sort(), [first]);
@@ -133,6 +135,41 @@ test("applyRestore recreates a file deleted after the checkpoint", (t) => {
 	const report = applyRestore(cwd, plan, blobs);
 	assert.deepEqual(report.restored, ["nested/file.txt"]);
 	assert.equal(readFileSync(join(cwd, "nested/file.txt"), "utf8"), "restored");
+});
+
+test("applyRestore reports files whose pre-image was never captured", (t) => {
+	const cwd = tempDir(t);
+	const blobs = new BlobStore(join(cwd, ".store"));
+	writeFileSync(join(cwd, "big.bin"), "current");
+
+	const plan = new Map([["big.bin", { path: "big.bin", hash: "", existed: true, skipped: "too-large" }]]);
+	const report = applyRestore(cwd, plan, blobs);
+
+	assert.deepEqual(report.unrestorable, ["big.bin"]);
+	assert.deepEqual(report.restored, []);
+	assert.equal(readFileSync(join(cwd, "big.bin"), "utf8"), "current");
+});
+
+test("summarizeCheckpoints marks uncaptured files without inventing counts", (t) => {
+	const cwd = tempDir(t);
+	const blobs = new BlobStore(join(cwd, ".store"));
+	const checkpoint = {
+		entryId: "u1",
+		seq: 1,
+		timestamp: 1,
+		files: [
+			{ path: "a.txt", hash: blobs.put(Buffer.from("one\n")), existed: true },
+			{ path: "big.bin", hash: "", existed: true, skipped: "too-large" },
+		],
+	};
+	writeFileSync(join(cwd, "a.txt"), "one\ntwo\n");
+	writeFileSync(join(cwd, "big.bin"), "whatever");
+
+	const stats = summarizeCheckpoints(cwd, [checkpoint], blobs);
+	assert.deepEqual(stats.get(checkpoint).files, [
+		{ path: "a.txt", added: 1, removed: 0 },
+		{ path: "big.bin", added: 0, removed: 0, skipped: true },
+	]);
 });
 
 test("countChangedLines counts added and removed lines", () => {

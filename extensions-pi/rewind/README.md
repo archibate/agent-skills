@@ -33,6 +33,10 @@ Code restore is chronological: every file pi edited at or after the chosen
 prompt is rolled back to the pre-image of its first such edit. Files pi did not
 edit after that prompt are left alone.
 
+A file whose pre-image was not captured (larger than `maxFileBytes`, or past
+`maxBytes`) is left alone and reported as `not captured` in the picker and in
+the restore notice, so a partial rollback never looks complete.
+
 ## How it works
 
 - `before_agent_start` opens a checkpoint. At `agent_before_settle` it is
@@ -43,12 +47,16 @@ edit after that prompt are left alone.
 - Before each `edit`/`write` tool call, the file's current bytes are stored
   content-addressed under `<agent-dir>/rewind/<session-id>/blobs/`. The same
   content is stored once no matter how many checkpoints reference it.
-- The newest 100 checkpoints are kept; older ones and their unreferenced blobs
-  are pruned. Concurrent sessions never touch each other's blob directory, so
-  pruning is safe.
+- Checkpoints are pruned to the newest `maxCheckpoints` and `maxBytes` worth of
+  pre-images; a single prompt is itself capped at `maxBytes`. Pruning deletes
+  the blobs no surviving checkpoint references, and `session_start` runs the
+  same sweep to reclaim blobs left by a run that crashed before committing its
+  checkpoint. Concurrent sessions never touch each other's blob directory (this
+  assumes one live pi process per session id), so pruning is safe.
 
 Checkpoints only hold pre-images of files pi was about to change, so disk use
-tracks edited files, not repository size.
+tracks edited files, not repository size: bounded by `maxBytes` (64 MiB default)
+per session.
 
 ## Limits
 
@@ -68,10 +76,16 @@ Same scope as Claude Code's checkpoints:
 Optional `<agent-dir>/rewind.json`:
 
 ```json
-{ "enabled": true, "maxCheckpoints": 100 }
+{ "enabled": true, "maxCheckpoints": 100, "maxBytes": 67108864, "maxFileBytes": 8388608 }
 ```
 
-`enabled: false` turns capture off. After editing the file, run `/reload`.
+- `enabled: false` turns capture off.
+- `maxCheckpoints` (100) caps how many prompts are rewindable.
+- `maxBytes` (64 MiB) caps stored pre-image bytes per session and per prompt;
+  the oldest checkpoints are evicted first.
+- `maxFileBytes` (8 MiB) skips files too large to snapshot.
+
+After editing the file, run `/reload`.
 
 ## Verification
 

@@ -13,7 +13,7 @@
  * the user's editor, or tools other than `edit`/`write` are not captured.
  */
 
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync, statSync } from "node:fs";
 import { homedir } from "node:os";
 import { join, resolve } from "node:path";
 import type { ExtensionAPI, ExtensionCommandContext, ExtensionContext } from "@earendil-works/pi-coding-agent";
@@ -33,6 +33,10 @@ import { type MenuEntry, pickCheckpoint } from "./menu.ts";
 
 const REWIND_ENTRY_TYPE = "rewind";
 const DEFAULT_MAX_CHECKPOINTS = 100;
+/** Pre-image bytes kept per session. */
+const DEFAULT_MAX_BYTES = 64 * 1024 * 1024;
+/** Files larger than this are not captured: a single huge file must not blow the budget. */
+const DEFAULT_MAX_FILE_BYTES = 8 * 1024 * 1024;
 // Matches pi's own session-id assertion: alphanumerics plus '-', '_', '.', so the id is one path component.
 const VALID_SESSION_ID = /^[A-Za-z0-9](?:[A-Za-z0-9._-]*[A-Za-z0-9])?$/;
 
@@ -49,10 +53,14 @@ const PROMPT_PREVIEW_MAX = 60;
 interface Config {
 	enabled: boolean;
 	maxCheckpoints: number;
+	maxBytes: number;
+	maxFileBytes: number;
 }
 
 interface OpenRun {
 	files: Map<string, SnapshotFile>;
+	/** Bytes stored for this run, so one prompt cannot exceed maxBytes on its own. */
+	bytes: number;
 }
 
 /** Pi's agent directory, matching getAgentDir() from the package without a runtime import. */
@@ -62,18 +70,26 @@ function agentDir(): string {
 	return join(homedir(), ".pi", "agent");
 }
 
+function positiveInt(value: unknown, fallback: number): number {
+	return typeof value === "number" && Number.isFinite(value) && value > 0 ? Math.floor(value) : fallback;
+}
+
 function loadConfig(): Config {
 	try {
 		const raw = JSON.parse(readFileSync(join(agentDir(), "rewind.json"), "utf8")) as Partial<Config>;
 		return {
 			enabled: raw.enabled !== false,
-			maxCheckpoints:
-				typeof raw.maxCheckpoints === "number" && raw.maxCheckpoints > 0
-					? Math.floor(raw.maxCheckpoints)
-					: DEFAULT_MAX_CHECKPOINTS,
+			maxCheckpoints: positiveInt(raw.maxCheckpoints, DEFAULT_MAX_CHECKPOINTS),
+			maxBytes: positiveInt(raw.maxBytes, DEFAULT_MAX_BYTES),
+			maxFileBytes: positiveInt(raw.maxFileBytes, DEFAULT_MAX_FILE_BYTES),
 		};
 	} catch {
-		return { enabled: true, maxCheckpoints: DEFAULT_MAX_CHECKPOINTS };
+		return {
+			enabled: true,
+			maxCheckpoints: DEFAULT_MAX_CHECKPOINTS,
+			maxBytes: DEFAULT_MAX_BYTES,
+			maxFileBytes: DEFAULT_MAX_FILE_BYTES,
+		};
 	}
 }
 
@@ -82,6 +98,7 @@ function resolveUserEntryId(ctx: ExtensionContext): string | undefined {
 	const branch = ctx.sessionManager.getBranch();
 	for (let i = branch.length - 1; i >= 0; i--) {
 		const entry = branch[i];
+		if (!entry) continue;
 		if (entry.type === "message" && entry.message.role === "user") return entry.id;
 	}
 	return ctx.sessionManager.getLeafId() ?? undefined;
@@ -134,7 +151,7 @@ async function pickTarget(
 				prompt: prompts.get(checkpoint),
 				added: stat?.totalAdded ?? 0,
 				removed: stat?.totalRemoved ?? 0,
-				files: stat?.files ?? checkpoint.files.map((file) => ({ path: file.path, added: 0, removed: 0 })),
+				files: stat?.files ?? checkpoint.files.map((file) => ({ path: file.path, added: 0, removed: 0, skipped: file.skipped !== undefined })),
 			};
 		});
 		const picked = await pickCheckpoint(ctx, { truncateToWidth: lib.truncateToWidth }, entries);
@@ -153,8 +170,10 @@ function describe(report: RestoreReport): string {
 	if (report.restored.length) parts.push(`${report.restored.length} restored`);
 	if (report.deleted.length) parts.push(`${report.deleted.length} deleted`);
 	if (report.skipped.length) parts.push(`${report.skipped.length} skipped`);
+	if (report.unrestorable.length) parts.push(`${report.unrestorable.length} not captured`);
 	if (report.missing.length) parts.push(`${report.missing.length} missing`);
-	return parts.length ? `Code rewind: ${parts.join(", ")}.` : "Code rewind: nothing to change.";
+	const hint = report.unrestorable.length ? " Uncaptured files were larger than maxFileBytes or past maxBytes." : "";
+	return (parts.length ? `Code rewind: ${parts.join(", ")}.` : "Code rewind: nothing to change.") + hint;
 }
 
 function notify(ctx: ExtensionCommandContext | ExtensionContext, text: string, type: "info" | "warning" | "error"): void {
@@ -177,10 +196,28 @@ export default function rewindExtension(pi: ExtensionAPI): void {
 		return hashes;
 	};
 
+	const referencedBytes = (): number => {
+		if (!blobs) return 0;
+		let total = 0;
+		for (const hash of referenced()) total += blobs.sizeOf(hash);
+		return total;
+	};
+
+	/** Drop oldest checkpoints until the count and byte budgets hold, then release their blobs. */
 	const trim = (): void => {
-		if (checkpoints.length <= config.maxCheckpoints) return;
-		checkpoints = checkpoints.slice(-config.maxCheckpoints);
-		blobs?.gc(referenced());
+		if (!blobs) return;
+		let dropped = false;
+		for (;;) {
+			const overCount = checkpoints.length > config.maxCheckpoints;
+			if (checkpoints.length <= 1 || (!overCount && referencedBytes() <= config.maxBytes)) break;
+			const before = referencedBytes();
+			checkpoints.shift();
+			dropped = true;
+			// Evicting can free nothing when newer checkpoints share the blob; stop rather than
+			// discard history for no gain. The captured run itself is capped at maxBytes.
+			if (!overCount && referencedBytes() >= before) break;
+		}
+		if (dropped) blobs.gc(referenced());
 	};
 
 	pi.on("session_start", (_event, ctx) => {
@@ -203,21 +240,26 @@ export default function rewindExtension(pi: ExtensionAPI): void {
 		checkpoints.sort((a, b) => a.seq - b.seq);
 		nextSeq = checkpoints.reduce((max, checkpoint) => Math.max(max, checkpoint.seq + 1), 1);
 		trim();
+		// Also reclaim blobs no surviving checkpoint references: leftovers from a run that crashed
+		// before its entry was committed. Assumes one live pi process per session id.
+		blobs.gc(referenced());
 	});
 
 	pi.on("before_agent_start", () => {
 		if (!config.enabled) return;
-		open = { files: new Map() };
+		open = { files: new Map(), bytes: 0 };
 	});
 
 	pi.on("tool_call", (event, ctx) => {
 		if (!config.enabled || !blobs) return;
 		if (event.toolName !== "edit" && event.toolName !== "write") return;
 		// A continuation after the settle boundary has no fresh before_agent_start.
-		open ??= { files: new Map() };
+		open ??= { files: new Map(), bytes: 0 };
 		// Capture is best effort: a failed snapshot must never block the tool call.
 		try {
-			const relPath = toWorkspaceRelative(ctx.cwd, event.input.path);
+			const path = event.input.path;
+			if (typeof path !== "string") return;
+			const relPath = toWorkspaceRelative(ctx.cwd, path);
 			if (relPath === undefined || open.files.has(relPath)) return;
 			const absolute = resolve(ctx.cwd, relPath);
 			if (!existsSync(absolute)) {
@@ -225,7 +267,17 @@ export default function rewindExtension(pi: ExtensionAPI): void {
 				return;
 			}
 			if (!isRestorableFile(absolute)) return;
+			const size = statSync(absolute).size;
+			if (size > config.maxFileBytes) {
+				open.files.set(relPath, { path: relPath, hash: "", existed: true, skipped: "too-large" });
+				return;
+			}
+			if (open.bytes + size > config.maxBytes) {
+				open.files.set(relPath, { path: relPath, hash: "", existed: true, skipped: "over-budget" });
+				return;
+			}
 			open.files.set(relPath, { path: relPath, hash: blobs.put(readFileSync(absolute)), existed: true });
+			open.bytes += size;
 		} catch {
 			// Ignore unreadable or unwritable paths.
 		}
@@ -293,7 +345,8 @@ export default function rewindExtension(pi: ExtensionAPI): void {
 			const restoreConversation = action !== "Restore code only";
 			if (restoreCode && blobs) {
 				const report = applyRestore(ctx.cwd, planRestore(checkpoints, target), blobs);
-				notify(ctx, describe(report), report.missing.length > 0 ? "warning" : "info");
+				const incomplete = report.missing.length > 0 || report.unrestorable.length > 0;
+				notify(ctx, describe(report), incomplete ? "warning" : "info");
 			}
 			if (restoreConversation) {
 				try {

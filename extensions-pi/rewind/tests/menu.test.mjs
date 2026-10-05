@@ -62,6 +62,25 @@ test("picker renders multi-line entries with prompt, totals, and per-file stats"
 	assert.equal(await promise, undefined);
 });
 
+test("picker marks files that were never captured", async () => {
+	const { ctx, state } = fakeCtx(plainKeys);
+	const entry = {
+		time: "10:00:00",
+		prompt: "touch a huge file",
+		added: 0,
+		removed: 0,
+		files: [{ path: "big.bin", added: 0, removed: 0, skipped: true }],
+	};
+	const promise = pickCheckpoint(ctx, lib, [entry]);
+
+	const fileLine = state.component.render(80).find((line) => line.includes("big.bin"));
+	assert.match(fileLine, /big\.bin not captured/);
+	assert.doesNotMatch(fileLine, /\+0 -0/);
+
+	state.done(undefined);
+	await promise;
+});
+
 test("picker moves the selection and returns the chosen index", async () => {
 	const keys = { matches: (data, action) => data === action, getKeys: () => [] };
 	const { ctx, state } = fakeCtx(keys);

@@ -4,7 +4,7 @@
 
 Modern CLI tools available:
 
-- `rg` not `grep` · `fd` not `find` · `exa` not `ls` · `sd` not `sed`
+- `rg` not `grep` · `fd` not `find` · `exa` not `ls`
 - `just` not `make` · `uv` not `pip` · `uv run` not `python3`
 - `sqlite3` · `hyperfine` · `rsync` · `gh`
 
