@@ -6,10 +6,10 @@ import { cleanupSessionResources, type AssistantMessage } from "@earendil-works/
 import { buildSessionContext, type ExtensionContext } from "@earendil-works/pi-coding-agent";
 import type { ReviewRequest, Reviewer, Verdict } from "./review.ts";
 import { createReviewTools, REVIEW_TOOL_NAMES } from "./review-tools.ts";
-import { DEFAULT_REVIEWER_MODEL, validateReviewerModel } from "./review-config.ts";
+import { DEFAULT_REVIEWER_MODEL, REVIEW_LIMITS, validateReviewerModel } from "./review-config.ts";
+import type { ReviewFailurePhase } from "./lazy-reviewer.ts";
 
-export { AUTO_REVIEW_ENTRY, DEFAULT_REVIEWER_MODEL, REVIEWER_MODEL_FLAG } from "./review-config.ts";
-export const REVIEW_LIMITS = { timeoutMs: 60_000, requests: 4, tools: 8, contextBytes: 256 * 1024, outputTokens: 2048 };
+export { AUTO_REVIEW_ENTRY, DEFAULT_REVIEWER_MODEL, REVIEWER_MODEL_FLAG, REVIEW_LIMITS } from "./review-config.ts";
 
 const PROMPT = `You review proposed tool calls before execution, not perform the main task.
 Approve only when the exact action and requested access follow the user's intent and instructions, with proportionate scope and consequences. Consider destructive changes, external effects, privacy, money, scope creep, and prior human denials. Access declarations describe capability, not authorization.
@@ -26,6 +26,8 @@ export interface AutoReviewRecord {
 	reason: string;
 	elapsedMs: number;
 	usage: ReviewUsage;
+	/** Failure before the automatic implementation could return its own recorded verdict. */
+	failure?: ReviewFailurePhase;
 }
 export interface AutoReviewerOptions {
 	model?: string;

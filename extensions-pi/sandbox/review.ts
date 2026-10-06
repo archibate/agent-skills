@@ -55,6 +55,17 @@ function createAutomaticReviewer(options: AutoReviewerOptions): Reviewer {
 	return lazyReviewer("auto", async () => {
 		const { AutoReviewer } = await import("./auto-review.ts");
 		return () => new AutoReviewer(selected);
+	}, {
+		timeoutMs: selected.limits?.timeoutMs,
+		onFailure: ({ toolCallId, phase, feedback, elapsedMs }) => {
+			// AutoReviewer records every verdict itself. An escaped review error means that
+			// audit failed; do not invent zero usage or allow unaudited manual escalation.
+			if (phase === "review") return false;
+			selected.record?.({
+				toolCallId, model: selected.model, decision: "deny", reason: feedback, elapsedMs, failure: phase,
+				usage: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, totalTokens: 0, cost: { total: 0 } },
+			});
+		},
 	});
 }
 

@@ -1,12 +1,20 @@
-import { keyText, truncateToVisualLines, type MessageRenderer, type Theme } from "@earendil-works/pi-coding-agent";
+import type { MessageRenderer, Theme } from "@earendil-works/pi-coding-agent";
 import { Box, type Component, MouseRegion, Text, truncateToWidth } from "@earendil-works/pi-tui";
+import { jobPreview } from "./renderers.ts";
+
+function notificationTitle(header: string): string {
+	const match = /^\[(job .*)\](?: (.*))?$/.exec(header);
+	if (!match) return header;
+	const status = match[2]?.replace(/^finished: /, "");
+	return `${match[1]}${status ? ` · ${status}` : ""}`;
+}
 
 function notificationBox(content: string, expanded: boolean, outputPad: number, theme: Theme): Box {
 	const newline = content.indexOf("\n");
 	const header = newline < 0 ? content : content.slice(0, newline);
 	const body = newline < 0 ? "" : content.slice(newline + 1);
 	const box = new Box(outputPad, 1, (text) => theme.bg("customMessageBg", text));
-	const title = theme.fg("customMessageLabel", theme.bold(header));
+	const title = theme.fg("customMessageLabel", theme.bold(notificationTitle(header)));
 	box.addChild(expanded ? new Text(title, 0, 0) : {
 		render: (width) => [truncateToWidth(title, width)],
 		invalidate() {},
@@ -16,24 +24,7 @@ function notificationBox(content: string, expanded: boolean, outputPad: number, 
 		if (expanded) {
 			box.addChild(new Text(styledBody, 0, 0));
 		} else {
-			let cachedWidth: number | undefined;
-			let cachedLines: string[] | undefined;
-			box.addChild({
-				render(width) {
-					if (cachedLines === undefined || cachedWidth !== width) {
-						const { visualLines, skippedCount } = truncateToVisualLines(styledBody, 5, width);
-						const hint = theme.fg("muted", `... (${skippedCount} earlier lines, `) +
-							theme.fg("dim", keyText("app.tools.expand")) + theme.fg("muted", " to expand)");
-						cachedLines = skippedCount > 0 ? [truncateToWidth(hint, width), ...visualLines] : visualLines;
-						cachedWidth = width;
-					}
-					return cachedLines;
-				},
-				invalidate() {
-					cachedWidth = undefined;
-					cachedLines = undefined;
-				},
-			});
+			box.addChild(jobPreview(styledBody, theme, "end"));
 		}
 	}
 	return box;

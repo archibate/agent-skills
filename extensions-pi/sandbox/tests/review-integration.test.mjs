@@ -187,7 +187,7 @@ test("manual review: approve, always, deny with feedback; marks and permissions 
 	const jobRenderers = session.extensionRunner.resolveToolRenderers("job_start", () => ({ renderCall: jobStart.renderCall, renderResult: resultRenderer }));
 	assert.equal(jobRenderers.renderResult, resultRenderer);
 	const jobRow = jobRenderers.renderCall(jobArgs, plainTheme, context("c5")).render(120).join("\n");
-	assert.match(jobRow, /\$ build \(timeout 30s\)[\s\S]*⛶ read-only · net FULL[\s\S]*✓ approved/);
+	assert.match(jobRow, /job start · timeout 30s[\s\S]*\$ build[\s\S]*⛶ read-only · net FULL[\s\S]*✓ approved/);
 });
 
 test("footer status restores permissions from flags and the active session branch", { skip: !sdkPath }, async (t) => {

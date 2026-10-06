@@ -110,6 +110,8 @@ A `job_start` that declares `dangerouslySkipSandbox` and whose command is exactl
 command (other shell syntax, unknown pi flags, a `$VAR` where pi reads access or a prompt) makes it
 an ordinary `dangerouslySkipSandbox` review.
 
+Reviewer implementations load on first use, with a 60-second loading deadline; configuration
+validation stays synchronous.
 Invalid permission or reviewer configuration is reported at startup; calls beyond read-only are
 then denied with the error in the reason.
 
@@ -141,11 +143,12 @@ Branch, instruction, model-metadata, or permission changes reset it; reload/resu
 from the active main context. No reviewer prompt or transcript is inserted into main LLM context.
 Each automatic decision records its model, reason, elapsed time and reported usage in a
 `sandbox-auto-review` custom entry, without storing query outputs or the full reviewer transcript.
+Loading and initialization failures record the failing phase without raw exception details.
 These records and origin marks survive resume; the live reviewer transcript is kept locally in
 memory only. Usage distinguishes input, cache reads/writes, and output. Reported cost is model
 metadata, not a subscription bill, and interrupted requests may not report usage.
 
-Bounds per review: 60 seconds, four model requests, eight queries, requested output of 2048 tokens
+After loading, bounds per automatic review: 60 seconds, four model requests, eight queries, requested output of 2048 tokens
 per model request, and at most 256 KiB of evidence/transcript (reduced for smaller model contexts).
 Oversized evidence, invalid verdicts, unavailable credentials, and provider failures cannot approve
 in `auto`; they escalate in `auto-manual`. Streamed responses and aggregate reported output are
@@ -176,7 +179,7 @@ nothing answers.
 
 - jobs declares `job_start` at load, then redeclares it with the `sandbox` parameter at
   `session_start` if the provider answers. A disabled sandbox answers nothing, so jobs keeps its
-  plain form, including its own `$ command` renderer. The sandbox extension only adds the
+  plain form, including its own `job start` command renderer. The sandbox extension only adds the
   access badge under that renderer; job status/results stay unchanged.
 - btw's side session reloads the main session's extensions, so its `bash` is the same declaration
   (prompt-cache prefix). It calls `restrict("read-only")`, which fixes that runtime's permissions
@@ -199,7 +202,10 @@ Query failures deny automatic review; there is no unsandboxed search fallback.
 | `enable.ts` | The opt-in gate: whether a launch asked for the sandbox (pure). |
 | `permissions.ts` | Permissions: presets, `--permissions` parsing, per-call assessment (pure). |
 | `subagent.ts` | Recognizes a bounded `pi -p --permissions` launch (pure). |
-| `review.ts` | Reviewer interface, strategy selection, manual fallback, denial reasons. |
+| `review.ts` | Reviewer interface, synchronous selection, manual fallback, denial reasons. |
+| `review-config.ts` | Reviewer flags, defaults, model-name validation (pure). |
+| `lazy-reviewer.ts` | Deferred loading, persistent implementation, cancellation and disposal. |
+| `manual-review.ts` | Manual-review flow and feedback collection. |
 | `auto-review.ts` | Luna reviewer lifecycle, quoted evidence/deltas, budgets, verdict validation and audit records. |
 | `review-tools.ts` | Bounded reviewer-only filesystem queries. |
 | `modal.ts` | The manual reviewer's modal. |

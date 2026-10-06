@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
-import { setImmediate } from "node:timers/promises";
+import { getEventListeners } from "node:events";
+import { setImmediate, setTimeout as sleep } from "node:timers/promises";
 import { test } from "node:test";
 import { lazyReviewer } from "../lazy-reviewer.ts";
 
@@ -122,18 +123,85 @@ for (const action of ["abort", "reset", "dispose"]) {
 
 test("import, construction, and implementation failures deny without leaking error details", async () => {
 	for (const name of ["auto", "manual"]) {
-		for (const load of [
-			() => { throw new Error("secret import detail"); },
-			async () => { throw new Error("secret import detail"); },
-			async () => () => { throw new Error("secret construction detail"); },
-			async () => () => ({ name, review: async () => { throw new Error("secret implementation detail"); } }),
+		for (const [phase, load] of [
+			["load", () => { throw new Error("secret import detail"); }],
+			["load", async () => { throw new Error("secret import detail"); }],
+			["construct", async () => () => { throw new Error("secret construction detail"); }],
+			["review", async () => () => ({ name, review: async () => { throw new Error("secret implementation detail"); } })],
 		]) {
-			const reviewer = lazyReviewer(name, load);
+			const failures = [];
+			const reviewer = lazyReviewer(name, load, { onFailure: (failure) => failures.push(failure) });
 			const result = await reviewer.review(request, {});
 			assert.equal(result.kind, "deny");
 			assert.doesNotMatch(result.feedback, /secret/);
 			assert.equal(result.cancelled, undefined);
+			assert.equal(failures.length, 1);
+			assert.equal(failures[0].phase, phase);
+			assert.equal(failures[0].feedback, result.feedback);
+			assert.ok(failures[0].elapsedMs >= 0);
 			reviewer.dispose();
 		}
+	}
+});
+
+test("a hung import has a cached deadline and cannot construct after late completion", async () => {
+	const load = deferred();
+	const failures = [];
+	let loads = 0;
+	let creates = 0;
+	const reviewer = lazyReviewer("auto", () => { loads++; return load.promise; }, {
+		timeoutMs: 10, onFailure: (failure) => failures.push(failure),
+	});
+	const first = reviewer.review(request, {});
+	// Keep this pure fixture alive while the implementation's deadline timer is unref'd.
+	await sleep(20);
+	assert.match((await first).feedback, /loading timed out/);
+	assert.match((await reviewer.review(request, {})).feedback, /loading timed out/);
+	assert.equal(loads, 1);
+	assert.equal(failures.length, 2);
+	assert.ok(failures.every((failure) => failure.phase === "load"));
+	load.resolve(() => { creates++; return { name: "auto", review: async () => approve }; });
+	await setImmediate();
+	assert.match((await reviewer.review(request, {})).feedback, /loading timed out/);
+	assert.equal(creates, 0);
+	reviewer.dispose();
+});
+
+test("a failed failure-audit callback denies without throwing or permitting escalation", async () => {
+	const reviewer = lazyReviewer("auto", async () => { throw new Error("secret import"); }, {
+		onFailure: () => { throw new Error("secret storage failure"); },
+	});
+	const result = await reviewer.review(request, {});
+	cancelled(result);
+	assert.match(result.feedback, /audit could not be recorded/);
+	assert.doesNotMatch(result.feedback, /secret/);
+	reviewer.dispose();
+});
+
+test("load timers and review abort listeners are removed after settlement", async (t) => {
+	const nativeSetTimeout = globalThis.setTimeout;
+	const nativeClearTimeout = globalThis.clearTimeout;
+	const timers = new Set();
+	globalThis.setTimeout = (...args) => { const timer = nativeSetTimeout(...args); timers.add(timer); return timer; };
+	globalThis.clearTimeout = (timer) => { timers.delete(timer); nativeClearTimeout(timer); };
+	t.after(() => { globalThis.setTimeout = nativeSetTimeout; globalThis.clearTimeout = nativeClearTimeout; });
+	for (const outcome of ["approve", "reject", "abort"]) {
+		const reply = deferred();
+		let context;
+		const reviewer = lazyReviewer("auto", async () => () => ({
+			name: "auto", review: (_request, ctx) => { context = ctx; return reply.promise; },
+		}));
+		const controller = new AbortController();
+		const pending = reviewer.review(request, { signal: controller.signal });
+		await setImmediate();
+		assert.equal(timers.size, 0);
+		assert.equal(getEventListeners(context.signal, "abort").length, 1);
+		if (outcome === "abort") controller.abort();
+		if (outcome === "reject") reply.reject(new Error("fixture review failed"));
+		else reply.resolve(approve);
+		await pending;
+		assert.equal(getEventListeners(context.signal, "abort").length, 0);
+		assert.equal(timers.size, 0);
+		reviewer.dispose();
 	}
 });

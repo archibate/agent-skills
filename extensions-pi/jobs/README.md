@@ -25,7 +25,10 @@ Only three tools are declared; everything else is the job's files on disk, read 
 | `job_watch` | Deliver matching stdout lines as messages instead of polling (needs the live runtime). |
 | `job_stop` | Signal a job's process group (default SIGTERM) and report its status. |
 
-`job_start` renders as `$ command` even without sandbox; an enabled sandbox adds its access badge.
+Tools render with `job start`, `job watch`, and `job stop` headers, followed by muted metadata.
+Watch and stop show the job ID and its quoted name when known, matching notifications.
+Start commands appear on a separate `$ command` line; an enabled sandbox adds its access badge.
+Results show a compact `→ outcome`; expanding reveals the original result text and details.
 Notifications show the status and last five visual log lines when collapsed. In fullscreen mode,
 left-click a notification to expand or collapse it; the regular tool-output expansion toggle also
 works. The agent still receives all notification text.
@@ -93,7 +96,7 @@ can run a job end-to-end without extra tool schemas.
 
 ## Editor setup
 
-`tsconfig.json` type checks `index.ts`, `jobs.ts`, and `notifications.ts` under strict settings. The host packages
+`tsconfig.json` type checks `index.ts`, `jobs.ts`, `renderers.ts`, and `notifications.ts` under strict settings. The host packages
 (`@earendil-works/pi-coding-agent`, `@earendil-works/pi-tui`, `typebox`, `@types/node`) are symlinked into `node_modules` so
 tsc and tsserver can resolve them; pi itself aliases those imports, so the links are editor-only.
 Refresh them after a pi upgrade, which moves the release directory:

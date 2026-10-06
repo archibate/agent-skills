@@ -116,7 +116,7 @@ test("sandboxed bash and job tools through the real pi loader", { skip: !sdkPath
 	// Jobs owns command rendering; sandbox adds the access badge.
 	const jobStart = session.getToolDefinition("job_start");
 	assert.equal(typeof jobStart.renderCall, "function");
-	assert.equal(jobStart.renderCall({ command: "build" }, plainTheme, { state: {} }).render(80).join("\n").trimEnd(), "$ build");
+	assert.equal(jobStart.renderCall({ command: "build" }, plainTheme, { state: {} }).render(80).map((line) => line.trimEnd()).join("\n"), "job start\n  $ build");
 	const jobRenderers = session.extensionRunner.resolveToolRenderers("job_start", () => ({
 		renderCall: jobStart.renderCall,
 		renderResult: jobStart.renderResult,
@@ -129,8 +129,8 @@ test("sandboxed bash and job tools through the real pi loader", { skip: !sdkPath
 	};
 	const renderContext = () => ({ toolCallId: "render-test", state: {}, executionStarted: false, lastComponent: undefined });
 	const jobRow = jobRenderers.renderCall(callArgs, plainTheme, renderContext());
-	assert.deepEqual(jobRow.render(80), bash.renderCall(callArgs, plainTheme, renderContext()).render(80));
-	assert.match(jobRow.render(80).join("\n"), /\$ uv run x\.py \(timeout 60s\)[\s\S]*⛶ rw ~\/\.cache\/uv · net fetch-only/);
+	assert.notDeepEqual(jobRow.render(80), bash.renderCall(callArgs, plainTheme, renderContext()).render(80));
+	assert.match(jobRow.render(80).join("\n"), /job start "build" · timeout 60s[\s\S]*\$ uv run x\.py[\s\S]*⛶ rw ~\/\.cache\/uv · net fetch-only/);
 	assert.equal(jobRenderers.renderResult, jobStart.renderResult, "job status/results are unchanged");
 
 	// Jobs run in the same sandbox, and their files stay readable from sandboxed bash.
@@ -201,5 +201,5 @@ test("without the flag the extension stays inert", { skip: !sdkPath }, async (t)
 	const jobStart = session.getToolDefinition("job_start");
 	assert.equal(jobStart.parameters.properties.sandbox, undefined);
 	const renderers = session.extensionRunner.resolveToolRenderers("job_start", () => ({ renderCall: jobStart.renderCall }));
-	assert.equal(renderers.renderCall({ command: "build" }, plainTheme, { state: {} }).render(80).join("\n").trimEnd(), "$ build");
+	assert.equal(renderers.renderCall({ command: "build" }, plainTheme, { state: {} }).render(80).map((line) => line.trimEnd()).join("\n"), "job start\n  $ build");
 });

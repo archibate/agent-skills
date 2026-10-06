@@ -269,6 +269,25 @@ for (const action of ["reset", "dispose"]) {
 	});
 }
 
+test("hybrid does not escalate or invent usage when recording the automatic verdict fails", async (t) => {
+	const { ctx, calls } = fixture(t, [approve]);
+	ctx.mode = "tui";
+	ctx.ui = { custom: () => { throw new Error("must not escalate an unaudited verdict"); } };
+	const records = [];
+	const hybrid = createReviewer("auto-manual", "tui", {
+		record: (record) => { records.push(record); throw new Error("secret storage detail"); },
+	});
+	t.after(() => hybrid.dispose());
+	const verdict = await hybrid.review(request, ctx);
+	assert.equal(verdict.kind, "deny");
+	assert.equal(verdict.cancelled, true);
+	assert.match(verdict.feedback, /audit could not be recorded/);
+	assert.doesNotMatch(verdict.feedback, /secret/);
+	assert.equal(calls.length, 1);
+	assert.equal(records.length, 1, "do not retry recording with invented zero usage");
+	assert.equal(records[0].usage.input, 10);
+});
+
 test("review tools handle private fixtures and ignore rg config or argv-like glob values", async (t) => {
 	const { cwd } = fixture(t);
 	mkdirSync(join(cwd, "sub"));

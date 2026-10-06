@@ -19,10 +19,10 @@
 import { statSync } from "node:fs";
 import type { ExtensionAPI, ExtensionToolContext } from "@earendil-works/pi-coding-agent";
 import { getShellConfig } from "@earendil-works/pi-coding-agent";
-import { Text } from "@earendil-works/pi-tui";
 import { Type } from "typebox";
 import type { SandboxProvider, SandboxProviderReply } from "../sandbox/sandbox.ts";
 import { createJobMessageRenderer } from "./notifications.ts";
+import { createJobToolRenderers } from "./renderers.ts";
 import {
 	describeLeftRunning,
 	describeStatus,
@@ -89,8 +89,8 @@ function readEnvInt(name: string, fallback: number): number {
 	return Number.isFinite(value) && value >= 0 ? Math.floor(value) : fallback;
 }
 
-function clamp(value: number, low: number, high: number): number {
-	return Math.max(low, Math.min(high, Math.floor(value)));
+function watchTimeoutSeconds(timeout: number | undefined): number {
+	return Math.max(1, Math.min(WATCH_MAX_SECONDS, Math.floor(timeout ?? WATCH_DEFAULT_SECONDS)));
 }
 
 function label(job: Job): string {
@@ -355,13 +355,7 @@ export default function jobsExtension(pi: ExtensionAPI): void {
 				),
 				...(sandbox ? { sandbox: Type.Optional(sandbox.parameter) } : {}),
 			}),
-			renderCall(args, theme, context) {
-				const text = (context.lastComponent as Text | undefined) ?? new Text("", 0, 0);
-				const command = typeof args.command === "string" && args.command ? args.command : "...";
-				const timeout = typeof args.timeout === "number" ? theme.fg("muted", ` (timeout ${args.timeout}s)`) : "";
-				text.setText(`${theme.fg("toolTitle", theme.bold(`$ ${command}`))}${timeout}`);
-				return text;
-			},
+			...createJobToolRenderers("start"),
 			async execute(_toolCallId, params: JobStartParams, _signal, _onUpdate, ctx: ExtensionToolContext) {
 				const prepared = sandbox ? await sandbox.prepare(params.sandbox, ctx.cwd) : undefined;
 				let job: Job;
@@ -407,6 +401,7 @@ export default function jobsExtension(pi: ExtensionAPI): void {
 	pi.registerTool({
 		name: "job_stop",
 		label: "job_stop",
+		...createJobToolRenderers("stop", { jobName: (id) => getJob(id)?.name }),
 		description:
 			"Stop a job started with job_start by signalling its whole process group, then report its " +
 			"status. Also stops processes a finished job left running.",
@@ -425,13 +420,13 @@ export default function jobsExtension(pi: ExtensionAPI): void {
 			const signal = params.signal ?? "SIGTERM";
 			if (!job.running) {
 				if (!registry.lingeringGroups.has(job.pid)) {
-					return { content: [{ type: "text", text: `${label(job)} already finished: ${statusLine(job)}` }], details: { id: job.id } };
+					return { content: [{ type: "text", text: `${label(job)} already finished: ${statusLine(job)}` }], details: { id: job.id, summary: `already finished: ${statusLine(job)}` } };
 				}
 				killGroup(job.pid, signal);
 				if (!groupAlive(job.pid)) registry.lingeringGroups.delete(job.pid);
 				return {
 					content: [{ type: "text", text: `Sent ${signal} to the processes ${label(job)} left running (process group ${job.pid}).` }],
-					details: { id: job.id },
+					details: { id: job.id, summary: `sent ${signal} to remaining processes · pgid ${job.pid}` },
 				};
 			}
 			if (signal === "SIGKILL") job.kill();
@@ -443,13 +438,17 @@ export default function jobsExtension(pi: ExtensionAPI): void {
 			const text = exited
 				? `${label(job)} stopped: ${statusLine(job)}`
 				: `Sent ${signal} to ${label(job)}; it is still running after ${STOP_WAIT_MS / 1000}s. Retry with signal "SIGKILL" to force.`;
-			return { content: [{ type: "text", text }], details: { id: job.id } };
+			const summary = exited
+				? `stopped: ${statusLine(job)}`
+				: `sent ${signal}; still running after ${STOP_WAIT_MS / 1000}s`;
+			return { content: [{ type: "text", text }], details: { id: job.id, summary } };
 		},
 	});
 
 	pi.registerTool({
 		name: "job_watch",
 		label: "job_watch",
+		...createJobToolRenderers("watch", { watchTimeoutSeconds, jobName: (id) => getJob(id)?.name }),
 		description:
 			"Watch a running job's output: recent matching lines are replayed first, then new ones " +
 			"arrive as messages while you keep working or after your turn ends. Use it instead of " +
@@ -475,7 +474,7 @@ export default function jobsExtension(pi: ExtensionAPI): void {
 				}
 			}
 			if (activeWatchers >= MAX_WATCHERS) throw new Error(`Too many active job watches (max ${MAX_WATCHERS}).`);
-			const seconds = clamp(params.timeout ?? WATCH_DEFAULT_SECONDS, 1, WATCH_MAX_SECONDS);
+			const seconds = watchTimeoutSeconds(params.timeout);
 			activeWatchers++;
 			job.watchers++;
 			try {

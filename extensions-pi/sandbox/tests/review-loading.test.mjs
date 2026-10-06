@@ -56,6 +56,28 @@ test("registration stays cold and first use loads only the selected reviewer", (
 		assert.ok(loaded.has("manual-review.ts"));
 		assert.ok(loaded.has("modal.ts"));
 		manual.dispose();
+		const feedbackReviewer = createReviewer("manual", "tui");
+		const feedbackAbort = new AbortController();
+		let askedForFeedback = false;
+		const feedbackVerdict = await feedbackReviewer.review(request, {
+			mode: "tui", signal: feedbackAbort.signal,
+			ui: {
+				custom: (factory) => new Promise((resolve) => {
+					const modal = factory({ requestRender() {} }, { fg: (_color, text) => text, bold: (text) => text }, {}, resolve);
+					setTimeout(() => modal.handleInput("f"), 320);
+				}),
+				input: async (_title, _placeholder, { signal }) => {
+					askedForFeedback = true;
+					feedbackAbort.abort();
+					assert.equal(signal.aborted, true);
+					return "late feedback";
+				},
+			},
+		});
+		assert.equal(askedForFeedback, true);
+		assert.equal(feedbackVerdict.cancelled, true);
+		assert.doesNotMatch(feedbackVerdict.feedback, /late feedback/);
+		feedbackReviewer.dispose();
 	`;
 	const result = spawnSync(process.execPath, ["--input-type=module", "-e", script], {
 		cwd: scratch, encoding: "utf8", timeout: 10_000, maxBuffer: 1024 * 1024,

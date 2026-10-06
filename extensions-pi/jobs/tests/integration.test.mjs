@@ -4,6 +4,7 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
 import { pathToFileURL } from "node:url";
+import { stripVTControlCharacters } from "node:util";
 
 // Offline tool-layer test: loads the real pi runtime and the extension, then calls the tools.
 // No model request is made. Requires PI_SDK_PATH (the release's dist/index.js).
@@ -112,6 +113,28 @@ test("jobs tools through the real pi loader", { skip: !sdkPath }, async (t) => {
 	notification.setExpanded(false);
 	assert.deepEqual(notification.render(80), collapsedLines);
 
+	// Tool renderers still use Pi's own result region and click expansion, with no terminal I/O.
+	for (const [name, args, details] of [
+		["job_start", { command: "build", name: "build" }, { id: "render", pid: 12345, dir: "/private/logs" }],
+		["job_watch", { id: "render", pattern: "error" }, { id: "render" }],
+		["job_stop", { id: "render" }, { id: "render", summary: "stopped: killed by SIGTERM" }],
+	]) {
+		const view = new sdk.ToolExecutionComponent(name, `render-${name}`, args, {}, session.getToolDefinition(name), { requestRender() {} }, cwd);
+		const fullText = "full result details\nprivate log path and status";
+		view.updateResult({ content: [{ type: "text", text: fullText }], details });
+		const lines = () => view.render(80).map(stripVTControlCharacters).join("\n");
+		assert.doesNotMatch(lines(), /private log path/);
+		const clickResult = () => {
+			const rendered = view.render(80).map(stripVTControlCharacters);
+			return view.handleMouse({ type: "click", button: "left", x: 2, y: rendered.findIndex((line) => line.includes("→")),
+				screenX: 2, screenY: 2, width: 80, height: rendered.length, shift: false, alt: false, ctrl: false });
+		};
+		assert.equal(clickResult().handled, true);
+		assert.match(lines(), /private log path/);
+		assert.equal(clickResult().handled, true);
+		assert.doesNotMatch(lines(), /private log path/);
+	}
+
 	const ctx = runner.createToolContext("jobs-test");
 	const call = (name, toolCallId, params) =>
 		session.getToolDefinition(name).execute(toolCallId, params, undefined, undefined, ctx);
@@ -123,6 +146,14 @@ test("jobs tools through the real pi loader", { skip: !sdkPath }, async (t) => {
 	assert.equal(started.isError, undefined);
 	assert.match(started.content[0].text, /You will be notified when it exits/);
 	const { id, dir, pid } = started.details;
+	const plainTheme = { fg: (_color, text) => text, bold: (text) => text };
+	for (const [toolName, expected] of [
+		["job_watch", `job watch ${id} "quick" · 600s`],
+		["job_stop", `job stop ${id} "quick" · SIGTERM`],
+	]) {
+		const row = session.getToolDefinition(toolName).renderCall({ id }, plainTheme, { state: {} });
+		assert.equal(row.render(120).map(stripVTControlCharacters).map((line) => line.trimEnd()).join("\n"), expected);
+	}
 	assert.equal(typeof id, "string");
 	assert.equal(dir, join(base, "pi-jobs", id));
 	assert.equal(statSync(dir).mode & 0o777, 0o700);
@@ -198,6 +229,15 @@ test("jobs tools through the real pi loader", { skip: !sdkPath }, async (t) => {
 	const envJob = await call("job_start", "s10", { command: "printf '%s' \"$PI_SESSION_ID\"", name: "env" });
 	await waitFor(() => existsSync(join(envJob.details.dir, "status")));
 	assert.equal(readFileSync(join(envJob.details.dir, "stdout"), "utf8"), session.sessionManager.getSessionId());
+
+	// Execution supplies truthful display-only stop outcomes without changing the agent-facing text.
+	const stoppable = await call("job_start", "s11", { command: "sleep 30", name: "stoppable" });
+	const stopped = await call("job_stop", "s12", { id: stoppable.details.id });
+	assert.match(stopped.content[0].text, /stopped: killed by SIGTERM/);
+	assert.equal(stopped.details.summary, "stopped: killed by SIGTERM");
+	const alreadyStopped = await call("job_stop", "s13", { id: stoppable.details.id });
+	assert.match(alreadyStopped.content[0].text, /already finished: killed by SIGTERM/);
+	assert.equal(alreadyStopped.details.summary, "already finished: killed by SIGTERM");
 
 	// bash stays native, but a missing timeout is filled in, and the timeout error routes to jobs.
 	const toolCall = { type: "tool_call", toolCallId: "t1", toolName: "bash", input: { command: "sleep 200" } };
