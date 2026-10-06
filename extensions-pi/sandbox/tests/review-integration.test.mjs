@@ -177,14 +177,14 @@ test("manual review: approve, always, deny with feedback; marks and permissions 
 	assert.match(row("c2"), /✓ always/);
 	assert.doesNotMatch(row("c3"), /✓|✗/);
 
-	// The marks resolver wraps job_start's shared renderer even with no tool-level renderCall.
+	// Review marks wrap jobs' own command renderer plus the sandbox access badge.
 	const jobStart = session.getToolDefinition("job_start");
 	assert.ok(jobStart.parameters.properties.sandbox, "the real jobs tool is sandbox-aware");
-	assert.equal(jobStart.renderCall, undefined, "the sandbox provides the renderer independently");
+	assert.equal(typeof jobStart.renderCall, "function", "jobs provides its own renderer");
 	const jobArgs = { command: "build", timeout: 30, sandbox: { networkAccess: "full" } };
 	assert.equal(await call("job_start", jobArgs), undefined);
 	const resultRenderer = () => {};
-	const jobRenderers = session.extensionRunner.resolveToolRenderers("job_start", () => ({ renderResult: resultRenderer }));
+	const jobRenderers = session.extensionRunner.resolveToolRenderers("job_start", () => ({ renderCall: jobStart.renderCall, renderResult: resultRenderer }));
 	assert.equal(jobRenderers.renderResult, resultRenderer);
 	const jobRow = jobRenderers.renderCall(jobArgs, plainTheme, context("c5")).render(120).join("\n");
 	assert.match(jobRow, /\$ build \(timeout 30s\)[\s\S]*⛶ read-only · net FULL[\s\S]*✓ approved/);

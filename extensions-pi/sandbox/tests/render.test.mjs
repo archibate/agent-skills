@@ -1,9 +1,9 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { stripVTControlCharacters } from "node:util";
-import { visibleWidth } from "@earendil-works/pi-tui";
+import { Text, visibleWidth } from "@earendil-works/pi-tui";
 import { parsePermissions } from "../permissions.ts";
-import { createSandboxBashDefinition, renderAllowanceBadge, renderBadge, renderSandboxCall } from "../tool.ts";
+import { createSandboxBashDefinition, renderAllowanceBadge, renderBadge, renderSandboxCall, withSandboxBadge } from "../tool.ts";
 
 const plainTheme = { fg: (_color, text) => text, bold: (text) => text };
 const context = () => ({ toolCallId: "render", state: {}, executionStarted: false, lastComponent: undefined });
@@ -51,6 +51,25 @@ test("wrapping fits narrow and wide terminals, multiline commands, CJK, and styl
 			);
 		}
 	}
+});
+
+test("sandbox decorates the tool's own renderer and preserves component reuse", () => {
+	let inner;
+	const decorated = withSandboxBadge((args, _theme, ctx) => {
+		assert.equal(ctx.lastComponent, inner);
+		inner ??= new Text("", 0, 0);
+		inner.setText(`custom job: ${args.command ?? "..."}`);
+		return inner;
+	});
+	const ctx = context();
+	const component = decorated({}, plainTheme, ctx);
+	assert.equal(textOf(component), "custom job: ...\n⛶ read-only");
+	ctx.lastComponent = component;
+	assert.equal(decorated({ command: "build", sandbox: { networkAccess: "full" } }, plainTheme, ctx), component);
+	assert.equal(textOf(component), "custom job: build\n⛶ read-only · net FULL");
+	assert.equal(decorated({ command: "done" }, plainTheme, ctx), component);
+	assert.equal(textOf(component), "custom job: done\n⛶ read-only");
+	component.invalidate();
 });
 
 test("permission badge uses every call-badge grant and includes allowed tools", () => {

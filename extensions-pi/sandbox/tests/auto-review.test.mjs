@@ -237,6 +237,38 @@ test("auto-manual escalates only denials/failures and identifies human decisions
 	assert.throws(() => createReviewer("auto-manual", "print"), /needs the interactive TUI/);
 });
 
+for (const action of ["reset", "dispose"]) {
+	test(`hybrid ${action} cancels an active manual escalation without accepting a late answer`, { timeout: 1000 }, async (t) => {
+		const { ctx, calls } = fixture(t, [deny, approve]);
+		ctx.mode = "tui";
+		let ready;
+		let answer;
+		let frames = 0;
+		const opened = new Promise((resolve) => { ready = resolve; });
+		ctx.ui = {
+			custom: (factory) => new Promise((resolve) => {
+				answer = resolve;
+				factory({ requestRender() {} }, paint, {}, resolve);
+				frames++;
+				ready();
+			}),
+		};
+		const hybrid = createReviewer("auto-manual", "tui");
+		t.after(() => hybrid.dispose());
+		const pending = hybrid.review(request, ctx);
+		await opened;
+		hybrid[action]();
+		const verdict = await pending;
+		assert.equal(verdict.kind, "deny");
+		assert.equal(verdict.cancelled, true);
+		answer({ kind: "approve" });
+		const next = await hybrid.review(request, ctx);
+		assert.equal(next.kind, action === "reset" ? "approve" : "deny");
+		assert.equal(calls.length, action === "reset" ? 2 : 1);
+		assert.equal(frames, 1);
+	});
+}
+
 test("review tools handle private fixtures and ignore rg config or argv-like glob values", async (t) => {
 	const { cwd } = fixture(t);
 	mkdirSync(join(cwd, "sub"));

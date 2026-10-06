@@ -19,8 +19,10 @@
 import { statSync } from "node:fs";
 import type { ExtensionAPI, ExtensionToolContext } from "@earendil-works/pi-coding-agent";
 import { getShellConfig } from "@earendil-works/pi-coding-agent";
+import { Text } from "@earendil-works/pi-tui";
 import { Type } from "typebox";
 import type { SandboxProvider, SandboxProviderReply } from "../sandbox/sandbox.ts";
+import { createJobMessageRenderer } from "./notifications.ts";
 import {
 	describeLeftRunning,
 	describeStatus,
@@ -253,6 +255,8 @@ export default function jobsExtension(pi: ExtensionAPI): void {
 		pi.sendMessage({ customType: "job", content: text, display: true }, { triggerTurn: true, deliverAs: "steer" });
 	};
 
+	pi.registerMessageRenderer("job", createJobMessageRenderer());
+
 	// Keep bash native, but bound a forgotten command and route long work to job_start.
 	pi.on("tool_call", (event) => {
 		if (DEFAULT_BASH_TIMEOUT_SECONDS <= 0 || event.toolName !== "bash") return;
@@ -351,6 +355,13 @@ export default function jobsExtension(pi: ExtensionAPI): void {
 				),
 				...(sandbox ? { sandbox: Type.Optional(sandbox.parameter) } : {}),
 			}),
+			renderCall(args, theme, context) {
+				const text = (context.lastComponent as Text | undefined) ?? new Text("", 0, 0);
+				const command = typeof args.command === "string" && args.command ? args.command : "...";
+				const timeout = typeof args.timeout === "number" ? theme.fg("muted", ` (timeout ${args.timeout}s)`) : "";
+				text.setText(`${theme.fg("toolTitle", theme.bold(`$ ${command}`))}${timeout}`);
+				return text;
+			},
 			async execute(_toolCallId, params: JobStartParams, _signal, _onUpdate, ctx: ExtensionToolContext) {
 				const prepared = sandbox ? await sandbox.prepare(params.sandbox, ctx.cwd) : undefined;
 				let job: Job;

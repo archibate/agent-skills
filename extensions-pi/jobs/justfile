@@ -14,6 +14,7 @@ link:
     rm -rf node_modules
     mkdir -p node_modules/@earendil-works node_modules/@types
     ln -s "{{modules}}/@earendil-works/pi-coding-agent" node_modules/@earendil-works/pi-coding-agent
+    ln -s "{{modules}}/@earendil-works/pi-tui" node_modules/@earendil-works/pi-tui
     ln -s "{{modules}}/typebox" node_modules/typebox
     ln -s "{{modules}}/@types/node" node_modules/@types/node
     echo "linked node_modules -> {{modules}}"

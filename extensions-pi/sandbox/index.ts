@@ -24,7 +24,7 @@
 import { homedir } from "node:os";
 import { DynamicBorder, type ExtensionAPI, type ExtensionCommandContext, type ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { Container, SelectList, Spacer, Text } from "@earendil-works/pi-tui";
-import { AUTO_REVIEW_ENTRY, DEFAULT_REVIEWER_MODEL, REVIEWER_MODEL_FLAG } from "./auto-review.ts";
+import { AUTO_REVIEW_ENTRY, DEFAULT_REVIEWER_MODEL, REVIEWER_MODEL_FLAG } from "./review-config.ts";
 import { ENABLE_SANDBOX_FLAG, sandboxRequested } from "./enable.ts";
 import { isReviewMark, MARK_ENTRY, type ReviewMark, registerReviewMarks } from "./marks.ts";
 import {
@@ -65,7 +65,7 @@ import {
 	type SandboxRequest,
 	warmSandbox,
 } from "./sandbox.ts";
-import { createSandboxBashDefinition, renderAllowanceBadge, renderSandboxCall } from "./tool.ts";
+import { createSandboxBashDefinition, renderAllowanceBadge, withSandboxBadge } from "./tool.ts";
 
 const PERMISSIONS_ENTRY = "sandbox-permissions";
 
@@ -191,11 +191,13 @@ export default function sandboxExtension(pi: ExtensionAPI): void {
 	}
 
 	registerReviewMarks(pi, (toolCallId) => marks.get(toolCallId));
-	// After the marks resolver so its wrapper includes the shared command and access badge.
-	// Keep this here rather than in jobs: sandbox is optional there, including at runtime.
+	// After the marks resolver so review marks follow the access badge. Jobs owns its base
+	// rendering; sandbox only decorates it while enabled.
 	pi.registerToolRenderer((toolName, next) => {
 		const base = next();
-		return toolName === "job_start" && requested() ? { ...base, renderCall: renderSandboxCall } : base;
+		return toolName === "job_start" && requested() && base?.renderCall
+			? { ...base, renderCall: withSandboxBadge(base.renderCall) }
+			: base;
 	});
 
 	const provider: SandboxProvider = {

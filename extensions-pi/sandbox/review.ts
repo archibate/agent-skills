@@ -7,8 +7,9 @@
  */
 
 import type { ExtensionContext } from "@earendil-works/pi-coding-agent";
-import { AutoReviewer, type AutoReviewerOptions } from "./auto-review.ts";
-import { ReviewModal } from "./modal.ts";
+import type { AutoReviewerOptions } from "./auto-review.ts";
+import { lazyReviewer } from "./lazy-reviewer.ts";
+import { DEFAULT_REVIEWER_MODEL, validateReviewerModel } from "./review-config.ts";
 import type { SandboxPolicy } from "./policy.ts";
 
 export const REVIEWER_FLAG = "reviewer";
@@ -48,51 +49,50 @@ const denyReviewer: Reviewer = {
 	review: async () => ({ kind: "deny" }),
 };
 
-const manualReviewer: Reviewer = {
-	name: "manual",
-	async review(request, ctx) {
-		if (ctx.mode !== "tui") return { kind: "deny" };
-		const signal = ctx.signal;
-		if (signal?.aborted) return { kind: "deny" };
-		const choice = await ctx.ui.custom<Verdict | "feedback">((tui, theme, _keybindings, done) => {
-			let modal: ReviewModal;
-			const finish = (verdict: Verdict | "feedback") => {
-				signal?.removeEventListener("abort", onAbort);
-				modal?.dispose();
-				done(verdict);
-			};
-			const onAbort = () => finish({ kind: "deny", cancelled: true });
-			modal = new ReviewModal(tui, theme, request, finish);
-			signal?.addEventListener("abort", onAbort, { once: true });
-			if (signal?.aborted) onAbort();
-			return modal;
-		});
-		if (signal?.aborted) return { kind: "deny", cancelled: true };
-		if (choice !== "feedback") return choice;
-		const feedback = await ctx.ui.input("Feedback for the agent", "why it was denied, or what to do instead", { signal });
-		return { kind: "deny", feedback: signal?.aborted ? undefined : feedback?.trim() || undefined, ...(signal?.aborted ? { cancelled: true } : {}) };
-	},
-};
+function createAutomaticReviewer(options: AutoReviewerOptions): Reviewer {
+	const selected = { ...options, model: options.model ?? DEFAULT_REVIEWER_MODEL };
+	validateReviewerModel(selected.model);
+	return lazyReviewer("auto", async () => {
+		const { AutoReviewer } = await import("./auto-review.ts");
+		return () => new AutoReviewer(selected);
+	});
+}
 
-/** The reviewer for `name` in `mode`; throws for reviewers this mode or build cannot run. */
+function createManualReviewer(): Reviewer {
+	return lazyReviewer("manual", async () => {
+		const module = await import("./manual-review.ts");
+		return module.createManualReviewer;
+	});
+}
+
+/** Selection and configuration validation are synchronous; implementations load on first review. */
 export function createReviewer(name: string, mode: ExtensionContext["mode"], options: AutoReviewerOptions = {}): Reviewer {
 	if (name === "deny") return denyReviewer;
 	if (name === "manual") {
 		if (mode !== "tui") throw new Error(`--${REVIEWER_FLAG} manual needs the interactive TUI; use deny`);
-		return manualReviewer;
+		return createManualReviewer();
 	}
-	if (name === "auto") return new AutoReviewer(options);
+	if (name === "auto") return createAutomaticReviewer(options);
 	if (name === "auto-manual") {
 		if (mode !== "tui") throw new Error(`--${REVIEWER_FLAG} auto-manual needs the interactive TUI; use auto or deny`);
-		const auto = new AutoReviewer(options);
+		const auto = createAutomaticReviewer(options);
+		const manual = createManualReviewer();
+		let epoch = 0;
+		let disposed = false;
 		return {
 			name: "auto-manual",
-			reset: () => auto.reset(),
-			dispose: () => auto.dispose(),
+			reset() { epoch++; auto.reset?.(); manual.reset?.(); },
+			dispose() { disposed = true; epoch++; auto.dispose?.(); manual.dispose?.(); },
 			async review(request, ctx) {
+				const current = epoch;
+				const cancelled = () => disposed || current !== epoch || ctx.signal?.aborted;
+				const cancellation: Verdict = { kind: "deny", cancelled: true, feedback: "Review cancelled" };
+				if (cancelled()) return cancellation;
 				const verdict = await auto.review(request, ctx);
-				if (verdict.kind !== "deny" || verdict.cancelled || ctx.signal?.aborted) return verdict;
-				const answer = await manualReviewer.review({ ...request, reviewerFeedback: verdict.feedback }, ctx);
+				if (cancelled()) return cancellation;
+				if (verdict.kind !== "deny" || verdict.cancelled) return verdict;
+				const answer = await manual.review({ ...request, reviewerFeedback: verdict.feedback }, ctx);
+				if (cancelled()) return cancellation;
 				return { ...answer, source: "manual", ...(answer.kind === "deny" && !answer.cancelled && !answer.feedback ? { feedback: `Automatic review: ${verdict.feedback}` } : {}) };
 			},
 		};

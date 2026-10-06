@@ -176,8 +176,8 @@ nothing answers.
 
 - jobs declares `job_start` at load, then redeclares it with the `sandbox` parameter at
   `session_start` if the provider answers. A disabled sandbox answers nothing, so jobs keeps its
-  plain form. The sandbox extension applies the same command and
-  access-badge renderer as `bash`; job status/results stay unchanged.
+  plain form, including its own `$ command` renderer. The sandbox extension only adds the
+  access badge under that renderer; job status/results stay unchanged.
 - btw's side session reloads the main session's extensions, so its `bash` is the same declaration
   (prompt-cache prefix). It calls `restrict("read-only")`, which fixes that runtime's permissions
   with the deny reviewer, and blocks bash when nothing answers.

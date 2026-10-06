@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { execFileSync } from "node:child_process";
+import { execFileSync, spawnSync } from "node:child_process";
 import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { tmpdir } from "node:os";
@@ -31,7 +31,9 @@ const { createOfoxProvider, normalizeCatalogs, discoverModels, CATALOG_TTL_MS } 
 const { googleIdentityApi } = await import(join(scratch, "extension/google-identity.ts"));
 const ai = await import(join(host, "..", "pi-ai/dist/index.js"));
 const { default: extensionFactory } = await import(join(scratch, "extension/index.ts"));
-const { ModelRuntime } = await import(join(host, "dist/index.js"));
+const { ModelRuntime, createAgentSessionServices, createAgentSessionFromServices, SessionManager, SettingsManager } =
+	await import(join(host, "dist/index.js"));
+const cli = join(host, JSON.parse(readFileSync(join(host, "package.json"), "utf8")).bin.pi);
 
 function row(id, overrides = {}) {
 	return {
@@ -399,6 +401,121 @@ test("Gemini handoffs replay foreign tool history as text and preserve result im
 	assert.equal(payload.contents[1].parts[2].inlineData.mimeType, "image/png");
 	assert.ok(payload.contents.every((entry) => entry.parts.every((part) => !part.functionCall && !part.functionResponse && !part.thoughtSignature)));
 	assert.equal(foreign.content[0].type, "toolCall");
+});
+
+test("CLI and SDK factories register without creating a runtime or discovering models", async () => {
+	const originalEntry = process.argv[1];
+	const originalCreate = ModelRuntime.create;
+	const originalFetch = globalThis.fetch;
+	let runtimeCalls = 0;
+	let networkCalls = 0;
+	try {
+		ModelRuntime.create = () => { runtimeCalls++; throw new Error("Factory must not create a runtime"); };
+		globalThis.fetch = async () => { networkCalls++; throw new Error("Factory must not perform discovery"); };
+		for (const entry of [join(host, "dist/cli.js"), cli, originalEntry]) {
+			process.argv[1] = entry;
+			let registered;
+			let commands = 0;
+			assert.equal(extensionFactory({
+				registerProvider: (provider) => { registered = provider; },
+				registerCommand: (name) => { assert.equal(name, "ofox-refresh"); commands++; },
+			}), undefined);
+			assert.equal(registered.id, "ofox");
+			assert.equal(registered.getModels().length, 0);
+			assert.equal(commands, 1);
+		}
+		assert.equal(runtimeCalls, 0);
+		assert.equal(networkCalls, 0);
+	} finally {
+		process.argv[1] = originalEntry;
+		ModelRuntime.create = originalCreate;
+		globalThis.fetch = originalFetch;
+	}
+});
+
+test("primary runtime restores injected cached models before initial model selection", async () => {
+	const agent = join(scratch, "primary-agent");
+	mkdirSync(agent);
+	const store = new ai.InMemoryModelsStore();
+	const credentials = new ai.InMemoryCredentialStore();
+	await store.write("ofox", { models: basicModels, checkedAt: 10_000 });
+	await credentials.modify("ofox", async () => ({ type: "api_key", key: "unit-test-key" }));
+	const originalWrite = store.write.bind(store);
+	let writes = 0;
+	store.write = async (...args) => { writes++; return originalWrite(...args); };
+	const runtime = await ModelRuntime.create({ credentials, modelsStore: store, modelsPath: null, refreshOnCreate: false });
+	const services = await createAgentSessionServices({
+		cwd: agent, agentDir: agent, modelRuntime: runtime,
+		settingsManager: SettingsManager.inMemory({ defaultProvider: "ofox", defaultModel: basicModels[0].id }),
+		resourceLoaderOptions: {
+			extensionFactories: [extensionFactory], noExtensions: true, noSkills: true,
+			noPromptTemplates: true, noThemes: true, noContextFiles: true,
+		},
+	});
+	assert.equal(services.modelRuntime, runtime);
+	assert.deepEqual(services.diagnostics, []);
+	assert.deepEqual(services.resourceLoader.getExtensions().errors, []);
+	assert.equal((await runtime.getAvailable("ofox")).length, 4);
+	const { session } = await createAgentSessionFromServices({
+		services, sessionManager: SessionManager.inMemory(agent), noTools: "all",
+	});
+	try {
+		assert.equal(session.model.provider, "ofox");
+		assert.equal(session.model.id, basicModels[0].id);
+		assert.equal(writes, 0);
+		assert.equal((await store.read("ofox")).checkedAt, 10_000);
+		assert.equal(existsSync(join(agent, "models-store.json")), false);
+	} finally {
+		session.dispose();
+	}
+});
+
+function cliFixture(name, models) {
+	const agent = join(scratch, name);
+	mkdirSync(agent);
+	writeFileSync(join(agent, "auth.json"), JSON.stringify({ ofox: { type: "api_key", key: "unit-test-key" } }));
+	writeFileSync(join(agent, "models-store.json"), JSON.stringify({ ofox: { models, checkedAt: 10_000 } }));
+	const guard = join(agent, "no-network.cjs");
+	writeFileSync(guard, 'globalThis.fetch = async () => { process.stderr.write("UNEXPECTED_NETWORK\\n"); throw new Error("Network forbidden in CLI fixture"); };');
+	return {
+		agent,
+		run: (args) => {
+			const result = spawnSync(process.execPath, [cli, "--no-session", "--no-extensions", "--no-skills",
+				"--no-context-files", "--no-prompt-templates", "--no-themes", "--extension", join(scratch, "extension/index.ts"), ...args], {
+				cwd: agent, input: "", encoding: "utf8", timeout: 10_000, maxBuffer: 1024 * 1024,
+				env: {
+					PATH: process.env.PATH, HOME: agent, PI_CODING_AGENT_DIR: agent,
+					PI_SKIP_VERSION_CHECK: "1", PI_TELEMETRY: "0", NODE_OPTIONS: `--require=${guard}`,
+					NODE_COMPILE_CACHE: join(scratch, "cli-node-cache"), XDG_CACHE_HOME: join(agent, "cache"),
+					XDG_RUNTIME_DIR: join(agent, "runtime"),
+				},
+			});
+			assert.ifError(result.error);
+			assert.doesNotMatch(result.stderr, /UNEXPECTED_NETWORK/);
+			return result;
+		},
+	};
+}
+
+test("CLI lists cached Ofox models online and offline without discovery or catalog writes", () => {
+	const { agent, run } = cliFixture("cli-cached", basicModels);
+	const before = readFileSync(join(agent, "models-store.json"), "utf8");
+	for (const flags of [[], ["--offline"]]) {
+		const result = run([...flags, "--list-models", "ofox"]);
+		assert.equal(result.status, 0, result.stderr);
+		for (const model of basicModels) assert.ok(result.stdout.includes(model.id), result.stdout);
+		assert.equal(readFileSync(join(agent, "models-store.json"), "utf8"), before);
+	}
+});
+
+test("empty-cache CLI does not discover models or accept an uncached Ofox override", () => {
+	const { run } = cliFixture("cli-empty", []);
+	const listed = run(["--list-models", "ofox"]);
+	assert.equal(listed.status, 0, listed.stderr);
+	assert.match(listed.stdout, /No models available|No models matching/);
+	const selected = run(["--model", `ofox/${basicModels[0].id}`, "--mode", "json"]);
+	assert.equal(selected.status, 1);
+	assert.match(selected.stderr, /not found/);
 });
 
 test("SDK loading leaves bootstrap to the host's isolated runtime and stored credentials", async () => {

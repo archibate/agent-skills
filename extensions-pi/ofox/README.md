@@ -14,12 +14,16 @@ from per-token to Pi's per-million-token rates. Known Pi models supplement
 thinking-level metadata; the live catalog determines inventory, limits, and prices.
 Image generation, video, embeddings, and transcription are not registered.
 
-CLI discovery runs before startup selection. SDK embeddings use their own
-`modelRuntime.refresh({ providers: ["ofox"] })`, respecting injected auth/storage.
-Catalogs are cached in Pi's
-`models-store.json` for one hour; `/ofox-refresh` forces an update. Refresh errors
-retain the last successful catalog. `--offline` / `PI_OFFLINE` restore only cached
-models. Discovery never sends prompts or makes inference requests.
+CLI startup restores cached models through Pi's main runtime before model
+selection. Interactive Pi refreshes live catalogs in the background; the extension
+factory does not perform discovery. `--list-models` reads the cache, even online.
+With an empty cache, start Pi without an Ofox model override and let the background
+refresh finish, or run `/ofox-refresh`, before selecting an Ofox model.
+SDK embeddings use their own `modelRuntime.refresh({ providers: ["ofox"] })`,
+respecting injected auth/storage. Catalogs are cached in Pi's `models-store.json`
+for one hour; manual refresh forces an update. Refresh errors retain the last
+successful catalog. `--offline` / `PI_OFFLINE` restore only cached models.
+Discovery never sends prompts or makes inference requests.
 
 Remove Ofox redirects from `models.json` and change model-cycle entries to
 `ofox/<catalog-id>`. Built-in providers remain independent. Existing sessions keep

@@ -12,7 +12,7 @@ import {
 	type ToolDefinition,
 	type ToolRenderers,
 } from "@earendil-works/pi-coding-agent";
-import { Text } from "@earendil-works/pi-tui";
+import { type Component, Text } from "@earendil-works/pi-tui";
 import { Type } from "typebox";
 import type { Allowance } from "./permissions.ts";
 import {
@@ -63,7 +63,35 @@ export function renderAllowanceBadge(allowance: Allowance, theme: BadgeTheme): s
 	return `${badge}${theme.fg("dim", " · ")}${theme.fg("accent", `tools ${tools}`)}`;
 }
 
-/** Shared command + access badge for foreground bash and background job_start calls. */
+type CallRenderer = NonNullable<ToolRenderers["renderCall"]>;
+
+/** A tool's own call component with the declared access underneath. */
+class SandboxCall implements Component {
+	inner: Component | undefined;
+	readonly badge = new Text("", 0, 0);
+
+	render(width: number): string[] {
+		return [...(this.inner?.render(width) ?? []), ...this.badge.render(width)];
+	}
+
+	invalidate(): void {
+		this.inner?.invalidate();
+		this.badge.invalidate();
+	}
+}
+
+/** Decorate without replacing the tool's command rendering or its reusable component. */
+export function withSandboxBadge(renderCall: CallRenderer): CallRenderer {
+	return (args, theme, context) => {
+		const box = context.lastComponent instanceof SandboxCall ? context.lastComponent : new SandboxCall();
+		box.inner = renderCall(args, theme, { ...context, lastComponent: box.inner });
+		const input = (args ?? {}) as { sandbox?: unknown };
+		box.badge.setText(renderBadge(input.sandbox, theme));
+		return box;
+	};
+}
+
+/** Command + access badge for foreground bash calls. */
 export const renderSandboxCall: NonNullable<ToolRenderers["renderCall"]> = (args, theme, context) => {
 	const input = (args ?? {}) as { command?: unknown; timeout?: unknown; sandbox?: unknown };
 	const text = (context.lastComponent as Text | undefined) ?? new Text("", 0, 0);

@@ -18,5 +18,5 @@
 		"skipLibCheck": true,
 		"types": ["node"]
 	},
-	"include": ["index.ts", "jobs.ts"]
+	"include": ["index.ts", "jobs.ts", "notifications.ts"]
 }

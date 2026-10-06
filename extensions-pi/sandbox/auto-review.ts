@@ -6,10 +6,9 @@ import { cleanupSessionResources, type AssistantMessage } from "@earendil-works/
 import { buildSessionContext, type ExtensionContext } from "@earendil-works/pi-coding-agent";
 import type { ReviewRequest, Reviewer, Verdict } from "./review.ts";
 import { createReviewTools, REVIEW_TOOL_NAMES } from "./review-tools.ts";
+import { DEFAULT_REVIEWER_MODEL, validateReviewerModel } from "./review-config.ts";
 
-export const REVIEWER_MODEL_FLAG = "reviewer-model";
-export const DEFAULT_REVIEWER_MODEL = "openai-codex/gpt-6-luna";
-export const AUTO_REVIEW_ENTRY = "sandbox-auto-review";
+export { AUTO_REVIEW_ENTRY, DEFAULT_REVIEWER_MODEL, REVIEWER_MODEL_FLAG } from "./review-config.ts";
 export const REVIEW_LIMITS = { timeoutMs: 60_000, requests: 4, tools: 8, contextBytes: 256 * 1024, outputTokens: 2048 };
 
 const PROMPT = `You review proposed tool calls before execution, not perform the main task.
@@ -96,8 +95,7 @@ export class AutoReviewer implements Reviewer {
 	constructor(options: AutoReviewerOptions = {}) {
 		this.options = options;
 		this.modelName = options.model ?? DEFAULT_REVIEWER_MODEL;
-		const slash = this.modelName.indexOf("/");
-		if (slash <= 0 || slash === this.modelName.length - 1 || this.modelName.trim() !== this.modelName) throw new Error(`--${REVIEWER_MODEL_FLAG} needs provider/model`);
+		validateReviewerModel(this.modelName);
 		this.limits = { ...REVIEW_LIMITS, ...options.limits };
 	}
 

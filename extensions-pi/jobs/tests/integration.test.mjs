@@ -82,6 +82,36 @@ test("jobs tools through the real pi loader", { skip: !sdkPath }, async (t) => {
 	}
 
 	const runner = session.extensionRunner;
+	const messageRenderer = runner.getMessageRenderer("job");
+	assert.equal(typeof messageRenderer, "function");
+	const notificationText = '[job render "preview"] exit 0\n' + Array.from({ length: 20 }, (_, i) => `output ${i + 1}`).join("\n");
+	sdk.initTheme("dark"); // No TUI or theme watcher: exercise only the transcript component.
+	const notification = new sdk.CustomMessageComponent(
+		{ role: "custom", customType: "job", content: notificationText, display: true, timestamp: Date.now() },
+		messageRenderer,
+	);
+	const collapsedLines = notification.render(80);
+	assert.ok(collapsedLines.length <= 10, "custom notifications start collapsed like tool output");
+	const click = () => notification.handleMouse({
+		type: "click", button: "left", x: 2, y: 2, screenX: 2, screenY: 2,
+		width: 80, height: notification.render(80).length, shift: false, alt: false, ctrl: false,
+	});
+	const clicked = click();
+	assert.equal(clicked.handled, true, "the host routes the click to the notification renderer");
+	assert.equal(clicked.render, true, "the mouse event requests a redraw");
+	assert.ok(notification.render(80).length > collapsedLines.length);
+	notification.invalidate();
+	assert.ok(notification.render(80).length > collapsedLines.length, "local expansion survives a host rebuild");
+	notification.setOutputPad(2);
+	assert.ok(notification.render(80).length > collapsedLines.length, "padding changes preserve local expansion");
+	notification.setOutputPad(1);
+	click();
+	assert.deepEqual(notification.render(80), collapsedLines, "a second click collapses the notification");
+	notification.setExpanded(true);
+	assert.ok(notification.render(80).length > collapsedLines.length, "the regular expansion toggle reveals the logs");
+	notification.setExpanded(false);
+	assert.deepEqual(notification.render(80), collapsedLines);
+
 	const ctx = runner.createToolContext("jobs-test");
 	const call = (name, toolCallId, params) =>
 		session.getToolDefinition(name).execute(toolCallId, params, undefined, undefined, ctx);
