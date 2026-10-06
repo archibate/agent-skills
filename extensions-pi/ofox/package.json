@@ -1,0 +1,9 @@
+{
+	"name": "pi-ofox-extension",
+	"private": true,
+	"type": "module",
+	"peerDependencies": {
+		"@earendil-works/pi-ai": "*",
+		"@earendil-works/pi-coding-agent": "*"
+	}
+}

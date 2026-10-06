@@ -151,6 +151,7 @@ curl -fsSL https://raw.githubusercontent.com/archibate/agent-skills/master/insta
 - `plan-mode` 🗺️——`/plan` 或 `Ctrl+Alt+P` 切**只读计划模式**，每轮都敲脑袋提醒模型“你目前只读”，给你出计划，你再按一次 `/plan` 关闭计划模式后，才提醒“放行” 🚓
 - `rewind` ⏪——Claude Code 同款**代码快照**：Pi 的每次 `edit` 和 `write` 都会被快照记录，`/rewind`（`Ctrl+Alt+R`）列出本会话每个用户提问的时间点，选中即可代码和对话一起回滚，也可以单独只回滚对话或代码；Pi 原生的 `/tree`（`Esc Esc`）保持不动。
 - `rmb-cost` 💴——状态栏里的 `$` 会话成本**就地换算成 ¥**，因为中国人能飞。
+- `ofox` 🦊——从 [Ofox](https://ofox.io) **自动发现模型**，`/ofox-refresh` 更新列表，不用手写 `models.json` 重定向。
 - `pi-subagents` 🦾——建议配合 `jobs` 和 `sandbox` 安装，真正符合**万物皆 bash** 的 Pi 哲学，把 subagent 也作为 bash 后台任务管理，主 agent 自己掌握节奏；可从脚本批量启动，可自由组合，开启您的大并行时代 🦾🦾🦾👋🤖
 
 > 安装器里勾选 Pi 为目标 agent 后，这些扩展按需勾选安装。

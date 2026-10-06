@@ -296,13 +296,19 @@ assert_link_target "$CASE_HOME/.pi/agent/skills/pi-subagents" "$ROOT/skills-pi/p
 [ ! -e "$CASE_HOME/.agents/skills/pi-subagents" ] || fail 'Pi-only skill leaked into the shared skills directory'
 
 new_case pi-extension-copy
-run_installer --skills scratchpad,sandbox --targets pi --yes --skip-deps --install-mode copy >/dev/null
-for extension in scratchpad sandbox; do
+run_installer --skills scratchpad,sandbox,ofox --targets pi --yes --skip-deps --install-mode copy >/dev/null
+for extension in scratchpad sandbox ofox; do
     assert_file "$CASE_HOME/.pi/agent/extensions/$extension/index.ts"
     assert_not_link "$CASE_HOME/.pi/agent/extensions/$extension"
     [ ! -e "$CASE_HOME/.pi/agent/extensions/$extension/node_modules" ] || fail 'copied extension kept node_modules'
 done
 assert_file "$CASE_HOME/.pi/agent/extensions/sandbox/landlock-exec.c"
+assert_file "$CASE_HOME/.pi/agent/extensions/ofox/provider.ts"
+assert_file "$CASE_HOME/.pi/agent/extensions/ofox/google-identity.ts"
+
+new_case pi-ofox-link
+run_installer --skills ofox --targets pi --yes --skip-deps >/dev/null
+assert_link_target "$CASE_HOME/.pi/agent/extensions/ofox" "$ROOT/extensions-pi/ofox"
 
 new_case pi-extension-unsupported-target
 set +e
