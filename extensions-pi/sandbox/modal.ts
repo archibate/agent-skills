@@ -105,6 +105,11 @@ export class ReviewModal implements Component {
 		const title = ` Permission request · ${request.subject} `;
 		const rule = (head = "") => truncateToWidth(head + theme.fg("borderAccent", "─".repeat(width)), width, "");
 		out.push(rule(theme.fg("borderAccent", "──") + theme.fg("accent", theme.bold(title))));
+		if (request.reviewerFeedback) {
+			push(theme.fg("warning", "Automatic review:"));
+			for (const line of clip(wrapTextWithAnsi(theme.fg("muted", request.reviewerFeedback), inner), 6, theme)) push(line);
+			out.push("");
+		}
 		for (const line of previewLines(request, theme)) for (const wrapped of wrapTextWithAnsi(line, inner)) push(wrapped);
 		out.push("");
 		push(theme.fg("muted", "Needs, beyond this session's permissions:"));

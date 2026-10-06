@@ -24,8 +24,9 @@
 import { homedir } from "node:os";
 import { DynamicBorder, type ExtensionAPI, type ExtensionCommandContext, type ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { Container, SelectList, Spacer, Text } from "@earendil-works/pi-tui";
+import { AUTO_REVIEW_ENTRY, DEFAULT_REVIEWER_MODEL, REVIEWER_MODEL_FLAG } from "./auto-review.ts";
 import { ENABLE_SANDBOX_FLAG, sandboxRequested } from "./enable.ts";
-import { MARK_ENTRY, type ReviewMark, registerReviewMarks } from "./marks.ts";
+import { isReviewMark, MARK_ENTRY, type ReviewMark, registerReviewMarks } from "./marks.ts";
 import {
 	type Allowance,
 	assessCall,
@@ -90,7 +91,11 @@ export default function sandboxExtension(pi: ExtensionAPI): void {
 	});
 	pi.registerFlag(REVIEWER_FLAG, {
 		type: "string",
-		description: `Who decides calls beyond the permissions: deny, or manual (TUI only). Default: manual in the TUI, deny otherwise.`,
+		description: `Who decides calls beyond the permissions: deny, manual, auto, or auto-manual. Manual modes need the TUI. Default: manual in the TUI, deny otherwise.`,
+	});
+	pi.registerFlag(REVIEWER_MODEL_FLAG, {
+		type: "string",
+		description: `Model for automatic review, as provider/model. Default: ${DEFAULT_REVIEWER_MODEL}.`,
 	});
 
 	let allowance: Allowance = NO_ACCESS;
@@ -102,11 +107,22 @@ export default function sandboxExtension(pi: ExtensionAPI): void {
 	let flagApplied = false;
 	let cwd = process.cwd();
 	let statusUI: ExtensionContext["ui"] | undefined;
+	let sessionEpoch = 0;
+	let reviewAbort = new AbortController();
 	const marks = new Map<string, ReviewMark>();
 
 	const home = homedir();
 
+	function invalidateReviews(sessionChanged = false): void {
+		if (sessionChanged) sessionEpoch++;
+		reviewAbort.abort();
+		reviewAbort = new AbortController();
+		reviewer.reset?.();
+	}
+
 	function restore(ctx: ExtensionContext, reason: "start" | "tree"): void {
+		invalidateReviews(true);
+		reviewer.dispose?.();
 		cwd = ctx.cwd;
 		statusUI = ctx.mode === "tui" ? ctx.ui : undefined;
 		marks.clear();
@@ -116,7 +132,7 @@ export default function sandboxExtension(pi: ExtensionAPI): void {
 			if (entry.customType === PERMISSIONS_ENTRY && isAllowance(entry.data)) stored = entry.data;
 			if (entry.customType === MARK_ENTRY) {
 				const { toolCallId, mark } = (entry.data ?? {}) as { toolCallId?: unknown; mark?: unknown };
-				if (typeof toolCallId === "string" && (mark === "approved" || mark === "always" || mark === "denied")) {
+				if (typeof toolCallId === "string" && isReviewMark(mark)) {
 					marks.set(toolCallId, mark);
 				}
 			}
@@ -140,7 +156,12 @@ export default function sandboxExtension(pi: ExtensionAPI): void {
 		}
 		const name = restricted !== undefined ? "deny" : pi.getFlag(REVIEWER_FLAG);
 		try {
-			reviewer = createReviewer(typeof name === "string" && name !== "" ? name : defaultReviewerName(ctx.mode), ctx.mode);
+			const model = pi.getFlag(REVIEWER_MODEL_FLAG);
+			const epoch = sessionEpoch;
+			reviewer = createReviewer(typeof name === "string" && name !== "" ? name : defaultReviewerName(ctx.mode), ctx.mode, {
+				model: typeof model === "string" && model !== "" ? model : DEFAULT_REVIEWER_MODEL,
+				record: (record) => { if (epoch === sessionEpoch) pi.appendEntry(AUTO_REVIEW_ENTRY, record); },
+			});
 		} catch (error) {
 			reviewer = createReviewer("deny", ctx.mode);
 			errors.push(error instanceof Error ? error.message : String(error));
@@ -158,6 +179,7 @@ export default function sandboxExtension(pi: ExtensionAPI): void {
 	}
 
 	function setAllowance(next: Allowance): void {
+		invalidateReviews();
 		allowance = next;
 		pi.appendEntry(PERMISSIONS_ENTRY, allowance);
 		updateStatus();
@@ -182,7 +204,10 @@ export default function sandboxExtension(pi: ExtensionAPI): void {
 		prepare: (request, workdir) => prepareSandbox(request as SandboxRequest | undefined, workdir),
 		isReadOnly: (request) => isReadOnlyRequest(request as SandboxRequest | undefined),
 		restrict(permissions) {
-			allowance = parsePermissions(permissions, cwd, home);
+			const next = parsePermissions(permissions, cwd, home);
+			invalidateReviews(true);
+			reviewer.dispose?.();
+			allowance = next;
 			restricted = permissions;
 			reviewer = createReviewer("deny", "print");
 			configError = undefined;
@@ -203,6 +228,10 @@ export default function sandboxExtension(pi: ExtensionAPI): void {
 	pi.on("session_tree", (_event, ctx) => {
 		if (requested()) restore(ctx, "tree");
 	});
+	pi.on("session_shutdown", () => {
+		invalidateReviews(true);
+		reviewer.dispose?.();
+	});
 
 	// One review at a time; each re-checks the permissions, which an earlier "always" may have widened.
 	let queue: Promise<unknown> = Promise.resolve();
@@ -218,11 +247,24 @@ export default function sandboxExtension(pi: ExtensionAPI): void {
 		};
 		const effective = () => (configError ? presetAllowance("read-only", ctx.cwd, home) : allowance);
 		if (assessCall(effective(), call).kind === "allow") return undefined;
+		const epoch = sessionEpoch;
 		const turn = queue.then(async () => {
+			if (ctx.signal?.aborted || epoch !== sessionEpoch) return { block: true, reason: "Review cancelled: the session changed or the turn was aborted." };
 			const assessment = assessCall(effective(), call);
 			if (assessment.kind === "allow") return undefined;
 			if (assessment.kind === "invalid") return { block: true, reason: assessment.message };
+			const instructions = ctx.getSystemPrompt();
+			const fingerprint = JSON.stringify(call.input);
+			const assessmentFingerprint = JSON.stringify(assessment);
+			const signal = AbortSignal.any([reviewAbort.signal, ...(ctx.signal ? [ctx.signal] : [])]);
+			const reviewContext: ExtensionContext = Object.create(ctx);
+			Object.defineProperty(reviewContext, "signal", { value: signal });
 			const request: ReviewRequest = {
+				toolCallId: event.toolCallId,
+				permissions: describeAllowance(effective()),
+				toolDescription: pi.getAllTools().find((tool) => tool.name === call.toolName)?.description,
+				resolvedPath: ["write", "edit"].includes(call.toolName) && typeof call.input.path === "string" ? canonicalPath(expandPath(call.input.path.replace(/^@/, ""), ctx.cwd, home)) : undefined,
+				resolvedAccess: ["bash", "job_start"].includes(call.toolName) ? assessment.always?.policy : undefined,
 				toolName: call.toolName,
 				input: call.input,
 				cwd: ctx.cwd,
@@ -231,13 +273,16 @@ export default function sandboxExtension(pi: ExtensionAPI): void {
 				always: assessment.always ? alwaysLabel(allowance, assessment.always) : undefined,
 			};
 			const active = configError ? createReviewer("deny", ctx.mode) : reviewer;
-			const verdict = await active.review(request, ctx);
+			const verdict = await active.review(request, reviewContext);
+			if (signal.aborted || epoch !== sessionEpoch || instructions !== ctx.getSystemPrompt() || fingerprint !== JSON.stringify(call.input) || assessmentFingerprint !== JSON.stringify(assessCall(effective(), call))) {
+				return { block: true, reason: "Review cancelled: the session, permissions, or proposed call changed. Reassess the current request." };
+			}
 			if (verdict.kind === "approve" || verdict.kind === "always") {
 				if (verdict.kind === "always" && assessment.always) setAllowance(unionAllowance(allowance, assessment.always));
-				setMark(event.toolCallId, verdict.kind === "always" ? "always" : "approved");
+				setMark(event.toolCallId, verdict.kind === "always" ? "always" : verdict.source === "auto" ? "auto-approved" : "approved");
 				return undefined;
 			}
-			if (active.name !== "deny") setMark(event.toolCallId, "denied");
+			if (active.name !== "deny") setMark(event.toolCallId, verdict.source === "auto" ? "auto-denied" : "denied");
 			const reason = denialReason(request, verdict, active.name, describeAllowance(effective()));
 			return { block: true, reason: configError ? `${reason} (${configError})` : reason };
 		});

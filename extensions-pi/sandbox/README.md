@@ -4,8 +4,8 @@ Runs the agent's `bash` (and `job_start`, and `/btw`'s bash) inside bubblewrap p
 with the access each command needs declared in the tool call. The declaration is rendered under
 the command, so a reviewer sees what every call asked for, and plain read-only calls stay terse.
 
-Calls that need more than the session's permissions go to a reviewer: a modal in the TUI, a
-denial in headless runs. See [Permissions and review](#permissions-and-review).
+Calls that need more than the session's permissions go to a reviewer: by default a modal in the
+TUI, a denial in headless runs. Optional automatic reviewers use GPT-6 Luna. See [Permissions and review](#permissions-and-review).
 
 ## Opt-in
 
@@ -78,7 +78,8 @@ exactly what it declares, and the agent's prompt does not mention either.
 | Setting | Values | Default |
 |---|---|---|
 | `--permissions`, `/permissions` | `default`, `read-only`, or a JSON sandbox object plus optional `"tools": [...]` | `default`: the git work tree is writable, network `fetch-only`, other tools run |
-| `--reviewer` | `deny`; `manual` (TUI only). `auto` and `auto-manual` are reserved | `manual` in the TUI, `deny` otherwise |
+| `--reviewer` | `deny`, `manual`, `auto`, `auto-manual`; manual modes need the TUI | `manual` in the TUI, `deny` otherwise |
+| `--reviewer-model` | Chat model as `provider/model` | `openai-codex/gpt-6-luna`, low reasoning |
 
 A call needs review when:
 
@@ -95,7 +96,8 @@ each command's own declaration.
 The manual reviewer's modal shows the command, edit diff, or written file, and what it needs beyond
 the permissions. Keys: Enter/`y` yes, `a` always (adds those grants to the session's permissions),
 Esc/`n` no, `f` no with a feedback note for the agent. Keys are ignored for 300 ms after it opens.
-Reviewed calls get a mark under the call: `✓ approved`, `✓ always`, `✗ denied`.
+Reviewed calls get a mark under the call: `✓ approved`, `✓ always`, `✗ denied`. Automatic decisions
+have distinct `✓ auto approved` / `✗ auto denied` marks.
 
 `/permissions` edits the permissions, or sets them from a value (`/permissions read-only`). Edits,
 "always" approvals, and marks are session entries: they survive `/reload` and resume, and fork
@@ -108,8 +110,51 @@ A `job_start` that declares `dangerouslySkipSandbox` and whose command is exactl
 command (other shell syntax, unknown pi flags, a `$VAR` where pi reads access or a prompt) makes it
 an ordinary `dangerouslySkipSandbox` review.
 
-Invalid `--permissions` or `--reviewer` values are reported at startup; calls beyond read-only are
+Invalid permission or reviewer configuration is reported at startup; calls beyond read-only are
 then denied with the error in the reason.
+
+### Automatic review
+
+```sh
+pi --reviewer auto-manual
+```
+
+This opts into the sandbox and uses Luna through the configured Codex credentials; it changes
+neither the main model nor the default reviewer for other launches. Review context and queried
+text are sent to the selected model provider and consume its quota. `auto` approves or denies
+without a modal. `auto-manual` lets automatic approvals proceed and sends denials or reviewer
+failures to the human modal with an explanation. Cancellation never opens a fallback modal.
+Automatic approval is for the exact call once; only a human can choose "always".
+
+The reviewer is a private in-memory SDK agent, not a reloaded set of user/project extensions. It
+receives the effective main conversation as quoted evidence, current project instructions,
+previous review marks, the exact proposal, and resolved access/paths. Pending main tool calls are
+quoted, never replayed as side actions. Its tools are only bounded `read`, `grep`, `find`, and `ls`
+queries: no shell, mutations, jobs, network tools, or tool auto-installation. Search programs run
+inside the existing read-only sandbox with private PIDs/devices, use one thread, ignore user ripgrep
+configuration, and do not cross filesystem boundaries. Reads pin their inode before opening it for
+contents and are limited to regular text files of at most 4 MiB; device/process pseudo-filesystems
+and binary or image inspection are excluded. Images in main history are marked as omitted evidence.
+
+One reviewer lives across calls, retaining its own prefix cache and appending new main evidence.
+Branch, instruction, model-metadata, or permission changes reset it; reload/resume re-seeds it
+from the active main context. No reviewer prompt or transcript is inserted into main LLM context.
+Each automatic decision records its model, reason, elapsed time and reported usage in a
+`sandbox-auto-review` custom entry, without storing query outputs or the full reviewer transcript.
+These records and origin marks survive resume; the live reviewer transcript is kept locally in
+memory only. Usage distinguishes input, cache reads/writes, and output. Reported cost is model
+metadata, not a subscription bill, and interrupted requests may not report usage.
+
+Bounds per review: 60 seconds, four model requests, eight queries, requested output of 2048 tokens
+per model request, and at most 256 KiB of evidence/transcript (reduced for smaller model contexts).
+Oversized evidence, invalid verdicts, unavailable credentials, and provider failures cannot approve
+in `auto`; they escalate in `auto-manual`. Streamed responses and aggregate reported output are
+also bounded. Session/permission changes cancel in-flight work, and changed instructions, call
+inputs or resolved access invalidate an approval before execution.
+
+Model decisions are probabilistic: `auto-manual` does not ask a human about automatic approvals.
+Offline tests verify the control flow, not Luna's judgment quality; live evaluation remains necessary
+before relying on unattended automatic approval.
 
 ## Limits
 
@@ -143,6 +188,9 @@ Linux with bubblewrap, Landlock ABI 9 or newer, a C compiler (the helper is buil
 use into `${XDG_CACHE_HOME:-~/.cache}/pi/sandbox/<source-hash>/`), and `socat` for `fetch-only`.
 Each check fails closed with an explanatory error. Overhead is about 15 ms per command.
 
+`grep` and `find` in the automatic reviewer additionally need `/usr/bin/rg` and `/usr/bin/fd`.
+Query failures deny automatic review; there is no unsandboxed search fallback.
+
 ## Files
 
 | File | Role |
@@ -151,7 +199,9 @@ Each check fails closed with an explanatory error. Overhead is about 15 ms per c
 | `enable.ts` | The opt-in gate: whether a launch asked for the sandbox (pure). |
 | `permissions.ts` | Permissions: presets, `--permissions` parsing, per-call assessment (pure). |
 | `subagent.ts` | Recognizes a bounded `pi -p --permissions` launch (pure). |
-| `review.ts` | Reviewer interface, `deny` and `manual` reviewers, denial reasons. |
+| `review.ts` | Reviewer interface, strategy selection, manual fallback, denial reasons. |
+| `auto-review.ts` | Luna reviewer lifecycle, quoted evidence/deltas, budgets, verdict validation and audit records. |
+| `review-tools.ts` | Bounded reviewer-only filesystem queries. |
 | `modal.ts` | The manual reviewer's modal. |
 | `marks.ts` | Review marks under reviewed calls. |
 | `bwrap.ts` | Policy + host facts → bwrap arguments, landlock-exec entry, environment (pure). |

@@ -2,15 +2,31 @@
   "cleanupPeriodDays": 3650,
   "skillListingBudgetFraction": 0.05,
   "env": {
+    "IS_DEMO": "1",
+    "ENABLE_CLAUDEAI_MCP_SERVERS": "false",
+    "ENABLE_TOOL_SEARCH": "true",
+    "API_TIMEOUT_MS": "1200000",
+    "CLAUDE_CODE_FORK_SUBAGENT": "1",
+    "CLAUDE_CODE_ENABLE_PROMPT_SUGGESTION": "1",
+    "CLAUDE_CODE_BASH_SANDBOX_SHOW_INDICATOR": "1",
+    "CLAUDE_CODE_TMUX_TRUECOLOR": "1",
     "BASH_MAX_OUTPUT_LENGTH": "10000",
     "BASH_MAX_TIMEOUT_MS": "240000",
     "CLAUDE_AUTO_BACKGROUND_TASKS": "1",
-    "CLAUDE_CODE_ENABLE_PROMPT_SUGGESTION": "1",
-    "CLAUDE_CODE_TMUX_TRUECOLOR": "1",
-    "CLAUDE_CODE_DISABLE_FEEDBACK_SURVEY": "1"
+    "CLAUDE_CODE_NEW_INIT": "1",
+    "CLAUDE_CODE_DISABLE_FEEDBACK_SURVEY": "1",
+    "CLAUDE_CODE_DISABLE_ARTIFACT": "1",
+    "CLAUDE_CODE_SEND_FEEDBACK": "0",
+    "DISABLE_FEEDBACK_COMMAND": "1"
   },
   "attribution": {
     "sessionUrl": false
+  },
+  "permissions": {
+    "defaultMode": "bypassPermissions",
+    "additionalDirectories": [
+      "/tmp"
+    ]
   },
   "enableAllProjectMcpServers": true,
   "skillOverrides": {
@@ -27,21 +43,27 @@
   "worktree": {
     "baseRef": "head"
   },
+  "viewMode": "default",
+  "tui": "fullscreen",
   "promptCacheTtl": "5m",
   "subagentPromptCacheTtl": "5m",
   "model": "opus",
   "effortLevel": "high",
+  "advisorModel": "opus",
   "awaySummaryEnabled": true,
   "showClearContextOnPlanAccept": true,
-  "tui": "fullscreen",
   "autoMemoryEnabled": true,
   "autoDreamEnabled": true,
   "showThinkingSummaries": true,
+  "skipDangerousModePermissionPrompt": true,
   "theme": "dark",
   "preferredNotifChannel": "notifications_disabled",
   "autoScrollEnabled": true,
+  "fileCheckpointingEnabled": true,
   "remoteControlAtStartup": true,
   "inputNeededNotifEnabled": true,
   "agentPushNotifEnabled": true,
-  "voiceEnabled": true
+  "voiceEnabled": false,
+  "enableArtifact": false,
+  "feedbackDrafts": "off"
 }

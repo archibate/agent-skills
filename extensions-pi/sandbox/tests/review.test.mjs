@@ -90,13 +90,16 @@ test("reviewer selection and denial reasons", async () => {
 	assert.equal(createReviewer("deny", "print").name, "deny");
 	assert.equal(createReviewer("manual", "tui").name, "manual");
 	assert.throws(() => createReviewer("manual", "print"), /manual needs the interactive TUI/);
-	assert.throws(() => createReviewer("auto", "tui"), /not available yet/);
+	assert.equal(createReviewer("auto", "tui").name, "auto");
+	assert.throws(() => createReviewer("auto", "tui", { model: "bad" }), /provider\/model/);
+	assert.throws(() => createReviewer("auto-manual", "print"), /needs the interactive TUI/);
 	assert.throws(() => createReviewer("nope", "tui"), /must be one of deny, manual, auto, auto-manual/);
 	assert.deepEqual(await createReviewer("deny", "print").review(request, {}), { kind: "deny" });
 	assert.match(
 		denialReason(request, { kind: "deny" }, "deny", "read-only"),
 		/^Blocked: bash needs writableLocations \/home\/u\/\.cache\/uv; networkAccess "full", beyond this run's permissions \(read-only\)\./,
 	);
+	assert.match(denialReason(request, { kind: "deny", source: "auto", feedback: "Stay local" }, "auto", "read-only"), /^Blocked by automatic review:/);
 	assert.match(
 		denialReason(request, { kind: "deny", feedback: "use the project venv" }, "manual", "read-only"),
 		/^The user denied this call: bash needs .*\. Feedback: use the project venv Do not retry/,

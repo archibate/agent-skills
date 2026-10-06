@@ -6,12 +6,17 @@
 import type { ExtensionAPI, Theme, ToolRenderers } from "@earendil-works/pi-coding-agent";
 import { type Component, truncateToWidth } from "@earendil-works/pi-tui";
 
-export type ReviewMark = "approved" | "always" | "denied";
+export type ReviewMark = "approved" | "always" | "denied" | "auto-approved" | "auto-denied";
+export function isReviewMark(value: unknown): value is ReviewMark {
+	return typeof value === "string" && ["approved", "always", "denied", "auto-approved", "auto-denied"].includes(value);
+}
 export const MARK_ENTRY = "sandbox-review";
 
 const MARKED_TOOLS = new Set(["bash", "job_start", "write", "edit"]);
 
 function markText(mark: ReviewMark, theme: Pick<Theme, "fg">): string {
+	if (mark === "auto-approved") return theme.fg("success", "✓ auto approved");
+	if (mark === "auto-denied") return theme.fg("error", "✗ auto denied");
 	if (mark === "denied") return theme.fg("error", "✗ denied");
 	return theme.fg("success", mark === "always" ? "✓ always (added to session permissions)" : "✓ approved");
 }
