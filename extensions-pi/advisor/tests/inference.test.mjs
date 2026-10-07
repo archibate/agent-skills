@@ -38,13 +38,29 @@ test("native Opus managed effort becomes static and works with one user message 
 	assert.deepEqual(payload.messages.map((m) => m.role), ["user"]);
 	assert.equal(payload.output_config.effort, "high");
 	assert.equal(payload.thinking.type, "adaptive");
-	assert.equal(payload.max_tokens, config.maxTokens);
+	assert.equal(payload.max_tokens, original.maxTokens);
 	assert.equal(payload.tools, undefined);
-	validateAnthropicRequest(payload, config.maxTokens);
+	validateAnthropicRequest(payload, original.maxTokens);
 	const cache = new TranscriptCache();
 	cache.prepare(payload, "native", "short")();
 	cache.prepare(payload, "native", "none")();
 	assert.deepEqual(original, before);
+});
+
+test("default output follows model metadata, including limits beyond the optional flag's range", () => {
+	const original = models.find((m) => m.id === "claude-opus-5-5");
+	for (const maxTokens of [4096, 64000, 262144]) {
+		const selected = { ...original, maxTokens };
+		assert.equal(prepareModel(selected, config).maxTokens, maxTokens);
+		assert.equal(selected.maxTokens, maxTokens);
+	}
+});
+
+test("an explicit output cap still reaches the Anthropic wire", async () => {
+	const model = prepareModel(models.find((m) => m.id === "claude-opus-5-5"), { ...config, maxTokens: 4096 });
+	const payload = await capture(model);
+	assert.equal(payload.max_tokens, 4096);
+	validateAnthropicRequest(payload, 4096);
 });
 
 test("inherited Anthropic fallbacks are removed on the wire", async () => {

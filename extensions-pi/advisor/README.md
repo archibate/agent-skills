@@ -88,7 +88,7 @@ The advisor can identify missing evidence but cannot fetch it. There is no autom
 |---|---|---|
 | `--advisor` | Follow pairings | Required value: exact `provider/model` or `none`; replaces `--advisor-model` |
 | `--advisor-thinking` | `high` | `off`, `minimal`, `low`, `medium`, `high`, `xhigh`, `max`; must be supported by the model |
-| `--advisor-max-tokens` | `8192` | Total output limit including thinking, where supported by the provider API |
+| `--advisor-max-tokens` | Selected model's output limit | Optional lower total output limit including thinking, where supported by the provider API |
 | `--advisor-cache` | `short` | `none`, `short`, `long`; Anthropic uses 5m or 1h |
 | `--advisor-timeout` | `180` | Deadline in seconds, from 1 to 1800 |
 
@@ -140,7 +140,9 @@ result reports actual provider input/output, cache-read/write tokens, and catalo
 USD cost; nested usage contributes to Pi's session totals. These figures are not a provider invoice.
 
 There is one inference per consultation, no internal retry or tool loop, and no automatic fallback.
-The output limit includes thinking; a truncated response is marked incomplete. Manual-thinking
+By default the selected model's catalog output limit is used, with no additional advisor cap.
+An explicit `--advisor-max-tokens` can lower that limit. Output includes thinking; a truncated
+response is marked incomplete. Manual-thinking
 Anthropic models require at least 2048 output tokens. Pi's Codex
 subscription adapter does not transmit output-token caps; on that route the deadline still
 applies, but `--advisor-max-tokens` is not a hard provider limit. Other adapters must also honor

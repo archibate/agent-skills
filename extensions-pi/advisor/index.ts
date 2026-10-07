@@ -11,7 +11,7 @@ import { readPolicy, resolveAdvisor, type AdvisorPolicy, type ModelIdentity } fr
 export default function registerAdvisor(pi: ExtensionAPI, agentDir = getAgentDir()) {
 	pi.registerFlag("advisor", { description: "Override advisor pairings for this process: exact provider/model, or none to disable.", type: "string" });
 	pi.registerFlag("advisor-thinking", { description: "Advisor reasoning effort. Default: high.", type: "string" });
-	pi.registerFlag("advisor-max-tokens", { description: "Advisor total output-token ceiling, including reasoning. Default: 8192.", type: "string" });
+	pi.registerFlag("advisor-max-tokens", { description: "Optional advisor total output-token ceiling, including reasoning. Default: selected model's output limit.", type: "string" });
 	pi.registerFlag("advisor-cache", { description: "Advisor cache retention: none, short (default), long. Anthropic: 5m or 1h.", type: "string" });
 	pi.registerFlag("advisor-timeout", { description: "Advisor deadline in seconds. Default: 180.", type: "string" });
 	const path = join(agentDir, "advisor.json");

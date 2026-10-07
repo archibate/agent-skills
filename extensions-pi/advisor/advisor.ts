@@ -109,7 +109,7 @@ export class Advisor {
 			if (response.stopReason !== "stop" && response.stopReason !== "length") throw new Error(response.errorMessage || `Advisor ended with ${response.stopReason}; no completed advice.`);
 			if (response.content.some((block) => block.type === "toolCall")) throw new Error("Advisor attempted a tool call; no tool was executed.");
 			const text = response.content.filter((block) => block.type === "text").map((block) => block.text).join("").trim();
-			if (!text) throw new Error("Advisor returned no visible advice. Its thinking was not forwarded; consider increasing --advisor-max-tokens.");
+			if (!text) throw new Error("Advisor returned no visible advice. Its thinking was not forwarded; try less thinking or relax an explicit --advisor-max-tokens limit.");
 			commitCache?.();
 			details.elapsedMs = Math.round(performance.now() - started);
 			const u = response.usage;

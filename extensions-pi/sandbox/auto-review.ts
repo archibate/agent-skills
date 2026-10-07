@@ -209,7 +209,6 @@ export class AutoReviewer implements Reviewer {
 		const agent = new Agent({
 			initialState: { systemPrompt: PROMPT, model, thinkingLevel: "low", tools: (this.options.createTools ?? createReviewTools)(ctx.cwd) },
 			sessionId: `${ctx.sessionManager.getSessionId()}.sandbox-review.${randomUUID()}`,
-			toolExecution: "sequential",
 			streamFn: (selected, context, options) => {
 				const budget = this.budget;
 				if (!budget || ++budget.requests > this.limits.requests) throw new Error("Reviewer exhausted its request budget");

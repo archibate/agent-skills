@@ -135,6 +135,42 @@ test("investigation executes only bounded read-only queries, then continues to a
 	assert.match(textOf(result), /Project-local evidence/);
 });
 
+for (const fail of [false, true]) {
+	test(`parallel investigation ${fail ? "fails closed on a query error" : "waits for both queries before approving"}`, { timeout: 3000 }, async (t) => {
+		const { ctx, calls } = fixture(t, [reply("", {
+			content: ["first", "second"].map((id) => ({ type: "toolCall", id, name: "read", arguments: { path: id } })),
+			stopReason: "toolUse",
+		}), approve]);
+		let started = 0;
+		let release;
+		const bothStarted = new Promise((resolve) => { release = resolve; });
+		const reviewer = new AutoReviewer({
+			limits: { timeoutMs: 1000 },
+			createTools: (cwd) => createReviewTools(cwd, fixtureSandbox).map((tool) => ({
+				...tool,
+				async execute(id, _args, signal) {
+					if (++started === 2) release();
+					signal.addEventListener("abort", release, { once: true });
+					try {
+						await bothStarted;
+						if (signal.aborted) throw new Error("Cancelled");
+						if (fail && id === "first") throw new Error("Query failed");
+						return { content: [{ type: "text", text: id }], details: undefined };
+					} finally {
+						signal.removeEventListener("abort", release);
+					}
+				},
+			})),
+		});
+		t.after(() => reviewer.dispose());
+		const verdict = await reviewer.review(request, ctx);
+		assert.equal(started, 2, "both queries must start before either completes");
+		assert.equal(verdict.kind, fail ? "deny" : "approve");
+		assert.equal(calls.length, fail ? 1 : 2);
+		if (!fail) assert.deepEqual(calls[1].context.messages.filter((m) => m.role === "toolResult").map(textOf), ["first", "second"]);
+	});
+}
+
 test("failed investigation cannot be ignored in favor of a later approval", async (t) => {
 	const { ctx, calls, reviewer } = fixture(t, [reply("", { content: [{ type: "toolCall", id: "missing", name: "read", arguments: { path: "missing.txt" } }], stopReason: "toolUse" }), approve]);
 	const verdict = await reviewer.review(request, ctx);

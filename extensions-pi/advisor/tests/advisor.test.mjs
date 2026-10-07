@@ -147,6 +147,9 @@ test("cache disabled removes markers; long cache asks for 1h; bad payloads fail 
 
 test("configuration validates route, supported level names, ceilings, TTL, and deadline", () => {
 	assert.equal(readConfig(() => undefined, "test/advisor").thinking, "high");
+	assert.equal(config.maxTokens, undefined);
+	assert.equal(config.timeoutMs, 180_000);
+	assert.equal(readConfig((name) => name === "advisor-max-tokens" ? "4096" : undefined, "test/advisor").maxTokens, 4096);
 	for (const [key, value] of [["advisor-thinking", "extreme"], ["advisor-cache", "forever"], ["advisor-max-tokens", "Infinity"], ["advisor-timeout", "0"]]) {
 		assert.throws(() => readConfig((name) => name === key ? value : undefined, "test/advisor"));
 	}
@@ -166,12 +169,27 @@ test("consultation uses one user message, separate system, no tools; usage and a
 	assert.equal(context.messages[0].role, "user");
 	assert.equal(context.tools, undefined);
 	assert.equal(options.maxRetries, 0);
-	assert.equal(selected.maxTokens, config.maxTokens);
+	assert.equal(selected.maxTokens, h.model.maxTokens);
+	assert.equal(options.maxTokens, h.model.maxTokens);
 	assert.equal(h.model.maxTokens, 32_000);
 	assert.deepEqual(out.usage, usage);
 	assert.match(joined(out.content), /20 cache read[\s\S]*Read cancellation/);
 	assert.doesNotMatch(joined(out.content), /PRIVATE/);
 	advisor.dispose();
+});
+
+test("explicit output caps reach inference without raising the model's own limit", async () => {
+	for (const [maxTokens, expected] of [[4096, 4096], [65536, 32000]]) {
+		const h = harness();
+		const advisor = new Advisor();
+		try {
+			const out = await advisor.consult(h.ctx, { ...config, maxTokens });
+			assert.equal(out.isError, undefined);
+			assert.equal(h.requests[0].selected.maxTokens, expected);
+			assert.equal(h.requests[0].options.maxTokens, expected);
+			assert.equal(h.model.maxTokens, 32000);
+		} finally { advisor.dispose(); }
+	}
 });
 
 test("effective compaction and branch selection never resurrect raw history", async () => {
