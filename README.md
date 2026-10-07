@@ -74,6 +74,7 @@ git clone --depth 1 https://github.com/archibate/agent-skills.git && cd agent-sk
 - 让 Pi 也并行多智能体🤖——`pi-subagents`（模仿 Claude Code 的 ultracode）
 - 面向现代模型的提示词规范✍️——`writing-prompt`
 - 禁止浮夸风PPT📔——`artifact-restraint`
+- 汇报别写小作文✂️——`minimalist`（唠叨得受不了时念咒语 `/minimalist`）
 
 ## 一键安装 🧰
 

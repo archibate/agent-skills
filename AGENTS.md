@@ -62,8 +62,8 @@ Before spending tier 2 or 3, trace the code flow and enumerate every state that 
 
 ## Communication
 
-- Maximize useful information per token.
-- Omit preambles, restatements, summaries, and generic advice.
-- Include a reason only when it changes the conclusion, confidence, or next action.
-- Do not offer follow-up work unless it is genuinely necessary.
-- Prefer the shortest answer that preserves all decision-relevant information.
+- Default to minimalist style for all direct user-facing replies, including progress updates. Expand only when the user explicitly requests detail.
+- Include only information that changes the user's judgment or next action; use the shortest wording that preserves it.
+- Focus on the current task. Omit unsolicited follow-up reminders and unrelated discoveries until they become relevant.
+- Omit preambles, restatements, redundant summaries, generic advice, obvious caveats, and redundant contrasts.
+- This governs communication, not investigation or implementation thoroughness.
