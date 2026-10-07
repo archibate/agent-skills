@@ -1,12 +1,16 @@
-import { getSupportedThinkingLevels, hasApi, type Api, type AssistantMessage, type AssistantMessageEventStream, type Model } from "@earendil-works/pi-ai";
-import type { AdvisorConfig } from "./config.ts";
+import { getSupportedThinkingLevels, hasApi, type Api, type AssistantMessage, type AssistantMessageEventStream, type Model, type ModelThinkingLevel } from "@earendil-works/pi-ai";
+import { LEVELS, type AdvisorConfig } from "./config.ts";
 
 /** A standalone reviewer uses static effort, no inherited fallback policy, and the model's output limit unless explicitly lowered. */
-export function prepareModel(selected: Model<Api>, config: AdvisorConfig): Model<Api> {
+export function prepareInference(selected: Model<Api>, config: AdvisorConfig): { model: Model<Api>; thinking: ModelThinkingLevel } {
 	// Pi resolves virtual models after this boundary, replacing the capped metadata and API policy.
 	if (selected.api === "pi-virtual") throw new Error("Advisor requires a physical provider/model, not a virtual router; select its concrete model in the pairing or --advisor override.");
 	const levels = getSupportedThinkingLevels(selected);
-	if (!levels.includes(config.thinking)) throw new Error(`${config.model} does not support advisor effort ${config.thinking}; choose --advisor-thinking from ${levels.join(", ")}.`);
+	const thinking = config.thinking === "auto"
+		? LEVELS.findLast((level) => level !== "max" && levels.includes(level) && selected.thinkingLevelMap?.[level] !== "max")
+		: config.thinking;
+	if (thinking === undefined) throw new Error(`${config.model} has no supported effort below max; set --advisor-thinking explicitly.`);
+	if (!levels.includes(thinking)) throw new Error(`${config.model} does not support advisor effort ${thinking}; choose --advisor-thinking from ${levels.join(", ")}.`);
 	const model = { ...selected, maxTokens: Math.min(selected.maxTokens, config.maxTokens ?? selected.maxTokens) };
 	if (hasApi(model, "anthropic-messages")) {
 		model.compat = {
@@ -15,11 +19,11 @@ export function prepareModel(selected: Model<Api>, config: AdvisorConfig): Model
 			supportsMidConvoEffort: false,
 			allowedFallbackModels: [],
 		};
-		if (model.reasoning && config.thinking !== "off" && !model.compat.forceAdaptiveThinking && model.maxTokens < 2048) {
+		if (model.reasoning && thinking !== "off" && !model.compat.forceAdaptiveThinking && model.maxTokens < 2048) {
 			throw new Error("Manual-thinking Anthropic advisors need at least 2048 total output tokens; increase --advisor-max-tokens or use supported off/adaptive thinking.");
 		}
 	}
-	return model;
+	return { model, thinking };
 }
 
 export function validateAnthropicRequest(payload: unknown, maxTokens: number): void {

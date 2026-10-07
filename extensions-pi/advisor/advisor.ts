@@ -4,7 +4,7 @@ import { cleanupSessionResources, type AssistantMessage, type Context, type Usag
 import { buildSessionContext, type ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { TranscriptCache } from "./cache.ts";
 import type { AdvisorConfig } from "./config.ts";
-import { observeResponse, prepareModel, settleCancelled, validateAnthropicRequest, type ObservedResponse } from "./inference.ts";
+import { observeResponse, prepareInference, settleCancelled, validateAnthropicRequest, type ObservedResponse } from "./inference.ts";
 import { buildTranscript } from "./transcript.ts";
 
 export const REVIEWER_PROMPT = `You are an independent advisor to the main assistant, not the agent executing the task. Review its interpretation, approach, and evidence against the user's goals and latest corrections.
@@ -68,7 +68,8 @@ export class Advisor {
 			const selected = ctx.modelRegistry.find(config.model.slice(0, slash), config.model.slice(slash + 1));
 			if (!selected) throw new Error(`Advisor model ${config.model} is unavailable. Load its provider or change the pairing/--advisor override; no fallback was used.`);
 			if (!ctx.modelRegistry.hasConfiguredAuth(selected)) throw new Error(`Credentials unavailable for advisor provider ${selected.provider}.`);
-			const model = prepareModel(selected, config);
+			const { model, thinking } = prepareInference(selected, config);
+			details.thinking = thinking;
 			const content = buildTranscript(buildSessionContext(ctx.sessionManager.getBranch()).messages, ctx.getSystemPrompt());
 			if (!model.input.includes("image") && content.some((block) => block.type === "image")) {
 				throw new Error("The advisor model cannot accept this transcript's images; select an image-capable advisor. Images were not silently removed.");
@@ -81,7 +82,7 @@ export class Advisor {
 			timer = setTimeout(() => controller!.abort(new Error(`Advisor exceeded its ${config.timeoutMs / 1000}s deadline; it may have consumed tokens.`)), config.timeoutMs);
 			let commitCache: (() => void) | undefined;
 			const stream = ctx.modelRegistry.streamSimple(model, context, {
-				reasoning: config.thinking === "off" ? undefined : config.thinking,
+				reasoning: thinking === "off" ? undefined : thinking,
 				maxTokens: model.maxTokens, cacheRetention: config.cache,
 				signal: combined, timeoutMs: config.timeoutMs, maxRetries: 0,
 				sessionId: this.sessionId, transport: "sse",

@@ -4,7 +4,7 @@ import { modelId } from "./pairings.ts";
 export const LEVELS = ["off", "minimal", "low", "medium", "high", "xhigh", "max"] as const;
 export interface AdvisorConfig {
 	model: string;
-	thinking: ModelThinkingLevel;
+	thinking: ModelThinkingLevel | "auto";
 	maxTokens?: number;
 	cache: "none" | "short" | "long";
 	timeoutMs: number;
@@ -12,8 +12,8 @@ export interface AdvisorConfig {
 
 export function readConfig(flag: (name: string) => unknown, selectedModel: string): AdvisorConfig {
 	const model = modelId(selectedModel);
-	const thinking = String(flag("advisor-thinking") ?? "high");
-	if (!(LEVELS as readonly string[]).includes(thinking)) throw new Error(`--advisor-thinking must be ${LEVELS.join(", ")}.`);
+	const thinking = String(flag("advisor-thinking") ?? "auto");
+	if (thinking !== "auto" && !(LEVELS as readonly string[]).includes(thinking)) throw new Error(`--advisor-thinking must be auto or ${LEVELS.join(", ")}.`);
 	const cache = String(flag("advisor-cache") ?? "short");
 	if (cache !== "none" && cache !== "short" && cache !== "long") throw new Error("--advisor-cache must be none, short, or long.");
 	function integer(name: string, value: unknown, min: number, max: number) {
@@ -24,8 +24,8 @@ export function readConfig(flag: (name: string) => unknown, selectedModel: strin
 	const maxTokens = flag("advisor-max-tokens");
 	const timeout = flag("advisor-timeout");
 	return {
-		model, thinking: thinking as ModelThinkingLevel, cache,
+		model, thinking: thinking as AdvisorConfig["thinking"], cache,
 		maxTokens: maxTokens === undefined ? undefined : integer("advisor-max-tokens", maxTokens, 1024, 131072),
-		timeoutMs: integer("advisor-timeout", timeout === undefined ? 180 : timeout, 1, 1800) * 1000,
+		timeoutMs: integer("advisor-timeout", timeout === undefined ? 600 : timeout, 1, 1800) * 1000,
 	};
 }

@@ -146,9 +146,12 @@ test("cache disabled removes markers; long cache asks for 1h; bad payloads fail 
 });
 
 test("configuration validates route, supported level names, ceilings, TTL, and deadline", () => {
-	assert.equal(readConfig(() => undefined, "test/advisor").thinking, "high");
+	assert.equal(readConfig(() => undefined, "test/advisor").thinking, "auto");
+	assert.equal(readConfig((name) => name === "advisor-thinking" ? "auto" : undefined, "test/advisor").thinking, "auto");
+	assert.equal(readConfig((name) => name === "advisor-thinking" ? "max" : undefined, "test/advisor").thinking, "max");
 	assert.equal(config.maxTokens, undefined);
-	assert.equal(config.timeoutMs, 180_000);
+	assert.equal(config.timeoutMs, 600_000);
+	assert.equal(readConfig((name) => name === "advisor-timeout" ? "45" : undefined, "test/advisor").timeoutMs, 45_000);
 	assert.equal(readConfig((name) => name === "advisor-max-tokens" ? "4096" : undefined, "test/advisor").maxTokens, 4096);
 	for (const [key, value] of [["advisor-thinking", "extreme"], ["advisor-cache", "forever"], ["advisor-max-tokens", "Infinity"], ["advisor-timeout", "0"]]) {
 		assert.throws(() => readConfig((name) => name === key ? value : undefined, "test/advisor"));
@@ -169,6 +172,8 @@ test("consultation uses one user message, separate system, no tools; usage and a
 	assert.equal(context.messages[0].role, "user");
 	assert.equal(context.tools, undefined);
 	assert.equal(options.maxRetries, 0);
+	assert.equal(options.reasoning, "high");
+	assert.equal(out.details.thinking, "high");
 	assert.equal(selected.maxTokens, h.model.maxTokens);
 	assert.equal(options.maxTokens, h.model.maxTokens);
 	assert.equal(h.model.maxTokens, 32_000);
@@ -176,6 +181,26 @@ test("consultation uses one user message, separate system, no tools; usage and a
 	assert.match(joined(out.content), /20 cache read[\s\S]*Read cancellation/);
 	assert.doesNotMatch(joined(out.content), /PRIVATE/);
 	advisor.dispose();
+});
+
+test("each consultation resolves auto effort and reports the actual level sent to inference", async () => {
+	const h = harness();
+	const advisor = new Advisor();
+	try {
+		for (const [reasoning, thinkingLevelMap, thinking, expected] of [
+			[true, { xhigh: "xhigh", max: "max" }, "auto", "xhigh"],
+			[true, { max: "max" }, "auto", "high"],
+			[true, { xhigh: "xhigh", max: "max" }, "low", "low"],
+			[true, { xhigh: "xhigh", max: "max" }, "max", "max"],
+			[false, undefined, "auto", "off"],
+		]) {
+			Object.assign(h.model, { reasoning, thinkingLevelMap });
+			const out = await advisor.consult(h.ctx, { ...config, thinking });
+			assert.equal(out.isError, undefined);
+			assert.equal(out.details.thinking, expected);
+			assert.equal(h.requests.at(-1).options.reasoning, expected === "off" ? undefined : expected);
+		}
+	} finally { advisor.dispose(); }
 });
 
 test("explicit output caps reach inference without raising the model's own limit", async () => {
@@ -245,7 +270,7 @@ test("second consult includes prior advisor calls as quoted tool history, never 
 	advisor.dispose();
 });
 
-test("model, auth, effort, and image incompatibility fail before inference without fallback", async () => {
+test("model, auth, explicit effort, and image incompatibility fail before inference without fallback", async () => {
 	for (const mutate of [
 		(h) => { h.ctx.modelRegistry.find = () => undefined; },
 		(h) => { h.ctx.modelRegistry.hasConfiguredAuth = () => false; },
@@ -255,7 +280,7 @@ test("model, auth, effort, and image incompatibility fail before inference witho
 	]) {
 		const h = harness(); mutate(h);
 		const advisor = new Advisor();
-		assert.equal((await advisor.consult(h.ctx, config)).isError, true);
+		assert.equal((await advisor.consult(h.ctx, { ...config, thinking: "high" })).isError, true);
 		assert.equal(h.requests.length, 0);
 		advisor.dispose();
 	}

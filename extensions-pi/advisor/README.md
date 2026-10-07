@@ -87,10 +87,15 @@ The advisor can identify missing evidence but cannot fetch it. There is no autom
 | Flag | Default | Meaning |
 |---|---|---|
 | `--advisor` | Follow pairings | Required value: exact `provider/model` or `none`; replaces `--advisor-model` |
-| `--advisor-thinking` | `high` | `off`, `minimal`, `low`, `medium`, `high`, `xhigh`, `max`; must be supported by the model |
+| `--advisor-thinking` | `auto` | Highest supported level except `max`; explicit `off`, `minimal`, `low`, `medium`, `high`, `xhigh`, `max` must be supported |
 | `--advisor-max-tokens` | Selected model's output limit | Optional lower total output limit including thinking, where supported by the provider API |
 | `--advisor-cache` | `short` | `none`, `short`, `long`; Anthropic uses 5m or 1h |
-| `--advisor-timeout` | `180` | Deadline in seconds, from 1 to 1800 |
+| `--advisor-timeout` | `600` | Deadline in seconds, from 1 to 1800 |
+
+Automatic effort is resolved from the selected advisor's capabilities on each consultation,
+not the main model's effort. Levels mapped to provider `max` are also excluded. Non-reasoning
+models use `off`; if no non-max level is supported, consultation fails explicitly. Request
+`--advisor-thinking max` to opt in where supported. Result details record the resolved level.
 
 Flags apply to this Pi process; no global settings or credentials are written. Model
 selection is exact: missing models/authentication and unsupported effort fail explicitly,
