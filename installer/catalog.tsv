@@ -19,6 +19,7 @@ jobs	extension	extensions-pi/jobs	claudish	no	-	-	-	pi	Background job tools
 scratchpad	extension	extensions-pi/scratchpad	claudish	no	-	-	-	pi	Session scratchpad
 context	extension	extensions-pi/context	claudish	no	-	-	-	pi	Context window usage
 prompt-stash	extension	extensions-pi/prompt-stash	claudish	no	-	-	-	pi	Stash and restore the prompt draft
+fresh	extension	extensions-pi/fresh	thinking	no	-	-	-	pi	Restart a branch with a user-only draft
 btw	extension	extensions-pi/btw	claudish	no	-	-	-	pi	Side question without disturbing the session
 plan-mode	extension	extensions-pi/plan-mode	claudish	no	-	-	-	pi	Read-only planning hint
 rmb-cost	extension	extensions-pi/rmb-cost	integration	no	-	-	-	pi	Session cost in RMB
