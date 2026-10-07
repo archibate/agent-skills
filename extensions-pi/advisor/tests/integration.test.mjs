@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { test, after } from "node:test";
 import { fixture } from "./host.mjs";
@@ -192,5 +192,101 @@ test("explicit advisor overrides persist across model changes/reload, but Pi too
 		await session.bindExtensions({ mode: "print", onError: (e) => assert.fail(e.error) });
 		await session.prompt("No tools.");
 		assert.deepEqual(requests[0].tools, []);
+	} finally { session.dispose(); }
+});
+
+test("session-journal failures report an applied selection, including Pi's partial append and subscriber failures", async (t) => {
+	const { KeybindingsManager } = await import(`${f.host}/dist/core/keybindings.js`);
+	const tui = await import(`${f.host}/../pi-tui/dist/index.js`);
+	const keys = new KeybindingsManager(); tui.setKeybindings(keys);
+	for (const failure of ["before", "persist", "subscriber"]) {
+		const { runtime, models, requests } = await selectionRuntime();
+		const { session, agentDir } = await sessionFixture({ runtime, model: models[0], flags: { advisor: "none" } });
+		const notices = [];
+		const uiContext = { notify: (message, type) => notices.push({ message, type }), custom: (factory) => new Promise((done) => {
+			const component = factory({ requestRender() {} }, { fg: (_color, text) => text }, keys, done);
+			component.handleInput("\x13");
+		}) };
+		let mocked; let unsubscribe;
+		try {
+			await session.bindExtensions({ mode: "tui", uiContext, onError: (e) => assert.fail(e.error) });
+			if (failure === "subscriber") unsubscribe = session.subscribe((event) => { if (event.type === "entry_appended") throw new Error("subscriber failure"); });
+			else mocked = t.mock.method(session.sessionManager, failure === "before" ? "appendCustomEntry" : "_persist", () => { throw new Error("journal failure"); });
+			await session.prompt("/advisor reviewer");
+			assert.ok(session.getActiveToolNames().includes("advisor"));
+			assert.equal(notices.at(-1).type, "warning");
+			assert.match(notices.at(-1).message, /Selection applied, but session persistence could not be confirmed/);
+			assert.equal(JSON.parse(readFileSync(join(agentDir, "advisor.json"), "utf8")).pairings["pairing-fixture/cheap"], "pairing-fixture/reviewer");
+			mocked?.mock.restore(); unsubscribe?.();
+			await session.reload();
+			assert.equal(session.getActiveToolNames().includes("advisor"), failure !== "before");
+			assert.equal(requests.length, 0);
+		} finally { mocked?.mock.restore(); unsubscribe?.(); session.dispose(); }
+	}
+});
+
+test("/advisor uses the real picker: Enter is session-only, Ctrl+S merges the current main pairing, and reload preserves selection", async () => {
+	const { runtime, models, requests, pairings } = await selectionRuntime();
+	const { KeybindingsManager } = await import(`${f.host}/dist/core/keybindings.js`);
+	const tui = await import(`${f.host}/../pi-tui/dist/index.js`);
+	const keys = new KeybindingsManager(); tui.setKeybindings(keys);
+	const { session, agentDir } = await sessionFixture({ runtime, model: models[0], pairings, flags: { advisor: "none" } });
+	const file = join(agentDir, "advisor.json");
+	const original = readFileSync(file, "utf8");
+	const notices = [];
+	let input = "\r";
+	let duringPicker;
+	const uiContext = {
+		notify: (message, type) => notices.push({ message, type }),
+		custom: async (factory) => {
+			let done;
+			const result = new Promise((resolve) => { done = resolve; });
+			const component = factory({ requestRender() {} }, { fg: (_color, text) => text }, keys, done);
+			assert.match(component.render(80).join("\n"), /Advisor for/);
+			if (duringPicker) await duringPicker();
+			component.handleInput(input);
+			return result;
+		},
+	};
+	try {
+		await session.bindExtensions({ mode: "tui", uiContext, onError: (e) => assert.fail(e.error) });
+		assert.ok(!session.getActiveToolNames().includes("advisor"));
+		await session.prompt("/advisor reviewer");
+		assert.ok(session.getActiveToolNames().includes("advisor"));
+		assert.equal(readFileSync(file, "utf8"), original);
+		assert.equal(session.sessionManager.getEntries().at(-1).data.model, "pairing-fixture/reviewer");
+		await session.reload();
+		assert.ok(session.getActiveToolNames().includes("advisor"), "Reload must not restore the earlier --advisor none");
+		await session.setModel(models[1]);
+		assert.ok(session.getActiveToolNames().includes("advisor"));
+		input = "\x13";
+		await session.prompt("/advisor cheap");
+		assert.deepEqual(JSON.parse(readFileSync(file, "utf8")).pairings, { ...pairings, "pairing-fixture/frontier": "pairing-fixture/cheap" });
+		assert.match(notices.at(-1).message, /saved pairing for pairing-fixture\/frontier/);
+		input = "\x1b";
+		const leaf = session.sessionManager.getLeafId();
+		await session.prompt("/advisor");
+		assert.equal(session.sessionManager.getLeafId(), leaf);
+		input = "\r";
+		await session.prompt("/advisor none");
+		assert.ok(!session.getActiveToolNames().includes("advisor"));
+		assert.equal(JSON.parse(readFileSync(file, "utf8")).pairings["pairing-fixture/frontier"], "pairing-fixture/cheap");
+		input = "\x13";
+		writeFileSync(file, "invalid");
+		await session.prompt("/advisor reviewer");
+		assert.equal(notices.at(-1).type, "error");
+		assert.equal(readFileSync(file, "utf8"), "invalid");
+		assert.ok(!session.getActiveToolNames().includes("advisor"));
+		writeFileSync(file, original);
+		duringPicker = () => session.setModel(models[0]);
+		await session.prompt("/advisor reviewer");
+		assert.match(notices.at(-1).message, /Session or main model changed/);
+		assert.equal(readFileSync(file, "utf8"), original);
+		const noticeCount = notices.length;
+		duringPicker = () => session.reload();
+		await session.prompt("/advisor reviewer");
+		assert.equal(readFileSync(file, "utf8"), original);
+		assert.equal(notices.length, noticeCount, "A stale runtime must not access its invalid UI context");
+		assert.equal(requests.length, 0, "Opening, selecting, saving, and cancelling must never infer");
 	} finally { session.dispose(); }
 });

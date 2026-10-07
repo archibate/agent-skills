@@ -1,4 +1,6 @@
-import { closeSync, constants, fstatSync, openSync, readSync } from "node:fs";
+import { randomUUID } from "node:crypto";
+import { closeSync, constants, fsyncSync, fstatSync, lstatSync, mkdirSync, openSync, readSync, realpathSync, renameSync, unlinkSync, writeFileSync } from "node:fs";
+import { basename, dirname, join } from "node:path";
 
 export interface ModelIdentity { provider: string; id: string }
 export interface AdvisorPolicy {
@@ -47,6 +49,51 @@ export function readPolicy(override: unknown, path: string): AdvisorPolicy {
 		if (size > limit) throw new Error("Advisor configuration exceeds 1 MiB.");
 		return { pairings: parsePairings(buffer.toString("utf8", 0, size)) };
 	} finally { closeSync(fd); }
+}
+
+/** Serialize cooperating Pi saves across processes; never replace malformed config or symlink targets. */
+export function savePairing(path: string, main: string, advisor: string | null): string | undefined {
+	modelId(main);
+	if (advisor !== null) modelId(advisor);
+	mkdirSync(dirname(path), { recursive: true, mode: 0o700 });
+	const target = join(realpathSync(dirname(path)), basename(path));
+	const lock = `${target}.lock`;
+	let lockFd: number;
+	try { lockFd = openSync(lock, "wx", 0o600); }
+	catch (error) {
+		if ((error as NodeJS.ErrnoException).code === "EEXIST") throw new Error(`Advisor pairing save is locked (${lock}). Retry when the other save finishes; a lock left by a crashed process must be removed manually.`);
+		throw error;
+	}
+	let temporary: string | undefined;
+	let committed = false;
+	let failure: unknown;
+	const cleanup = (operation: () => void) => { try { operation(); } catch (error) { failure ??= error; } };
+	try {
+		try {
+			if (!lstatSync(target).isFile()) throw new Error("Advisor configuration must be a regular file, not a symlink.");
+		} catch (error) { if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error; }
+		const pairings = new Map(readPolicy(undefined, target).pairings);
+		pairings.set(main, advisor);
+		const source = `${JSON.stringify({ pairings: Object.fromEntries(pairings) }, null, 2)}\n`;
+		if (Buffer.byteLength(source) > 1024 * 1024) throw new Error("Advisor configuration exceeds 1 MiB.");
+		const candidate = join(dirname(target), `.${basename(target)}.${randomUUID()}.tmp`);
+		const fd = openSync(candidate, "wx", 0o600);
+		temporary = candidate;
+		try { writeFileSync(fd, source); fsyncSync(fd); } finally { closeSync(fd); }
+		renameSync(temporary, target);
+		temporary = undefined;
+		committed = true;
+	} catch (error) { failure = error; }
+	finally {
+		if (temporary) cleanup(() => unlinkSync(temporary!));
+		cleanup(() => closeSync(lockFd));
+		cleanup(() => unlinkSync(lock));
+	}
+	if (failure) {
+		if (!committed) throw failure;
+		return `Pairing saved, but cleanup failed: ${failure instanceof Error ? failure.message : String(failure)}`;
+	}
+	return undefined;
 }
 
 export function resolveAdvisor(policy: AdvisorPolicy, main: ModelIdentity | undefined): string | undefined {

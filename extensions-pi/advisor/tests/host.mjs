@@ -19,6 +19,6 @@ export function fixture() {
 	const scratch = mkdtempSync(join(process.env.PI_SCRATCHPAD_DIR ?? tmpdir(), "advisor-test-"));
 	cpSync(fileURLToPath(new URL("..", import.meta.url)), join(scratch, "extension"), { recursive: true });
 	mkdirSync(join(scratch, "node_modules/@earendil-works"), { recursive: true });
-	for (const name of ["pi-ai", "pi-agent-core", "pi-coding-agent"]) symlinkSync(join(host, "..", name), join(scratch, "node_modules/@earendil-works", name));
+	for (const name of ["pi-ai", "pi-agent-core", "pi-coding-agent", "pi-tui"]) symlinkSync(join(host, "..", name), join(scratch, "node_modules/@earendil-works", name));
 	return { host, scratch, load: (path) => import(join(scratch, "extension", path)), cleanup: () => rmSync(scratch, { recursive: true, force: true }) };
 }

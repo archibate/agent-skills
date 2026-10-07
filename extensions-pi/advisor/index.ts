@@ -3,6 +3,8 @@ import { Type } from "@earendil-works/pi-ai";
 import { getAgentDir, type ExtensionAPI, type ToolDefinition } from "@earendil-works/pi-coding-agent";
 import { Advisor } from "./advisor.ts";
 import { readConfig } from "./config.ts";
+import { registerAdvisorCommand } from "./command.ts";
+import { CHOICE_ENTRY, restoreChoice, sessionChoice } from "./session-choice.ts";
 import { readPolicy, resolveAdvisor, type AdvisorPolicy, type ModelIdentity } from "./pairings.ts";
 
 /** SDK hosts with an explicit agentDir can inject that same directory via an inline factory. */
@@ -20,6 +22,25 @@ export default function registerAdvisor(pi: ExtensionAPI, agentDir = getAgentDir
 	let enabled = false;
 	let selected: string | undefined;
 	let mainId: string | undefined;
+	let sessionOverride: string | null | undefined;
+	let generation = 0;
+	let sessionGeneration = 0;
+
+	function invalidatePolicy(): void { policy = undefined; loadError = undefined; errorReported = false; }
+	registerAdvisorCommand(pi, {
+		path, current: () => selected, generation: () => generation, sessionGeneration: () => sessionGeneration,
+		apply(model, ctx) {
+			sessionOverride = model;
+			generation++;
+			invalidatePolicy();
+			reconcile(ctx.model);
+			// Pi can append in memory before disk persistence or event subscribers throw.
+			// Keep the explicit selection applied rather than reporting a false rollback.
+			try { pi.appendEntry(CHOICE_ENTRY, sessionChoice(ctx.sessionManager.getSessionId(), model)); }
+			catch (error) { return `Selection applied, but session persistence could not be confirmed; it may be lost on reload/resume: ${error instanceof Error ? error.message : String(error)}`; }
+			return undefined;
+		},
+	});
 
 	const tool: ToolDefinition = {
 		name: "advisor",
@@ -33,7 +54,7 @@ export default function registerAdvisor(pi: ExtensionAPI, agentDir = getAgentDir
 		async execute(_id, _params, signal, onUpdate, ctx) {
 			reconcile(ctx.model);
 			if (loadError) throw loadError;
-			if (!selected) throw new Error("Advisor is disabled for the current main model. Configure a pairing or launch with --advisor provider/model.");
+			if (!selected) throw new Error("Advisor is disabled for the current main model. Use /advisor, configure a pairing, or launch with --advisor provider/model.");
 			const config = readConfig((name) => pi.getFlag(name), selected);
 			onUpdate?.({ content: [{ type: "text", text: `Consulting ${config.model}…` }], details: undefined });
 			return (advisor ??= new Advisor()).consult(ctx, config, signal);
@@ -43,7 +64,7 @@ export default function registerAdvisor(pi: ExtensionAPI, agentDir = getAgentDir
 
 	function reconcile(main: ModelIdentity | undefined): void {
 		if (!policy && !loadError) {
-			try { policy = readPolicy(pi.getFlag("advisor"), path); }
+			try { policy = readPolicy(sessionOverride !== undefined ? sessionOverride ?? "none" : pi.getFlag("advisor"), path); }
 			catch (error) { loadError = new Error(`Advisor configuration (--advisor or ${path}): ${error instanceof Error ? error.message : String(error)}`); }
 		}
 		const next = policy && resolveAdvisor(policy, main);
@@ -65,14 +86,15 @@ export default function registerAdvisor(pi: ExtensionAPI, agentDir = getAgentDir
 	pi.on("session_start", (_event, ctx) => {
 		advisor?.dispose();
 		advisor = undefined;
-		policy = undefined;
-		loadError = undefined;
-		errorReported = false;
+		generation++;
+		sessionGeneration++;
+		sessionOverride = restoreChoice(ctx.sessionManager.getEntries(), ctx.sessionManager.getSessionId(), pi.getFlag("advisor"));
+		invalidatePolicy();
 		reconcile(ctx.model);
 	});
-	pi.on("model_select", (event) => { reconcile(event.model); });
+	pi.on("model_select", (event) => { generation++; reconcile(event.model); });
 	pi.on("before_agent_start", (_event, ctx) => { reconcile(ctx.model); });
 	pi.on("session_tree", (_event, ctx) => { advisor?.reset(); reconcile(ctx.model); });
 	pi.on("session_compact", () => { advisor?.reset(); });
-	pi.on("session_shutdown", () => { advisor?.dispose(); advisor = undefined; });
+	pi.on("session_shutdown", () => { generation++; sessionGeneration++; advisor?.dispose(); advisor = undefined; });
 }

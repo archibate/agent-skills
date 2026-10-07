@@ -314,7 +314,7 @@ test("extension factory is inert; tool has no arguments, is sequential, and star
 	const flags = [];
 	const handlers = new Map();
 	let tool;
-	register({ registerFlag: (name) => flags.push(name), on: (name, handler) => handlers.set(name, handler), registerTool: (value) => { tool = value; } });
+	register({ registerCommand() {}, registerFlag: (name) => flags.push(name), on: (name, handler) => handlers.set(name, handler), registerTool: (value) => { tool = value; } });
 	assert.equal(flags.length, 5);
 	assert.equal(tool.name, "advisor");
 	assert.deepEqual(tool.parameters.properties, {});

@@ -57,7 +57,7 @@ function extension(override, content = source) {
 	let active = ["keep"];
 	let registrations = 0;
 	const api = {
-		registerFlag() {}, getFlag: (name) => name === "advisor" ? override : undefined,
+		registerCommand() {}, registerFlag() {}, getFlag: (name) => name === "advisor" ? override : undefined,
 		on: (name, handler) => handlers.set(name, handler),
 		registerTool(value) { tool = value; if (++registrations > 1) active.push("manual-off"); },
 		getActiveTools: () => [...active],
@@ -69,7 +69,7 @@ function extension(override, content = source) {
 
 test("lifecycle follows main selection, preserves other tools, and guards stale disabled executions", async () => {
 	const h = extension();
-	const ctx = { model: main };
+	const ctx = { model: main, sessionManager: { getEntries: () => [], getSessionId: () => "fixture" } };
 	assert.equal(h.tool.exposure, "hidden");
 	h.handlers.get("session_start")({}, ctx);
 	assert.equal(h.tool.exposure, "model-only");
@@ -131,7 +131,7 @@ test("main-model changes abort in-flight consultations even under a fixed CLI ad
 
 test("bad config withdraws advisor, reports once, and recovers only after session initialization/reload", async () => {
 	const h = extension();
-	const ctx = { model: main };
+	const ctx = { model: main, sessionManager: { getEntries: () => [], getSessionId: () => "fixture" } };
 	h.handlers.get("session_start")({}, ctx);
 	writeFileSync(h.path, "invalid");
 	assert.throws(() => h.handlers.get("session_start")({}, ctx), /configuration/);

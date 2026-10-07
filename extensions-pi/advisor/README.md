@@ -9,9 +9,9 @@ Loading the extension does not start a model request. The main model decides whe
 Disabled unless the selected main model has a pairing or you supply an override:
 
 ```sh
-pi -e ./extensions-pi/advisor                         # follow pairings; missing file means off
-pi -e ./extensions-pi/advisor --advisor provider/model # override for this process
-pi -e ./extensions-pi/advisor --advisor none           # disable despite pairings
+pi                          # follow pairings; missing file means off
+pi --advisor provider/model # override for this process
+pi --advisor none           # disable despite pairings
 ```
 
 Load the selected advisor's provider and configure its credentials/catalog. For Ofox,
@@ -37,18 +37,45 @@ Pairings follow the resolved selected main model, whether chosen through `--mode
 `/model`, scoped cycling, startup defaults, or session resume. A virtual main model
 uses its selected identity, not its per-request physical route.
 
-Precedence: **`--advisor` override → exact main-model pairing → off**. An override
-stays fixed across main-model changes and does not persist into a new process.
+Precedence: **session `/advisor` choice → `--advisor` override → exact main-model pairing → off**.
+Overrides stay fixed across main-model changes. CLI flags do not persist into a new process.
 Pi's tool restrictions (`--no-tools`, `--tools`, `--exclude-tools`) still apply.
 
 Configuration is read at session initialization and `/reload`, not watched. Invalid
 configuration reports an error and disables the tool until reloaded; an explicit CLI
-override bypasses the file. Project-local pairings are not read. The JSON file must
+or session override bypasses the file for inference. Project-local pairings are not read. The JSON file must
 contain only a `pairings` object and fit within 1 MiB.
 
 SDK hosts with a custom `agentDir` should inject the same directory via
 `extensionFactories: [(pi) => advisor(pi, agentDir)]`; Pi's public `getAgentDir()`
 accessor only knows the environment/default directory, not the SDK option.
+
+### Interactive selection
+
+Run `/advisor` (or `/advisor search terms`) in the interactive terminal while idle.
+The searchable picker uses the available-model snapshot, excludes virtual routers, and
+includes **None**. Opening it makes no discovery or inference requests.
+
+- **Enter** applies the choice to this session without changing pairings.
+- **Ctrl+S** applies it and saves the pairing for the currently selected main model.
+  It honors Pi's remapped `app.models.save` key.
+- **Esc** cancels without changes.
+
+Session choices are stored as non-context session metadata: they survive `/reload`,
+resume, and tree navigation, but do not carry into new/forked sessions. A new process's
+explicit `--advisor` flag overrides an older restored choice; subsequent `/advisor`
+selections override that flag again.
+
+Saving rereads and merges the latest pairing file under an exclusive lock, then replaces
+it atomically. Unrelated pairings are preserved; malformed files and symlinks are not
+replaced. A failed pairing write does not apply the selection. After a successful write,
+the choice is applied even if session-journal persistence reports an error; a warning
+explains that reload/resume may lose the session override. Committed pairings are not
+rolled back over other writers. The configuration directory must be trusted: the lock
+coordinates Pi writers, not unrelated editors or malicious directory changes.
+A competing save reports a busy
+lock; a lock left by a crashed writer must be removed manually after verifying no save
+is running. Changes to the main model or session while the picker is open cancel the action.
 
 ### Consultation options
 

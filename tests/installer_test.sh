@@ -305,7 +305,7 @@ done
 assert_file "$CASE_HOME/.pi/agent/extensions/sandbox/landlock-exec.c"
 assert_file "$CASE_HOME/.pi/agent/extensions/ofox/provider.ts"
 assert_file "$CASE_HOME/.pi/agent/extensions/ofox/google-identity.ts"
-for file in advisor.ts transcript.ts cache.ts config.ts inference.ts pairings.ts; do
+for file in advisor.ts transcript.ts cache.ts config.ts inference.ts pairings.ts command.ts picker.ts session-choice.ts; do
     assert_file "$CASE_HOME/.pi/agent/extensions/advisor/$file"
 done
 
