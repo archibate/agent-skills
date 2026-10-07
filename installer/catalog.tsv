@@ -19,13 +19,16 @@ jobs	extension	extensions-pi/jobs	claudish	no	-	-	-	pi	Background job tools
 scratchpad	extension	extensions-pi/scratchpad	claudish	no	-	-	-	pi	Session scratchpad
 context	extension	extensions-pi/context	claudish	no	-	-	-	pi	Context window usage
 prompt-stash	extension	extensions-pi/prompt-stash	claudish	no	-	-	-	pi	Stash and restore the prompt draft
+end-key	extension	extensions-pi/end-key	claudish	no	-	-	-	pi	Input-first End key and transcript jump
 fresh	extension	extensions-pi/fresh	thinking	no	-	-	-	pi	Restart a branch with a user-only draft
+advisor	extension	extensions-pi/advisor	thinking	no	-	ofox	-	pi	Tool-free advisor over the current conversation
 btw	extension	extensions-pi/btw	claudish	no	-	-	-	pi	Side question without disturbing the session
 plan-mode	extension	extensions-pi/plan-mode	claudish	no	-	-	-	pi	Read-only planning hint
 rmb-cost	extension	extensions-pi/rmb-cost	integration	no	-	-	-	pi	Session cost in RMB
+subagent-cost	extension	extensions-pi/subagent-cost	integration	no	jobs	-	-	pi	Parent and subagent cost totals
 ofox	extension	extensions-pi/ofox	integration	no	-	-	-	pi	Ofox provider with automatic model discovery
 rewind	extension	extensions-pi/rewind	claudish	no	-	-	-	pi	File checkpoints for code rewind
-pi-subagents	skill	skills-pi/pi-subagents	thinking	no	jobs,sandbox	-	-	pi	Subagent orchestration
+pi-subagents	skill	skills-pi/pi-subagents	thinking	no	jobs,sandbox	subagent-cost	-	pi	Subagent orchestration
 fresh-arch	skill	skills/fresh-arch	thinking	no	-	grill-me	-	-	Fresh architecture design
 grill-me	skill	skills/grill-me	thinking	no	-	fresh-arch	-	-	Design interview
 writing-prompt	skill	skills/writing-prompt	writing	no	-	-	-	-	Modern prompt engineering

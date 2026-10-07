@@ -296,8 +296,8 @@ assert_link_target "$CASE_HOME/.pi/agent/skills/pi-subagents" "$ROOT/skills-pi/p
 [ ! -e "$CASE_HOME/.agents/skills/pi-subagents" ] || fail 'Pi-only skill leaked into the shared skills directory'
 
 new_case pi-extension-copy
-run_installer --skills scratchpad,sandbox,ofox --targets pi --yes --skip-deps --install-mode copy >/dev/null
-for extension in scratchpad sandbox ofox; do
+run_installer --skills scratchpad,sandbox,ofox,advisor,end-key --targets pi --yes --skip-deps --install-mode copy >/dev/null
+for extension in scratchpad sandbox ofox advisor end-key; do
     assert_file "$CASE_HOME/.pi/agent/extensions/$extension/index.ts"
     assert_not_link "$CASE_HOME/.pi/agent/extensions/$extension"
     [ ! -e "$CASE_HOME/.pi/agent/extensions/$extension/node_modules" ] || fail 'copied extension kept node_modules'
@@ -305,10 +305,32 @@ done
 assert_file "$CASE_HOME/.pi/agent/extensions/sandbox/landlock-exec.c"
 assert_file "$CASE_HOME/.pi/agent/extensions/ofox/provider.ts"
 assert_file "$CASE_HOME/.pi/agent/extensions/ofox/google-identity.ts"
+for file in advisor.ts transcript.ts cache.ts config.ts inference.ts pairings.ts; do
+    assert_file "$CASE_HOME/.pi/agent/extensions/advisor/$file"
+done
+
+assert_file "$CASE_HOME/.pi/agent/extensions/end-key/README.md"
+[ ! -e "$CASE_HOME/.pi/agent/keybindings.json" ] || fail 'extension installation changed keybindings'
+
+new_case pi-end-key-link
+run_installer --skills end-key --targets pi --yes --skip-deps >/dev/null
+assert_link_target "$CASE_HOME/.pi/agent/extensions/end-key" "$ROOT/extensions-pi/end-key"
+
+new_case pi-advisor-link
+run_installer --skills advisor --targets pi --yes --skip-deps >/dev/null
+assert_link_target "$CASE_HOME/.pi/agent/extensions/advisor" "$ROOT/extensions-pi/advisor"
 
 new_case pi-ofox-link
 run_installer --skills ofox --targets pi --yes --skip-deps >/dev/null
 assert_link_target "$CASE_HOME/.pi/agent/extensions/ofox" "$ROOT/extensions-pi/ofox"
+
+new_case pi-subagent-cost-copy
+run_installer --skills subagent-cost --targets pi --yes --skip-deps --install-mode copy >/dev/null
+for file in index.ts accounting.ts ledger.ts presentation.ts; do
+    assert_file "$CASE_HOME/.pi/agent/extensions/subagent-cost/$file"
+done
+assert_not_link "$CASE_HOME/.pi/agent/extensions/subagent-cost"
+assert_file "$CASE_HOME/.pi/agent/extensions/jobs/index.ts"
 
 new_case pi-extension-unsupported-target
 set +e

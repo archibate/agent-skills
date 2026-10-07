@@ -173,7 +173,14 @@ function sessionEnv(ctx: ExtensionToolContext): NodeJS.ProcessEnv {
 	const env: NodeJS.ProcessEnv = { ...process.env };
 	env.PI_SESSION_ID = ctx.sessionManager.getSessionId();
 	const sessionFile = ctx.sessionManager.getSessionFile();
-	if (sessionFile) env.PI_SESSION_FILE = sessionFile;
+	if (sessionFile) {
+		env.PI_SESSION_FILE = sessionFile;
+		// Child Pi instances self-register with subagent-cost; never parse shell commands.
+		env.PI_SUBAGENT_PARENT_SESSION_FILE = sessionFile;
+	} else {
+		delete env.PI_SESSION_FILE;
+		delete env.PI_SUBAGENT_PARENT_SESSION_FILE;
+	}
 	if (ctx.model) {
 		env.PI_PROVIDER = ctx.model.provider;
 		env.PI_MODEL = ctx.model.id;

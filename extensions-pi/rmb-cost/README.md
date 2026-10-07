@@ -2,8 +2,9 @@
 
 Displays Pi's built-in terminal costs in RMB at a fixed rate of **1 USD = 6.7 RMB**:
 
-- Footer session total.
-- `/session` totals, per-model breakdown, cache re-billing and cache-warming economics.
+- Footer session total, including registered children when `subagent-cost` is loaded.
+- `/session` totals, per-model breakdown, cache re-billing and cache-warming economics;
+  `subagent-cost`'s parent/child/combined breakdown also uses raw-USD conversion.
 - Cache-warming, compaction, branch-summary and cache-miss transcript notices.
 - Codemode model-call costs and their total.
 

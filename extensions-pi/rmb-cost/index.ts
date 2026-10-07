@@ -43,11 +43,25 @@ interface FooterHost {
 	};
 }
 
+function findNoticeWrapper(method: NoticeMethod | undefined): NoticeMethod | undefined {
+	const seen = new Set<NoticeMethod>();
+	while (typeof method === "function" && !seen.has(method)) {
+		if (method[PATCHED]) return method;
+		seen.add(method);
+		method = Reflect.get(method, Symbol.for("pi.cost.base-method")) as NoticeMethod | undefined;
+	}
+	return undefined;
+}
+
 function patchNoticeMethod(proto: Record<string, NoticeMethod | undefined>, name: string, makeConverter: ConverterFactory): void {
-	const original = proto[name];
+	// Another extension may wrap this method too. Keep our own dispatch identity so
+	// /reload updates the inner wrapper instead of stacking around the other one.
+	const slot = Symbol.for(`pi.rmb-cost.notice.${name}`);
+	const original = (Reflect.get(proto, slot) as NoticeMethod | undefined) ?? findNoticeWrapper(proto[name]) ?? proto[name];
 	if (!original) return;
 	if (original[PATCHED]) {
 		original[CONVERTER] = makeConverter;
+		Reflect.set(proto, slot, original); // Adopt pre-slot wrappers during a warm upgrade.
 		return;
 	}
 	const patched: NoticeMethod = function (...args) {
@@ -68,6 +82,7 @@ function patchNoticeMethod(proto: Record<string, NoticeMethod | undefined>, name
 	patched[PATCHED] = true;
 	patched[CONVERTER] = makeConverter;
 	proto[name] = patched;
+	Reflect.set(proto, slot, patched);
 }
 
 function createFooterRenderer(original: typeof FooterComponent.prototype.render): typeof original {
@@ -169,6 +184,8 @@ function registerCodemodeCosts(pi: ExtensionAPI): void {
 }
 
 export default async function (pi: ExtensionAPI): Promise<void> {
+	// Optional currency hook for subagent-cost's raw-USD parent/child breakdown.
+	Reflect.set(FooterComponent.prototype, Symbol.for("pi.cost.format-usd"), formatRmb);
 	// Reuse Pi's own accounting algorithms for the /session presentation snapshot.
 	// These internal helpers ship with the Node distribution, like the patched renderers.
 	const core = join(getPackageDir(), "dist", "core");

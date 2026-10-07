@@ -148,10 +148,12 @@ curl -fsSL https://raw.githubusercontent.com/archibate/agent-skills/master/insta
 - `context` 📊——`/context` 把**上下文窗口**像 Claude Code 一样拆开给你看：系统提示、项目规则、技能、工具、MCP、消息、摘要各占多少，还剩多少自由空间。`/context all` 连每个工具每个技能消耗了多少都算清，再也不用盲猜是谁在爆我 token 💸💥
 - `prompt-stash` 📝——Claude Code 同款 **Ctrl+S 暂存草稿**：想法写一半突然被新点子岔开，先按一下存起来，以后再按一下就能取回，万一两坨草稿都满了还能互换，绝对不丢。
 - `fresh` 🌱——`/fresh` 选择重新思考的起点（默认首条用户消息），在当前会话回到该消息之前，把从此处开始的**用户消息**合成一条草稿放进输入框，不自动发送；旧分支保留在 `/tree`，文件不回滚。
+- `advisor` 🧠——主模型先收集证据，再调用**无工具顾问**审查方案或结果；按主模型配对或用 `--advisor` 启用，默认关闭。保留对话、工具结果和图片，不转发私有思考，显示用量与缓存读取。详见 [配置与限制](extensions-pi/advisor/README.md)。
 - `btw` 🤫——执行到一半，有小疑惑但不想污染主对话？`/btw` 开个**旁路小提问**：复用主分支的 prompt 缓存，主会话不被写回，agent 一边流式输出时你都能追问！`/btw` 子 agent 只读，能调查，不能修改文件。
 - `plan-mode` 🗺️——`/plan` 或 `Ctrl+Alt+P` 切**只读计划模式**，每轮都敲脑袋提醒模型“你目前只读”，给你出计划，你再按一次 `/plan` 关闭计划模式后，才提醒“放行” 🚓
 - `rewind` ⏪——Claude Code 同款**代码快照**：Pi 的每次 `edit` 和 `write` 都会被快照记录，`/rewind`（`Ctrl+Alt+R`）列出本会话每个用户提问的时间点，选中即可代码和对话一起回滚，也可以单独只回滚对话或代码；Pi 原生的 `/tree`（`Esc Esc`）保持不动。
 - `rmb-cost` 💴——状态栏、`/session`、缓存/压缩提示和 codemode 的美元成本**就地换算成 ¥**，因为中国人能飞。
+- `subagent-cost` 🧮——把 `job_start` 启动的 Pi 子 agent 成本**算进主会话状态栏**，`/session` 分列主、子和合计；子端自行登记、文件事件驱动更新，闲时不轮询，fork 不重复计费，配合 `rmb-cost` 显示人民币。
 - `ofox` 🦊——从 [Ofox](https://ofox.io) **自动发现模型**，`/ofox-refresh` 更新列表，不用手写 `models.json` 重定向。
 - `pi-subagents` 🦾——建议配合 `jobs` 和 `sandbox` 安装，真正符合**万物皆 bash** 的 Pi 哲学，把 subagent 也作为 bash 后台任务管理，主 agent 自己掌握节奏；可从脚本批量启动，可自由组合，开启您的大并行时代 🦾🦾🦾👋🤖
 

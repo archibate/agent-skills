@@ -70,6 +70,9 @@ can run a job end-to-end without extra tool schemas.
 
 ## Behavior
 
+- Persistent sessions pass `PI_SUBAGENT_PARENT_SESSION_FILE` to jobs so child Pi
+  processes can self-register with the optional [subagent-cost](../subagent-cost) extension.
+  In-memory sessions clear this attribution, including any inherited value.
 - Every job runs in its own process group with detached stdio; the jobs root is resolved per call
   from `$XDG_RUNTIME_DIR`, independent of `TMPDIR` and the scratchpad.
 - The process-global registry lives on `globalThis`, so live jobs survive `/reload`; the newest
