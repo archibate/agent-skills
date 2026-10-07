@@ -85,8 +85,9 @@ test("previews: edit diff, write content, other tools as JSON", () => {
 });
 
 test("reviewer selection and denial reasons", async () => {
-	assert.equal(defaultReviewerName("tui"), "manual");
+	assert.equal(defaultReviewerName("tui"), "auto-manual");
 	assert.equal(defaultReviewerName("print"), "deny");
+	assert.equal(defaultReviewerName("rpc"), "deny");
 	assert.equal(createReviewer("deny", "print").name, "deny");
 	assert.equal(createReviewer("manual", "tui").name, "manual");
 	assert.throws(() => createReviewer("manual", "print"), /manual needs the interactive TUI/);

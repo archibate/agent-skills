@@ -4,8 +4,9 @@ Runs the agent's `bash` (and `job_start`, and `/btw`'s bash) inside bubblewrap p
 with the access each command needs declared in the tool call. The declaration is rendered under
 the command, so a reviewer sees what every call asked for, and plain read-only calls stay terse.
 
-Calls that need more than the session's permissions go to a reviewer: by default a modal in the
-TUI, a denial in headless runs. Optional automatic reviewers use GPT-6 Luna. See [Permissions and review](#permissions-and-review).
+Calls that need more than the session's permissions go to a reviewer: by default automatic review
+with human fallback in the TUI (`auto-manual`), a denial in headless runs. Automatic reviewers use
+GPT-6 Luna. See [Permissions and review](#permissions-and-review).
 
 ## Opt-in
 
@@ -78,7 +79,7 @@ exactly what it declares, and the agent's prompt does not mention either.
 | Setting | Values | Default |
 |---|---|---|
 | `--permissions`, `/permissions` | `default`, `read-only`, or a JSON sandbox object plus optional `"tools": [...]` | `default`: the git work tree is writable, network `fetch-only`, other tools run |
-| `--reviewer` | `deny`, `manual`, `auto`, `auto-manual`; manual modes need the TUI | `manual` in the TUI, `deny` otherwise |
+| `--reviewer` | `deny`, `manual`, `auto`, `auto-manual`; manual modes need the TUI | `auto-manual` in the TUI, `deny` otherwise |
 | `--reviewer-model` | Chat model as `provider/model` | `openai-codex/gpt-6-luna`, low reasoning |
 
 A call needs review when:

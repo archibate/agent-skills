@@ -111,9 +111,9 @@ export function createReviewer(name: string, mode: ExtensionContext["mode"], opt
 	throw new Error(`--${REVIEWER_FLAG} must be one of ${REVIEWER_NAMES.join(", ")}; got ${JSON.stringify(name)}`);
 }
 
-/** The default reviewer: ask in the TUI, refuse elsewhere. */
+/** The default reviewer: automatic review with human fallback in the TUI, refuse elsewhere. */
 export function defaultReviewerName(mode: ExtensionContext["mode"]): ReviewerName {
-	return mode === "tui" ? "manual" : "deny";
+	return mode === "tui" ? "auto-manual" : "deny";
 }
 
 /** The tool error the agent sees for a denied call. */

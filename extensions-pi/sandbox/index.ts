@@ -91,7 +91,7 @@ export default function sandboxExtension(pi: ExtensionAPI): void {
 	});
 	pi.registerFlag(REVIEWER_FLAG, {
 		type: "string",
-		description: `Who decides calls beyond the permissions: deny, manual, auto, or auto-manual. Manual modes need the TUI. Default: manual in the TUI, deny otherwise.`,
+		description: `Who decides calls beyond the permissions: deny, manual, auto, or auto-manual. Manual modes need the TUI. Default: auto-manual in the TUI, deny otherwise.`,
 	});
 	pi.registerFlag(REVIEWER_MODEL_FLAG, {
 		type: "string",

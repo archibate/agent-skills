@@ -64,6 +64,7 @@ async function setup(t) {
 		sessions.push(session);
 		for (const [name, value] of Object.entries(flags)) session.extensionRunner.setFlagValue(name, value);
 		const reviewCalls = [];
+		session.extensionRunner.getModelRegistry().streamSimple = () => { throw new Error("Unexpected model request in offline test"); };
 		if (autoPlans) {
 			const model = { type: "chat", id: "gpt-6-luna", provider: "openai-codex", api: "openai-codex-responses", name: "Luna", baseUrl: "https://example.invalid", reasoning: true, input: ["text"], contextWindow: 272000, maxTokens: 128000, cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 } };
 			const registry = session.extensionRunner.getModelRegistry();
@@ -141,7 +142,7 @@ test("--permissions replaces the default and is recorded in the session", { skip
 test("manual review: approve, always, deny with feedback; marks and permissions persist", { skip: !sdkPath }, async (t) => {
 	const { base, open } = await setup(t);
 	const other = join(base, "other");
-	const { session, call, shown, customs, statuses } = await open({ mode: "tui", flags: { "enable-sandbox": true }, answers: ["y", "a", "f", "y"] });
+	const { session, call, shown, customs, statuses } = await open({ mode: "tui", flags: { "enable-sandbox": true, reviewer: "manual" }, answers: ["y", "a", "f", "y"] });
 	const initialStatus = statuses.get("sandbox-permissions");
 	assert.match(initialStatus, /^⛶ rw .*project · net fetch-only · tools all$/);
 	const grant = { command: "uv sync", sandbox: { writableLocations: [other] } };
@@ -188,6 +189,24 @@ test("manual review: approve, always, deny with feedback; marks and permissions 
 	assert.equal(jobRenderers.renderResult, resultRenderer);
 	const jobRow = jobRenderers.renderCall(jobArgs, plainTheme, context("c5")).render(120).join("\n");
 	assert.match(jobRow, /job start · timeout 30s[\s\S]*\$ build[\s\S]*⛶ read-only · net FULL[\s\S]*✓ approved/);
+});
+
+test("TUI defaults to automatic review with human fallback when sandboxing is enabled", { skip: !sdkPath }, async (t) => {
+	const { open } = await setup(t);
+	const { call, shown, reviewCalls, customs, errors } = await open({ mode: "tui", flags: { "enable-sandbox": true }, answers: ["y"], autoPlans: [
+		{ decision: "approve", reason: "User authorized this action." },
+		{ decision: "deny", reason: "Confirm the requested network access." },
+	] });
+	assert.deepEqual(errors, []);
+	assert.equal(reviewCalls.length, 0, "startup does not call the model");
+	const grant = { command: "fetch", sandbox: { networkAccess: "full" } };
+	assert.equal(await call("bash", grant), undefined);
+	assert.equal(shown.length, 0, "automatic approval needs no modal");
+	assert.equal(await call("bash", grant), undefined);
+	assert.match(shown[0], /Automatic review:[\s\S]*Confirm the requested network access/);
+	assert.equal(reviewCalls.length, 2);
+	assert.deepEqual(customs("sandbox-review").map(({ mark }) => mark), ["auto-approved", "approved"]);
+	assert.equal(customs("sandbox-permissions").length, 0, "one-shot decisions do not widen permissions");
 });
 
 test("footer status restores permissions from flags and the active session branch", { skip: !sdkPath }, async (t) => {

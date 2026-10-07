@@ -1,23 +1,11 @@
 ---
 name: minimalist
 description: >
-  Speak in minimalist language.
+  Report in minimalist language. Use when user complained AI report format cogonition overload.
 ---
 
-Response in a bullet list. Use minimalist language. No longer than 80 chars.
+汇报信息量太大容易造成我造成认知过载。
 
-Apply for:
+汇报时：删除任何不会改变我的判断或下一步行动的信息。
 
-- List requirements you parsed.
-- List stuck points blocking it.
-- List archievements and pending.
-
-EXAMPLE:
-
-- SF 卡双口分别接沪深逐笔
-- 沪深快照走普通网卡
-
-- 已做：忙核规则改为动态计数；本方案需 8 核
-- 已确认：最新提交已支持 4 队列
-- 卡点：普通网卡名未知，未改实盘配置
-- 卡点：boke 非实盘机，无法收包验证
+一次只专注于解决一个任务——当前立即需要关注的任务，删除所有关于后续任务的提醒。等当前完成后，再提起后续待做/顺手发现的任务。
