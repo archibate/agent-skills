@@ -6,18 +6,18 @@
  * conversation messages, and summaries - plus free space.
  *
  * Counting:
- * - The window total is authoritative: it comes from the provider's reported
- *   usage via ctx.getContextUsage().
- * - Per-category counts come from pi's own chars/4 estimate (estimateTokens),
- *   then are scaled so they sum to the reported total. Providers report a
- *   single token count per request, so the system/files/skills/tools/messages
- *   split cannot be recovered from the transcript and stays approximate.
+ * - The used total comes from ctx.getContextUsage(), which can combine provider
+ *   usage with estimates, or be unknown after compaction.
+ * - Retained messages are split into user, assistant (reasoning/text/tool calls),
+ *   tool results, other, and summaries. Counts use pi's chars/4 estimator and
+ *   reconcile recursively with the used total. The split stays approximate;
+ *   hidden reasoning and opaque signatures cannot be recovered or counted.
  *
  * Usage:
- *   /context          show the breakdown
- *   /context tools    include the per-tool detail
+ *   /context          show the breakdown and top five call/result tool names
+ *   /context tools    show all call/result tools and tool definitions
  *   /context skills   include the per-skill detail
- *   /context all      include both
+ *   /context all      include both (aliases: verbose, -v)
  *
  * The overlay scrolls with arrows/PageUp/PageDown/Home/End and closes with
  * Esc, Enter, q, or Ctrl+C.
@@ -31,7 +31,7 @@ import type {
 	ThemeColor,
 } from "@earendil-works/pi-coding-agent";
 import { estimateTokens, formatSkillsForPrompt } from "@earendil-works/pi-coding-agent";
-import { matchesKey, truncateToWidth, visibleWidth, type Component } from "@earendil-works/pi-tui";
+import { matchesKey, sliceByColumn, truncateToWidth, visibleWidth, type Component } from "@earendil-works/pi-tui";
 
 // ---------------------------------------------------------------------------
 // Token estimation
@@ -71,6 +71,8 @@ interface Stat {
 	tokens: number;
 	color: ThemeColor;
 	children?: Stat[];
+	/** Children belong in a separate per-tool detail section, not the overview. */
+	detail?: "calls" | "results";
 }
 
 interface DetailItem {
@@ -105,6 +107,111 @@ const COLORS: Record<string, ThemeColor> = {
 	other: "customMessageLabel",
 	summary: "syntaxString",
 };
+
+// ---------------------------------------------------------------------------
+// Conversation accounting
+// ---------------------------------------------------------------------------
+
+type Projection = { entries: Array<{ messages: readonly EstimatableMessage[] }> };
+
+/** Allocate integer totals recursively, preserving every parent/child sum. */
+export function allocateStats(stats: Stat[], total: number): Stat[] {
+	const allocations = segmentWidths(stats.map((stat) => stat.tokens), total);
+	return stats.map((stat, index) => ({
+		...stat,
+		tokens: allocations[index]!,
+		children: stat.children && allocateStats(stat.children, allocations[index]!),
+	}));
+}
+
+function group(label: string, color: ThemeColor, children: Stat[], detail?: Stat["detail"]): Stat {
+	return { label, color, tokens: children.reduce((sum, child) => sum + child.tokens, 0), children, detail };
+}
+
+function addTool(tools: Map<string, number>, name: string, tokens: number): void {
+	tools.set(name, (tools.get(name) ?? 0) + tokens);
+}
+
+function toolStats(tools: Map<string, number>, color: ThemeColor): Stat[] {
+	return [...tools].sort(([a], [b]) => compareNames(a, b))
+		.map(([label, tokens]) => ({ label, tokens, color }));
+}
+
+function compareNames(a: string, b: string): number {
+	return a < b ? -1 : a > b ? 1 : 0;
+}
+
+export function collectConversation(projection: Projection): Stat {
+	let user = 0;
+	let reasoning = 0;
+	let text = 0;
+	let other = 0;
+	let summaries = 0;
+	const calls = new Map<string, number>();
+	const results = new Map<string, number>();
+
+	// Only projected messages contribute: no abandoned/compacted history or
+	// nested execution metadata. Historical tool names need not still be active.
+	for (const entry of projection.entries) {
+		for (const message of entry.messages) {
+			const tokens = countMessage(message);
+			switch (message.role) {
+				case "user": user += tokens; break;
+				case "assistant": {
+					let thinkingChars = 0;
+					let textChars = 0;
+					const callChars = new Map<string, number>();
+					for (const block of message.content) {
+						if (block.type === "thinking") thinkingChars += block.thinking.length;
+						else if (block.type === "text") textChars += block.text.length;
+						else if (block.type === "toolCall") {
+							addTool(callChars, block.name, block.name.length + safeJson(block.arguments).length);
+						}
+					}
+					// Match Pi's whole-message ceil(chars/4), rather than rounding
+					// every block separately. Signatures and usage are not content.
+					const split = allocateStats([
+						{ label: "Reasoning", tokens: thinkingChars, color: COLORS.assistant },
+						{ label: "Text", tokens: textChars, color: COLORS.assistant },
+						group("Tool calls", COLORS.tools, toolStats(callChars, COLORS.tools)),
+					], tokens);
+					reasoning += split[0]!.tokens;
+					text += split[1]!.tokens;
+					for (const call of split[2]!.children!) addTool(calls, call.label, call.tokens);
+					break;
+				}
+				case "toolResult": addTool(results, message.toolName, tokens); break;
+				case "bashExecution":
+				case "custom": other += tokens; break;
+				case "branchSummary":
+				case "compactionSummary": summaries += tokens; break;
+			}
+		}
+	}
+
+	const assistant = group("Assistant", COLORS.assistant, [
+		{ label: "Reasoning", tokens: reasoning, color: COLORS.assistant },
+		{ label: "Text", tokens: text, color: COLORS.assistant },
+		group("Tool calls", COLORS.tools, toolStats(calls, COLORS.tools), "calls"),
+	].filter((stat) => stat.tokens > 0));
+	return group("Messages", COLORS.messages, [
+		{ label: "User", tokens: user, color: COLORS.user },
+		assistant,
+		group("Tool results", COLORS.toolResults, toolStats(results, COLORS.toolResults), "results"),
+		{ label: "Other", tokens: other, color: COLORS.other },
+		{ label: "Summaries", tokens: summaries, color: COLORS.summary },
+	].filter((stat) => stat.tokens > 0));
+}
+
+/** Select only after allocation; the remainder therefore reconciles exactly. */
+export function rankTools(items: DetailItem[], limit: number): DetailItem[] {
+	const ranked = [...items].sort((a, b) => b.tokens - a.tokens || compareNames(a.label, b.label));
+	if (ranked.length <= limit) return ranked;
+	return [...ranked.slice(0, limit), {
+		label: "Other tools",
+		tokens: ranked.slice(limit).reduce((sum, item) => sum + item.tokens, 0),
+	}];
+}
 
 // ---------------------------------------------------------------------------
 // Collection
@@ -181,7 +288,7 @@ function collectSystemSections(
 	return { systemTokens, contextTokens, skillsTokens };
 }
 
-async function collectReport(
+export async function collectReport(
 	ctx: ExtensionCommandContext,
 	pi: ExtensionAPI,
 	showSkills: boolean,
@@ -225,39 +332,7 @@ async function collectReport(
 	}
 	tools.sort((a, b) => b.tokens - a.tokens);
 
-	// Conversation messages: use the compaction-aware projection, not the raw
-	// branch, so summarized-away history is not double counted.
-	let userTokens = 0;
-	let assistantTokens = 0;
-	let toolResultTokens = 0;
-	let otherTokens = 0;
-	let summaryTokens = 0;
-	for (const projected of projection.entries) {
-		for (const message of projected.messages) {
-			const tokens = countMessage(message);
-			switch (message.role) {
-				case "user":
-					userTokens += tokens;
-					break;
-				case "assistant":
-					assistantTokens += tokens;
-					break;
-				case "toolResult":
-					toolResultTokens += tokens;
-					break;
-				case "bashExecution":
-				case "custom":
-					otherTokens += tokens;
-					break;
-				case "branchSummary":
-				case "compactionSummary":
-					summaryTokens += tokens;
-					break;
-				default:
-					break;
-			}
-		}
-	}
+	const messages = collectConversation(projection);
 
 	const raw: Stat[] = [];
 	const add = (label: string, tokens: number, color: ThemeColor, children?: Stat[]) => {
@@ -267,42 +342,16 @@ async function collectReport(
 	add("System prompt", system.systemTokens, COLORS.system);
 	add("Context files", system.contextTokens, COLORS.context);
 	add("Skills", system.skillsTokens, COLORS.skills);
-	add("Tools", builtinToolTokens, COLORS.tools);
-	add("MCP tools", mcpToolTokens, COLORS.mcp);
-
-	const messageChildren: Stat[] = [];
-	if (userTokens) messageChildren.push({ label: "User", tokens: userTokens, color: COLORS.user });
-	if (assistantTokens) {
-		messageChildren.push({ label: "Assistant", tokens: assistantTokens, color: COLORS.assistant });
-	}
-	if (toolResultTokens) {
-		messageChildren.push({ label: "Tool results", tokens: toolResultTokens, color: COLORS.toolResults });
-	}
-	if (otherTokens) messageChildren.push({ label: "Other", tokens: otherTokens, color: COLORS.other });
-	if (summaryTokens) {
-		messageChildren.push({ label: "Summaries", tokens: summaryTokens, color: COLORS.summary });
-	}
-	add(
-		"Messages",
-		userTokens + assistantTokens + toolResultTokens + otherTokens + summaryTokens,
-		COLORS.messages,
-		messageChildren,
-	);
+	add("Tool definitions", builtinToolTokens, COLORS.tools);
+	add("MCP tool definitions", mcpToolTokens, COLORS.mcp);
+	if (messages.tokens > 0) raw.push(messages);
 
 	const estimated = raw.reduce((sum, stat) => sum + stat.tokens, 0);
 	const usedKnown = usage?.tokens != null;
 	const used = usage?.tokens ?? estimated;
-	const scale = usedKnown && estimated > 0 ? used / estimated : 1;
-	const stats = raw.map((stat) => ({
-		label: stat.label,
-		color: stat.color,
-		tokens: Math.round(stat.tokens * scale),
-		children: stat.children?.map((child) => ({
-			label: child.label,
-			color: child.color,
-			tokens: Math.round(child.tokens * scale),
-		})),
-	}));
+	// A known positive total with no estimatable content cannot be attributed.
+	if (estimated === 0 && used > 0) add("Unattributed", used, COLORS.other);
+	const stats = allocateStats(raw, used);
 
 	const modelLabel = model ? `${model.provider}/${model.id}` : "no model selected";
 
@@ -358,18 +407,14 @@ function fmtPercent(tokens: number, window: number): string {
 }
 
 function truncateLeft(text: string, max: number): string {
-	if (visibleWidth(text) <= max) return text;
-	if (max <= 1) return "…";
-	let kept = "";
-	let width = 0;
-	for (let i = text.length - 1; i >= 0; i--) {
-		const char = text[i]!;
-		const charWidth = visibleWidth(char);
-		if (width + charWidth > max - 1) break;
-		kept = char + kept;
-		width += charWidth;
-	}
-	return `…${kept}`;
+	if (max <= 0) return "";
+	const width = visibleWidth(text);
+	if (width <= max) return text;
+	return `…${sliceByColumn(text, width - max + 1, max - 1, true)}`;
+}
+
+function padVisible(text: string, width: number): string {
+	return text + " ".repeat(Math.max(0, width - visibleWidth(text)));
 }
 
 /** Largest-remainder widths so the stacked bar fills exactly `width` cells. */
@@ -405,7 +450,7 @@ function renderBar(report: ContextReport, palette: Palette, width: number): stri
 	return out;
 }
 
-function renderLines(report: ContextReport, palette: Palette, width: number): string[] {
+export function renderLines(report: ContextReport, palette: Palette, width: number): string[] {
 	const lines: string[] = [];
 	const push = (text = "") => lines.push(truncateToWidth(text, width, "…", true));
 
@@ -430,38 +475,38 @@ function renderLines(report: ContextReport, palette: Palette, width: number): st
 	push(`  ${renderBar(report, palette, Math.max(1, width - 4))}`);
 	push();
 
-	const labelWidth = Math.max(8, width - 21);
-	const legendRow = (swatch: string, label: string, tokens: number, indent: string) => {
-		const name = label.length > labelWidth ? `${label.slice(0, labelWidth - 1)}…` : label;
-		return (
-			`${indent}${swatch} ${name.padEnd(labelWidth)}` +
-			`${fmtTokens(tokens).padStart(7)}  ${fmtPercent(tokens, report.window).padStart(6)}`
-		);
+	const legendRow = (swatch: string, label: string, tokens: number, depth: number) => {
+		const numbers = `${fmtTokens(tokens).padStart(7)}  ${fmtPercent(tokens, report.window).padStart(6)}`;
+		// Reserve numeric columns first. Truncate the complete label field so
+		// nesting never shifts numbers or clips percentages at narrow widths.
+		const labelWidth = Math.max(0, width - visibleWidth(numbers) - 2);
+		const prefix = width < 40 ? " ".repeat(depth + 1) : `${"  ".repeat(depth + 1)}${swatch} `;
+		const name = truncateToWidth(`${prefix}${label}`, labelWidth, "…");
+		return `${padVisible(name, labelWidth)}${numbers}`;
 	};
 
-	for (const stat of report.stats) {
-		push(legendRow(palette.swatch(stat.color), stat.label, stat.tokens, "  "));
-		for (const child of stat.children ?? []) {
-			const name = child.label;
-			push(
-				`    ${palette.swatch(child.color)} ${name.padEnd(labelWidth - 2)}` +
-					`${fmtTokens(child.tokens).padStart(7)}  ` +
-					`${fmtPercent(child.tokens, report.window).padStart(6)}`,
-			);
+	const toolDetails: Stat[] = [];
+	const overview = (stats: Stat[], depth: number) => {
+		for (const stat of stats) {
+			push(legendRow(palette.swatch(stat.color), stat.label, stat.tokens, depth));
+			if (stat.detail) toolDetails.push(stat);
+			else overview(stat.children ?? [], depth + 1);
 		}
-	}
+	};
+	overview(report.stats, 0);
 	if (report.free > 0) {
-		push(legendRow(palette.fg("dim", "░"), "Free", report.free, "  "));
+		push(legendRow(palette.fg("dim", "░"), "Free", report.free, 0));
 	}
 
 	const detail = (title: string, items: DetailItem[], color: ThemeColor, limit: number) => {
 		if (items.length === 0) return;
 		push();
 		push(`  ${palette.fg(color, title)}`);
-		const labelWidth2 = Math.max(8, width - 13);
 		for (const item of items.slice(0, limit)) {
-			const name = truncateLeft(item.label, labelWidth2);
-			push(`    ${name.padEnd(labelWidth2)}${fmtTokens(item.tokens).padStart(7)}`);
+			const numbers = fmtTokens(item.tokens).padStart(7);
+			const labelWidth = Math.max(0, width - visibleWidth(numbers) - 6);
+			const name = truncateLeft(item.label, labelWidth);
+			push(`    ${padVisible(name, labelWidth)}${numbers}`);
 		}
 		if (items.length > limit) {
 			push(`    ${palette.fg("dim", `… +${items.length - limit} more`)}`);
@@ -473,7 +518,11 @@ function renderLines(report: ContextReport, palette: Palette, width: number): st
 		detail(`Skills (${report.skills.length})`, report.skills, COLORS.skills, 20);
 	}
 	if (report.showTools) {
-		detail(`Tools (${report.tools.length})`, report.tools, COLORS.tools, 24);
+		detail(`Tool definitions (${report.tools.length})`, report.tools, COLORS.tools, 24);
+	}
+	for (const stat of toolDetails) {
+		const items = stat.children ?? [];
+		detail(`${stat.label} (${items.length})`, rankTools(items, report.showTools ? Infinity : 5), stat.color, Infinity);
 	}
 
 	push();
@@ -482,8 +531,8 @@ function renderLines(report: ContextReport, palette: Palette, width: number): st
 		`  ${palette.fg(
 			"dim",
 			report.usedKnown
-				? "Scaled to the provider total; the per-category split is approximate."
-				: "Provider usage pending; raw chars/4 estimates.",
+				? "Scaled to Pi's context total (usage + estimates); split is approximate."
+				: "Context usage unknown; raw chars/4 estimates.",
 		)}`,
 	);
 	return lines;

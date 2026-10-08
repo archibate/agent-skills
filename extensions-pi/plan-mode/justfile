@@ -1,0 +1,26 @@
+# Editor dependencies come from the installed Pi release, matching the runtime.
+version := `cat "$HOME/.pi/agent/install/current-version"`
+release := "$HOME/.pi/agent/install/releases/" + version
+modules := release / "node_modules"
+
+# Re-run after a Pi upgrade to refresh the editor's dependency links.
+link:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    cd "{{justfile_directory()}}"
+    packages=(@earendil-works/pi-coding-agent @earendil-works/pi-tui typebox @types/node)
+    for pkg in "${packages[@]}"; do
+        test -d "{{modules}}/$pkg" || { echo "Missing Pi dependency: $pkg" >&2; exit 1; }
+        if [[ -e "node_modules/$pkg" && ! -L "node_modules/$pkg" ]]; then
+            echo "Refusing to replace local dependency: $pkg" >&2
+            exit 1
+        fi
+    done
+    mkdir -p node_modules/@earendil-works node_modules/@types
+    for pkg in "${packages[@]}"; do
+        ln -sfnT "{{modules}}/$pkg" "node_modules/$pkg"
+    done
+
+# Type check with no emit. The first run may download TypeScript.
+check: link
+    npx -y -p typescript tsc --noEmit -p "{{justfile_directory()}}"

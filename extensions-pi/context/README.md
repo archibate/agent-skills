@@ -1,27 +1,41 @@
 # context
 
-`/context` visualizes how the model's context window is being used. It breaks the
-next request into the categories Claude Code's `/context` shows: system prompt,
-project context files, skills, tool definitions, MCP tools, conversation
-messages, and summaries — plus free space.
+`/context` shows estimated context usage: system prompt, context files, skills,
+tool definitions (including MCP), messages, and free space. Messages expand into
+User, Assistant (Reasoning, Text, Tool calls), Tool results, Other, and Summaries.
+Empty categories are omitted. Overview percentages use the context window size.
 
 ## Usage
 
 ```text
-/context          show the breakdown
-/context tools    include the per-tool detail
-/context skills   include the per-skill detail
-/context all      include both
+/context          overview and top five call/result tool names
+/context tools    all call/result tool names and tool-definition detail
+/context skills   also include per-skill detail
+/context all      include both (aliases: verbose, -v)
 ```
 
+Tool calls and Tool results have separate detail sections below the existing
+file/skill/tool-definition details. Each ranks tool names independently by token
+footprint, with ties ordered by name. Headers count distinct names, not calls.
+The default view combines names beyond the top five into `Other tools`.
+
 The overlay scrolls with arrows, PageUp/PageDown, Home, and End, and closes with
-Esc, Enter, q, or Ctrl+C.
+Esc, Enter, q, or Ctrl+C. Non-TUI output uses the same breakdown.
 
 ## Counting
 
-- The window total is authoritative: it comes from the provider's reported usage
-  via `ctx.getContextUsage()`.
-- Per-category counts use pi's own chars/4 estimate (`estimateTokens`), then are
-  scaled so they sum to the reported total. Providers report a single token count
-  per request, so the system/files/skills/tools/messages split cannot come from
-  the transcript and is necessarily approximate.
+- The used total comes from `ctx.getContextUsage()`: Pi may combine provider usage
+  with estimates, and usage can be unknown immediately after compaction. When
+  unknown, the report uses raw estimates.
+- Categories use Pi's chars/4 estimator (`estimateTokens`), including its image
+  estimate, scaled with integer allocation so rows sum to the used total and
+  children sum to their parent. Per-tool detail reconciles with its overview row.
+  File, skill, and tool-definition details retain their separate raw estimates.
+- This is an approximate breakdown of retained context, not exact provider
+  tokenization or lifetime generation usage. Active branches, compaction, and
+  context edits determine which messages count.
+- Reasoning counts only recorded thinking text, not hidden/encrypted reasoning,
+  signatures, or reasoning usage counters. Calls count names and JSON arguments;
+  results count text/images, including failures. Result metadata and nested
+  execution records do not add context. Historical and qualified tool names are
+  preserved even when the tool is no longer active.

@@ -151,7 +151,7 @@ curl -fsSL https://raw.githubusercontent.com/archibate/agent-skills/master/insta
 - `fresh` 🌱——`/fresh` 选择重新思考的起点（默认首条用户消息），在当前会话回到该消息之前，把从此处开始的**用户消息**合成一条草稿放进输入框，不自动发送；旧分支保留在 `/tree`，文件不回滚。
 - `advisor` 🧠——主模型先收集证据，再调用**无工具顾问**审查方案或结果；`/advisor` 搜索选择，`Ctrl+S` 保存与主模型的配对；也支持 `--advisor` 覆盖，默认关闭。保留对话、工具结果和图片，不转发私有思考，显示用量与缓存读取。
 - `btw` 🤫——执行到一半，有小疑惑但不想污染主对话？`/btw` 开个**旁路小提问**：复用主分支的 prompt 缓存，主会话不被写回，agent 一边流式输出时你都能追问！`/btw` 子 agent 只读，能调查，不能修改文件。
-- `plan-mode` 🗺️——`/plan`、`Ctrl+Alt+P` 或模型工具进入**只读计划模式**，计划书放会话 scratchpad，沙箱开启时临时收紧权限，支持选项提问和 Markdown 审批；批准后可从计划起点原地分支执行，调查过程留在 `/tree`，也可保留当前上下文继续。
+- `plan-mode` 🗺️——`/plan`、`Ctrl+Alt+P` 或模型工具进入**只读计划模式**，计划书放 `scratchpad`，有沙箱时临时收紧权限，支持选项提问和 Markdown 审批；批准后可从计划起点原地分支执行，调查过程留在 `/tree`，也可保留当前上下文继续。
 - `rewind` ⏪——Claude Code 同款**代码快照**：Pi 的每次 `edit` 和 `write` 都会被快照记录，`/rewind`（`Ctrl+Alt+R`）列出本会话每个用户提问的时间点，选中即可代码和对话一起回滚，也可以单独只回滚对话或代码；Pi 原生的 `/tree`（`Esc Esc`）保持不动。
 - `rmb-cost` 💴——状态栏、`/session`、缓存/压缩提示和 codemode 的美元成本**就地换算成 ¥**，因为中国人能飞。
 - `subagent-cost` 🧮——把 `pi-subagents` 的成本也算进状态栏，`/session` 里面主和子 agent 分别统计。
