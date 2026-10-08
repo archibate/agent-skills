@@ -12,8 +12,10 @@ and locale before testing. For graphical terminal emulators, also load
 
 Capture and inspect the actual target window before input. Verify focus, then
 exercise relevant keyboard and pointer transitions: selection, menus, dialogs,
-validation, scrolling, and window resizing. Reobserve after focus changes or modal
-dialogs; check the actual resulting state rather than relying on input delivery.
+validation, scrolling, and window resizing. For animated transitions, also follow
+[Motion](motion.md) to capture progression, not just endpoints. Reobserve after
+focus changes or modal dialogs; check the resulting state rather than relying on
+input delivery.
 Use screenshots from the verified session and window, following `computer-use`
 for coordinate mapping and capture validity.
 

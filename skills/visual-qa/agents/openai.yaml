@@ -1,4 +1,4 @@
 interface:
   display_name: "Visual QA"
   short_description: "Visual QA for web, TUI, desktop, documents, and images."
-  default_prompt: "Use $visual-qa to choose the matching surface reference, exercise relevant visible states, inspect current output, fix defects, and recheck. Distinguish terminal screen-state evidence from rendered appearance and report verification gaps."
+  default_prompt: "Use $visual-qa to choose the matching surface and motion references, inspect current output and relevant transition timelines, fix defects, and recheck. Distinguish terminal screen state, rendered appearance, sampled motion, and timing evidence; report verification gaps."

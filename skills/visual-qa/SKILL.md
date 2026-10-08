@@ -4,10 +4,8 @@ description: >-
   Surface-neutral visual quality assurance for browser UIs, terminal/TUI apps
   requiring PTY interaction, native desktop apps, documents/slides/PDFs, images,
   and diagrams. Use after creating or changing visible output, or when asked to
-  test visible interaction states, layout, typography, clipping, content accuracy,
-  or visual polish. Route to scenario-specific tools, inspect current output,
-  fix defects, and recheck; distinguish terminal screen-state evidence from
-  actual rendered appearance.
+  test visible interaction states, animation, abrupt transitions, stutter, layout,
+  typography, clipping, content accuracy, or visual polish.
 ---
 
 # Visual QA
@@ -31,16 +29,23 @@ combine them when a task spans surfaces.
 
 A browser-hosted diagram needs web + images/diagrams. A TUI inspected in a desktop
 terminal needs TUI + desktop; PTY interaction alone does not require browser tools.
+
+For any animated or time-dependent output, also read
+[Motion](references/motion.md) before testing. This cross-surface route covers
+frame sequences, timing, and interrupted transitions; load it even when the user
+has not explicitly reported an animation defect.
+
 Apply `$e2e-side-effect-safety` before nontrivial execution tests, including setup.
 
 ## Shared verification loop
 
 1. Identify the intended content and constraints. Define the relevant surfaces,
    viewing dimensions, themes, locales, states, and output formats; mark exclusions.
-2. Open or render the latest build/output and wait for a meaningful stable state.
-   Settle animation for still captures; inspect motion separately when relevant.
-3. Exercise relevant visible transitions and capture their results. Inspect the
-   complete agreed set of views/pages/states, not just a convenient sample.
+2. Open or render the latest build/output. Use stable states for static checks;
+   for motion checks, start capture before the trigger and inspect progression.
+3. Exercise relevant visible transitions, including their intermediate states and
+   interruptions when applicable. Inspect the agreed views, pages, states, and
+   timelines completely, not just endpoints or a convenient sample.
 4. Check content against its source; check geometry, alignment, spacing, text and
    glyphs, wrapping, clipping, occlusion, contrast, hierarchy, and visible focus.
    Include content extremes and applicable empty, loading, error, selected,
@@ -64,5 +69,6 @@ reconstruction has a narrower evidence boundary, defined in the TUI reference.
 
 Report the surfaces/states actually inspected, evidence used, unresolved defects,
 and untested targets. Claim visual completion only after inspecting the final
-rendered output; label state-only verification as such. Do not claim
+rendered output and relevant motion; distinguish static, sampled-motion, and timing
+evidence, and label state-only verification as such. Do not claim
 “pixel-perfect” without screenshot evidence and relevant measurements.

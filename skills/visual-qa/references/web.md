@@ -8,15 +8,18 @@ session and the user has approved it. Follow the chosen skill's tool workflow.
 
 Define relevant viewport sizes, breakpoints, device-pixel ratios (DPRs), zoom,
 themes, and locales. Open the latest build and reload or cache-bust after changes.
-Wait for fonts (`document.fonts.ready`), images, hydration, asynchronous content,
-and layout to settle. Inspect console/network failures that affect rendering.
+For stable-state checks, wait for fonts (`document.fonts.ready`), images,
+hydration, asynchronous content, and layout to settle. When testing loading or
+entrance behavior, capture before those events instead. Inspect console/network
+failures that affect rendering.
 
 ## Exercise and capture
 
 Drive the controls needed to reach the target states: keyboard focus, pointer
 hover, active/selected controls, dialogs, validation, expansion, and scrolling.
-Capture and actually inspect screenshots after transitions. Accessibility or DOM
-snapshots help locate controls but do not replace rendered inspection.
+Inspect settled screenshots for endpoints and use [Motion](motion.md) to capture
+animated transitions from before the trigger through completion. Accessibility or
+DOM snapshots help locate controls but do not replace rendered inspection.
 
 ## Surface checks and repairs
 

@@ -12,43 +12,35 @@ When `job_start` takes `sandbox`, pass `{"dangerouslySkipSandbox": true}`: the c
 that needs the network and its session files. Bound what it may do with `--permissions` (see
 below), and keep the command a single `pi -p ...` so the bound is recognized.
 
-## Fork or fresh
+## Start fresh
 
-**Fork** continues your session: it inherits your context and reuses the prompt cache. State only
-what to do, and leave the system prompt, tools, model, and thinking level unchanged.
+Start each new child with a fresh conversation. It loads its own project instructions and tools,
+not the parent's conversation. Supply the task, relevant paths, constraints, and any findings it
+needs; keep the handoff focused rather than copying the parent transcript.
+
+Use a new `$PI_SESSION_ID.<name>` for each child. `--session-id` creates that session if absent
+and resumes it if it already exists. `<name>` must end with a letter or digit.
 
 ```
 job_start
   name:    review
   sandbox: {"dangerouslySkipSandbox": true}
-  command: pi -p --fork "$PI_SESSION_ID" --session-id "$PI_SESSION_ID.review" --permissions read-only "You are a forked subagent; do not spawn subagents. Task: review the unstaged changes"
-```
-
-**Fresh** starts empty. Put everything the child needs in the task. It is only empty if its
-`<name>` is new: `--session-id` continues an existing id, so pick a fresh name per task.
-
-```
-job_start
-  name:    audit
-  sandbox: {"dangerouslySkipSandbox": true}
-  command: pi -p --session-id "$PI_SESSION_ID.audit" --model "$PI_PROVIDER/$PI_MODEL" --thinking "$PI_REASONING_LEVEL" --append-system-prompt "You are a subagent; do not spawn subagents." --permissions read-only "Audit src/ for security issues and report findings"
+  command: pi -p --session-id "$PI_SESSION_ID.review" --model "$PI_PROVIDER/$PI_MODEL" --thinking "$PI_REASONING_LEVEL" --permissions read-only "You are a subagent; do not spawn subagents. Task: review the unstaged changes in src/ for correctness. Do not edit files. Return concrete findings with file:line evidence."
 ```
 
 `--model` and `--thinking` keep the child on your current model and effort; change them to give the
-child a different one. Fork when your context already holds the relevant observations or the
-background is long to restate; fresh when a new perspective is the point or the task is
-self-contained.
+child a different one.
 
 ## Recursion
 
-Delegate only from the main agent. Every child task starts with "You are a ... subagent; do not
+Delegate only from the main agent. Every child task starts with "You are a subagent; do not
 spawn subagents." A task carrying that marker means you are the child: do not delegate further.
 
 ## Read-only and restricted children
 
 `--permissions read-only` keeps the child's read-only bash and blocks any write, edit, or bash
-grant. It works with `--fork`, since it does not change the prompt. For a child that edits, pass a
-sandbox object instead, e.g. `--permissions '{"writableLocations":["src"]}'`. For a handover file,
+grant. For a child that edits, pass a sandbox object instead, e.g.
+`--permissions '{"writableLocations":["src"]}'`. For a handover file,
 add its directory to `writableLocations`; the child's own scratchpad is a different directory.
 
 ## Results
@@ -66,28 +58,20 @@ the child a handover path in your scratchpad in the task, and read that file ins
 
 ## Follow-ups
 
-`--session-id "$PI_SESSION_ID.<name>"` gives the child a deterministic, parent-scoped id. Resume it
-later with the same handle; the turn is appended to the same session, so context and prompt cache
-are reused.
+For follow-up work on the same task, resume the child with its exact `--session-id`. This retains
+the child's focused conversation; provider cache reuse is not guaranteed.
 
 ```
 job_start
   name:    review-2
   sandbox: {"dangerouslySkipSandbox": true}
-  command: pi -p --session "$PI_SESSION_ID.review" --permissions read-only "You are a subagent; do not spawn subagents. Task: also check the tests"
+  command: pi -p --session-id "$PI_SESSION_ID.review" --permissions read-only "You are a subagent; do not spawn subagents. Task: also check the tests"
 ```
 
-`<name>` must end with a letter or digit. `--fork` refuses an id that already exists, so pick a
-fresh name per child; without `--fork`, an existing id is continued instead. Resume is not live:
-the child must have exited, and you cannot steer a running one.
+The child must have exited before resuming it; this does not steer a running one.
 
 ## Parallel and sequential
 
 Issue several `job_start` calls in one message to run children in parallel; each notifies you on
 exit. Keep parallel children read-only or editing disjoint files, otherwise run them one at a time.
 For staged work, read one verdict before starting the next.
-
-## Guardrails
-
-- With `--fork`, do not pass `--append-system-prompt`, `--tools`, `--model`, or `--thinking`; they
-  invalidate the cache and the fork's advantage.

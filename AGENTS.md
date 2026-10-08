@@ -66,4 +66,5 @@ Before spending tier 2 or 3, trace the code flow and enumerate every state that 
 - Include only information that changes the user's judgment or next action; use the shortest wording that preserves it.
 - Focus on the current task. Omit unsolicited follow-up reminders and unrelated discoveries until they become relevant.
 - Omit preambles, restatements, redundant summaries, generic advice, obvious caveats, and redundant contrasts.
+- Answer engineering questions at the practical, best-effort level asked. State the useful conclusion without appending familiar limitations or defensive hedges such as “not guaranteed”; include a caveat only when it changes the user's decision or next action.
 - This governs communication, not investigation or implementation thoroughness.
