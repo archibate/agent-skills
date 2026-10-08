@@ -7,8 +7,15 @@ extension's auto-backgrounding.
 (1) injects a default timeout when the model omits one, so a forgotten long command cannot hang
 forever, (2) appends a `job_start` hint when that timeout fires, and (3) holds one-shot (print/JSON)
 runs open while jobs are pending, nudging the agent on a per-job liveness backoff so a job that
-never exits surfaces for a heal-or-kill decision instead of hanging the run. Long-running work goes
-through `job_start`, which returns a job id and notifies the agent when the job exits.
+never exits surfaces for a heal-or-kill decision instead of hanging the run.
+
+Default to `bash` with a timeout of at most 120 seconds, including commands of uncertain duration.
+Use `job_start` when expected runtime exceeds 120 seconds (2 minutes), is indefinite (e.g. a
+server), or you would otherwise choose a Bash timeout above 120 seconds. Also use jobs for work
+that genuinely needs longer after a Bash timeout, or intentional background/concurrent tasks of
+any duration while the agent continues other work or monitors progress. After a timeout,
+distinguish slow work from a hang and check retry safety before restarting. Prefer managed jobs
+over bare `bash &`: completion notifications reach the working agent or wake it after its turn ends.
 
 When the [sandbox](../sandbox) extension is loaded and enabled, jobs run in its sandbox and
 `job_start` takes the same `sandbox` declaration as `bash`; otherwise jobs run unsandboxed. The

@@ -77,7 +77,12 @@ let activeWatchers = 0;
 
 function guideline(root: string): string {
 	return (
-		"Long-running commands: use the job_start tool instead of bash. Each job gets an owner-only " +
+		"Default to bash with a timeout of at most 120 seconds, including commands of uncertain duration. " +
+		"Use job_start when expected runtime exceeds 120 seconds (2 minutes), including indefinite " +
+		"runtimes, or when you would otherwise choose a bash timeout above 120 seconds. Also use jobs " +
+		"for work that genuinely needs longer after a bash timeout, or intentional background/concurrent " +
+		"work regardless of duration. Prefer managed jobs over bare bash &: completion notifications wake you " +
+		"asynchronously. Each job gets an owner-only " +
 		`directory under ${root}/<id>/ with command/stdout/stderr/status/pgid/started files; ` +
 		"inspect it with bash (grep, tail), wait for the status file, stop it with job_stop, and use " +
 		"job_watch to be notified of output instead of polling."
@@ -282,7 +287,7 @@ export default function jobsExtension(pi: ExtensionAPI): void {
 				...event.content,
 				{
 					type: "text" as const,
-					text: "For work that should outlive this call, use job_start to run it in the background; it returns the job's directory and notifies you on exit.",
+					text: "Bash exceeded its timeout. Assess whether the command needs more time or is stuck. If it genuinely needs longer, retry with job_start after checking that restarting will not duplicate side effects; do not raise the bash timeout above 120 seconds. The job runs in the background and notifies you on exit.",
 				},
 			],
 			details: event.details,
@@ -351,9 +356,16 @@ export default function jobsExtension(pi: ExtensionAPI): void {
 			label: "job_start",
 			description:
 				"Start a shell command in the background and return its job id, process group, and file " +
-				"directory. The command outlives this call and you are notified when it exits. Inspect it " +
-				"with bash: grep/tail the stdout file, wait on the status file. Stop it with job_stop. Only " +
-				`for long-running work; use bash for quick commands.${sandbox ? ` ${sandbox.note}` : ""}`,
+				"directory. Use when expected runtime exceeds 120 seconds (2 minutes), is indefinite " +
+				"(e.g. a server), or you would otherwise choose a bash timeout above 120 seconds. Also use " +
+				"for work that needs longer after a bash timeout, or intentional background/concurrent tasks " +
+				"of any duration while you keep working or monitor progress. Otherwise use bash with a " +
+				"timeout of at most 120 seconds; " +
+				"uncertain duration alone does not justify a job. Prefer this over bare bash & for managed " +
+				"cancellation and asynchronous notifications. The command outlives this call; completion " +
+				"notifies you while you work or wakes you after your turn ends. Inspect stdout/stderr/status " +
+				"files with bash, watch output with job_watch, and stop with job_stop." +
+				(sandbox ? ` ${sandbox.note}` : ""),
 			parameters: Type.Object({
 				command: Type.String({ description: "Shell command to run in the background." }),
 				name: Type.Optional(Type.String({ description: "Short label used in notifications (e.g. \"build\")." })),
