@@ -1,50 +1,68 @@
 ---
 name: visual-qa
-description: Render-first visual quality assurance for frontends, slides, diagrams, SVG/canvas, PDFs, generative-AI images, and other visual artifacts. Use after creating or changing a visual artifact, including with image generation, or when asked to review alignment, spacing, typography, connectors, clipping, factual correctness, responsive layout, font fallback, export fidelity, or visual polish. Inspect the actual rendered artifact, verify generated content against its source data and constraints, measure suspicious geometry, fix visible defects, and render again before completion.
+description: >-
+  Surface-neutral visual quality assurance for browser UIs, terminal/TUI apps
+  requiring PTY interaction, native desktop apps, documents/slides/PDFs, images,
+  and diagrams. Use after creating or changing visible output, or when asked to
+  test visible interaction states, layout, typography, clipping, content accuracy,
+  or visual polish. Route to scenario-specific tools, inspect current output,
+  fix defects, and recheck; distinguish terminal screen-state evidence from
+  actual rendered appearance.
 ---
 
 # Visual QA
 
-Source correctness is not visual correctness. Treat the rendered artifact as the test subject.
+Source correctness is not visual correctness. Test the actual current output.
+This skill covers appearance and the interaction needed to reach or verify visible
+states; it does not replace functional, protocol, or performance testing.
 
-## Verification loop
+## Choose the surface
 
-1. Define the render matrix: target surfaces, viewport sizes, device-pixel ratios, zoom levels, themes, locales, states, and export formats that matter to the task.
-2. Build and open the actual deliverable. Reload after rebuilding, wait for fonts, images, hydration, and layout to settle, and avoid validating a stale cached artifact.
-3. Capture and inspect every relevant view. For multi-page or multi-state artifacts, review the complete set rather than a convenient sample.
-4. Measure suspicious geometry from the rendered layout. Compare bounding boxes, centers, padding, baselines, and connector endpoints; verify what each connector is intended to connect.
-5. Fix the defect at the highest semantic layout layer available.
-6. Re-render the affected view, then recheck the complete render matrix for regressions.
-7. Report the surfaces and states inspected, the evidence used, and any remaining uncertainty.
+Read the matching reference before choosing tools. Load only relevant routes;
+combine them when a task spans surfaces.
 
-Use `$agent-browser` for headless web rendering and interaction. Use `$chrome-cdp` when the task specifically requires the user's visible or authenticated Chrome session and the user has approved it. Render non-web outputs such as PDF or slide exports with their target renderer, convert representative pages to images when useful, and inspect those images. Close browser sessions after the pass.
+| When testing | Read |
+|---|---|
+| Browser UI | [Web](references/web.md) |
+| Terminal UI, TUI, or PTY-driven interaction | [TUI](references/tui.md) |
+| Native desktop windows or a graphical terminal emulator | [Desktop](references/desktop.md) |
+| PDF, slides, or paginated/exported documents | [Documents](references/documents.md) |
+| Raster/generated images, vector art, charts, or connectors | [Images and diagrams](references/images-diagrams.md) |
 
-Read [references/checklist.md](references/checklist.md) before reviewing or handing off an artifact with custom layout, connectors, SVG/canvas, dense typography, CJK text, responsive behavior, or multiple pages/states.
+A browser-hosted diagram needs web + images/diagrams. A TUI inspected in a desktop
+terminal needs TUI + desktop; PTY interaction alone does not require browser tools.
+Apply `$e2e-side-effect-safety` before nontrivial execution tests, including setup.
 
-## Evidence model
+## Shared verification loop
 
-Use visual inspection and measurements together:
+1. Identify the intended content and constraints. Define the relevant surfaces,
+   viewing dimensions, themes, locales, states, and output formats; mark exclusions.
+2. Open or render the latest build/output and wait for a meaningful stable state.
+   Settle animation for still captures; inspect motion separately when relevant.
+3. Exercise relevant visible transitions and capture their results. Inspect the
+   complete agreed set of views/pages/states, not just a convenient sample.
+4. Check content against its source; check geometry, alignment, spacing, text and
+   glyphs, wrapping, clipping, occlusion, contrast, hierarchy, and visible focus.
+   Include content extremes and applicable empty, loading, error, selected,
+   disabled, expanded, and scrolled states. Verify hit areas where interactive.
+5. Measure suspicious geometry using renderer-native evidence. Fix the defect at
+   the semantic layout layer that owns it rather than patching derived coordinates.
+6. Re-render after the last change, recheck the affected view, then sweep the
+   agreed matrix for regressions. Preserve evidence for defects needing judgment.
 
-- Screenshots reveal balance, semantics, glyph problems, occlusion, and defects that DOM metrics cannot judge.
-- Rendered measurements distinguish real misalignment from visual ambiguity and quantify disputed geometry.
-- Source review, successful builds, accessibility snapshots, generic overflow checks, or a single viewport are not proof of visual correctness.
+## Evidence and completion
 
-Treat automated warnings as leads. Shadows, transforms, and pseudo-elements can create harmless overflow reports, while a page with no reported overflow can still look wrong.
+Use inspected captures for appearance and rendered measurements for precision.
+Check actual glyphs and fallback where typography matters, including intended CJK
+forms; a declared font does not prove which glyphs were rendered. Inspect both
+suspicious details and the complete composition at the intended viewing scale.
 
-For generative-AI images, compare the visible result with the prompt and source data. Check exact text, numbers and arithmetic, object counts, ordering, labels, color semantics, spatial relationships, omissions, and invented details. For engineering diagrams, validate structure and facts independently of visual plausibility. Make a targeted edit or regenerate, then inspect the new result before handoff.
+Build success, logs, source review, structural snapshots, and automated warnings
+are supporting evidence, not proof of rendered appearance. Screenshot diffs help
+with a known-good baseline; a stable wrong image is still wrong. Terminal screen
+reconstruction has a narrower evidence boundary, defined in the TUI reference.
 
-## Repair hierarchy
-
-Prefer solutions in this order:
-
-1. Use normal flow, Flexbox, Grid, intrinsic sizing, and design tokens for semantic layout.
-2. Derive underlines, badges, boxes, and simple decoration from their owning element with borders, backgrounds, or pseudo-elements.
-3. Use SVG for genuine vector geometry, charts, and connectors. Derive coordinates from data, anchors, or rendered bounding boxes; use a graph or connector library when routing is non-trivial.
-4. Use canvas for high-volume drawing when retained DOM/SVG structure is unsuitable.
-5. Use `$imagegen` for raster and illustrative assets, and consider it for engineering diagrams when a raster deliverable is acceptable. An image model's native visual capability can produce strong composition, alignment, and diagram layout, sometimes better than LLM-authored SVG or TypeScript. Treat the result as visually synthesized rather than deterministically correct: specify exact data, labels, and relationships, then sanity-check every visible fact. Prefer code-native geometry when the deliverable requires exact editability, machine readability, reproducibility, accessibility, or automated data binding.
-
-Hard-coded coordinates are legitimate inside stable plots and deliberate vector artwork. They become a defect risk when they duplicate layout facts owned elsewhere. Render and inspect every coordinate-based primitive at its target sizes, and replace fragile coordinates when the shape does not survive that test.
-
-## Completion standard
-
-Finish only after the final artifact itself has been rendered and inspected. A local fix must pass both its focused recheck and a whole-artifact regression pass. Do not claim “pixel-perfect” without screenshot evidence and relevant measurements.
+Report the surfaces/states actually inspected, evidence used, unresolved defects,
+and untested targets. Claim visual completion only after inspecting the final
+rendered output; label state-only verification as such. Do not claim
+“pixel-perfect” without screenshot evidence and relevant measurements.

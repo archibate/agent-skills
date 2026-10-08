@@ -98,7 +98,8 @@ test("installed Pi loader accepts the extension", async () => {
 		hasUI: true,
 		ui: { editor: async (_title, value) => { output = value; }, notify: assert.fail },
 	}));
-	assert.match(output, /Tool calls \(8\)/);
+	assert.match(output, /      • Tool calls/);
+	assert.doesNotMatch(output, /Tool calls \(8\)|Tool results \(8\)/);
 });
 
 test("assistant block estimates conserve whole-message rounding", () => {
@@ -156,24 +157,23 @@ test("user images, bash/custom messages, and both summary roles retain their cat
 	conserved([stats]);
 });
 
-test("independent rankings, repeated names, qualified names, and exact top-five remainder", () => {
+test("complete independent rankings preserve totals, repeated names, and qualified names", () => {
 	const stats = collectConversation(projection(messages));
 	const calls = child(stats, "Assistant", "Tool calls");
 	const results = child(stats, "Tool results");
 	assert.equal(calls.children.length, 8);
 	assert.equal(results.children.length, 8);
-	assert.equal(rankTools(calls.children, 5)[0].label, "alpha");
-	assert.equal(rankTools(results.children, 5)[0].label, "bash");
+	assert.equal(rankTools(calls.children)[0].label, "alpha");
+	assert.equal(rankTools(results.children)[0].label, "bash");
 	for (const group of [calls, results]) {
-		const ranked = rankTools(group.children, 5);
-		assert.equal(ranked.length, 6);
-		assert.equal(ranked.at(-1).label, "Other tools");
+		const ranked = rankTools(group.children);
+		assert.equal(ranked.length, 8);
 		assert.equal(sum(ranked), group.tokens);
-		assert.equal(rankTools(group.children, Infinity).length, 8);
+		assert.ok(ranked.every((item) => item.label !== "Other tools"));
 	}
 	assert.ok(calls.children.some((item) => item.label === "mcp.one.lookup"));
 	assert.ok(calls.children.some((item) => item.label === "mcp.two.lookup"));
-	assert.deepEqual(rankTools([{ label: "z", tokens: 1 }, { label: "a", tokens: 1 }], 5).map((item) => item.label), ["a", "z"]);
+	assert.deepEqual(rankTools([{ label: "z", tokens: 1 }, { label: "a", tokens: 1 }]).map((item) => item.label), ["a", "z"]);
 });
 
 test("recursive allocation across fractional scales, tiny totals, and zero", async () => {
@@ -182,7 +182,7 @@ test("recursive allocation across fractional scales, tiny totals, and zero", asy
 		const stats = allocateStats([raw], total);
 		conserved(stats, total);
 		const calls = child(stats[0], "Assistant", "Tool calls");
-		assert.equal(sum(rankTools(calls.children, 5)), calls.tokens);
+		assert.equal(sum(rankTools(calls.children)), calls.tokens);
 		const report = await collectReport(context(messages, total, { getSystemPrompt: () => "system" }), pi, false, false);
 		conserved(report.stats, total);
 		assert.equal(report.used, total);
@@ -284,13 +284,17 @@ test("flags, aliases, separate detail sections, and plain-text routes", async ()
 		assert.equal(output.includes("Skills (1)"), skills, flag);
 		assert.equal(output.includes("Tool definitions (1)"), full, flag);
 		if (!flag) writeFileSync(join(base, "context-render-default.txt"), output);
-		assert.equal(output.includes("Other tools"), !full, flag);
-		assert.match(output, /Tool calls \(8\)/);
-		assert.match(output, /Tool results \(8\)/);
-		const overview = output.slice(0, output.indexOf("Tool calls (8)"));
+		assert.doesNotMatch(output, /Other tools/);
+		assert.equal(output.includes("Tool calls (8)"), full, flag);
+		assert.equal(output.includes("Tool results (8)"), full, flag);
+		if (full) {
+			for (const name of toolNames) assert.ok(output.includes(name), `${flag}: ${name}`);
+		}
+		const overview = full ? output.slice(0, output.indexOf("Tool calls (8)")) : output;
 		assert.match(overview, /      • Reasoning/);
 		assert.match(overview, /      • Text/);
 		assert.match(overview, /      • Tool calls/);
+		assert.match(overview, /    • Tool results/);
 		for (const name of toolNames) assert.ok(!overview.includes(name), name);
 		assert.doesNotMatch(output, /provider total|authoritative/);
 	}
@@ -301,7 +305,8 @@ test("flags, aliases, separate detail sections, and plain-text routes", async ()
 		await invoke("", context(messages));
 	} finally { console.log = oldLog; }
 	assert.match(printed, /Context usage unknown/);
-	assert.match(printed, /Tool results \(8\)/);
+	assert.match(printed, /    • Tool results/);
+	assert.doesNotMatch(printed, /Tool calls \(8\)|Tool results \(8\)/);
 });
 
 test("render matrix: widths, ANSI, wide names, numeric columns, empty states", async () => {

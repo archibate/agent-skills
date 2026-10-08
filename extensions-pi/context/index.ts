@@ -14,7 +14,7 @@
  *   hidden reasoning and opaque signatures cannot be recovered or counted.
  *
  * Usage:
- *   /context          show the breakdown and top five call/result tool names
+ *   /context          show the overview breakdown
  *   /context tools    show all call/result tools and tool definitions
  *   /context skills   include the per-skill detail
  *   /context all      include both (aliases: verbose, -v)
@@ -203,14 +203,9 @@ export function collectConversation(projection: Projection): Stat {
 	].filter((stat) => stat.tokens > 0));
 }
 
-/** Select only after allocation; the remainder therefore reconciles exactly. */
-export function rankTools(items: DetailItem[], limit: number): DetailItem[] {
-	const ranked = [...items].sort((a, b) => b.tokens - a.tokens || compareNames(a.label, b.label));
-	if (ranked.length <= limit) return ranked;
-	return [...ranked.slice(0, limit), {
-		label: "Other tools",
-		tokens: ranked.slice(limit).reduce((sum, item) => sum + item.tokens, 0),
-	}];
+/** Rank allocated counts without changing the accounting tree. */
+export function rankTools(items: DetailItem[]): DetailItem[] {
+	return [...items].sort((a, b) => b.tokens - a.tokens || compareNames(a.label, b.label));
 }
 
 // ---------------------------------------------------------------------------
@@ -519,10 +514,10 @@ export function renderLines(report: ContextReport, palette: Palette, width: numb
 	}
 	if (report.showTools) {
 		detail(`Tool definitions (${report.tools.length})`, report.tools, COLORS.tools, 24);
-	}
-	for (const stat of toolDetails) {
-		const items = stat.children ?? [];
-		detail(`${stat.label} (${items.length})`, rankTools(items, report.showTools ? Infinity : 5), stat.color, Infinity);
+		for (const stat of toolDetails) {
+			const items = stat.children ?? [];
+			detail(`${stat.label} (${items.length})`, rankTools(items), stat.color, Infinity);
+		}
 	}
 
 	push();

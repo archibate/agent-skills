@@ -8,16 +8,16 @@ Empty categories are omitted. Overview percentages use the context window size.
 ## Usage
 
 ```text
-/context          overview and top five call/result tool names
+/context          overview breakdown
 /context tools    all call/result tool names and tool-definition detail
 /context skills   also include per-skill detail
 /context all      include both (aliases: verbose, -v)
 ```
 
-Tool calls and Tool results have separate detail sections below the existing
-file/skill/tool-definition details. Each ranks tool names independently by token
-footprint, with ties ordered by name. Headers count distinct names, not calls.
-The default view combines names beyond the top five into `Other tools`.
+With `tools` or `all`, Tool calls and Tool results have separate detail sections
+below the existing file/skill/tool-definition details. Each lists all tool names,
+ranked independently by token footprint, with ties ordered by name. Headers count
+distinct names, not calls. The default view shows only their overview totals.
 
 The overlay scrolls with arrows, PageUp/PageDown, Home, and End, and closes with
 Esc, Enter, q, or Ctrl+C. Non-TUI output uses the same breakdown.
