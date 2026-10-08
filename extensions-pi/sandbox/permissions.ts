@@ -32,8 +32,11 @@ export interface Allowance {
 	tools: "all" | string[];
 }
 
-/** Tools that never write. They run under every allowance. */
-const READ_ONLY_TOOLS = new Set(["read", "grep", "find", "ls", "job_watch", "job_stop"]);
+/** Reads and session-control tools without unrestricted filesystem or network access. */
+const READ_ONLY_TOOLS = new Set([
+	"read", "grep", "find", "ls", "job_watch", "job_stop",
+	"enter_plan_mode", "ask_question", "exit_plan_mode",
+]);
 /** Tools whose `sandbox` input is the declaration to check. */
 const SANDBOXED_TOOLS = new Set(["bash", "job_start"]);
 /** Tools whose `path` input is the file they write. */
@@ -138,6 +141,29 @@ export function unionAllowance(a: Allowance, b: Allowance): Allowance {
 			device: maxMode(DEVICE_MODES, p.device, q.device),
 		},
 		tools: a.tools === "all" || b.tools === "all" ? "all" : unique([...a.tools, ...b.tools]),
+	};
+}
+
+/** Only grants shared by both allowances. A skipped sandbox is the unrestricted identity. */
+export function intersectAllowance(a: Allowance, b: Allowance): Allowance {
+	if (a.policy.skip) return b;
+	if (b.policy.skip) return a;
+	const p = a.policy, q = b.policy;
+	const minMode = <T extends string>(modes: readonly T[], x: T, y: T): T => rank(modes, x) <= rank(modes, y) ? x : y;
+	const sharedPaths = (xs: string[], ys: string[]): string[] => unique(xs.flatMap((x) =>
+		ys.flatMap((y) => isWithin(x, y) ? [x] : isWithin(y, x) ? [y] : [])));
+	return {
+		policy: {
+			skip: false,
+			writable: sharedPaths(p.writable, q.writable),
+			network: minMode(NETWORK_MODES, p.network, q.network),
+			sockets: sharedPaths(p.sockets, q.sockets),
+			bus: p.bus && q.bus,
+			display: p.display && q.display,
+			process: minMode(PROCESS_MODES, p.process, q.process),
+			device: minMode(DEVICE_MODES, p.device, q.device),
+		},
+		tools: a.tools === "all" ? b.tools : b.tools === "all" ? a.tools : a.tools.filter((tool) => b.tools.includes(tool)),
 	};
 }
 

@@ -23,7 +23,7 @@ end-key	extension	extensions-pi/end-key	claudish	no	-	-	-	pi	Input-first End key
 fresh	extension	extensions-pi/fresh	thinking	no	-	-	-	pi	Restart a branch with a user-only draft
 advisor	extension	extensions-pi/advisor	thinking	no	-	ofox	-	pi	Tool-free advisor over the current conversation
 btw	extension	extensions-pi/btw	claudish	no	-	-	-	pi	Side question without disturbing the session
-plan-mode	extension	extensions-pi/plan-mode	claudish	no	-	-	-	pi	Read-only planning hint
+plan-mode	extension	extensions-pi/plan-mode	claudish	no	-	-	-	pi	Planning tools and approval
 rmb-cost	extension	extensions-pi/rmb-cost	integration	no	-	-	-	pi	Session cost in RMB
 subagent-cost	extension	extensions-pi/subagent-cost	integration	no	jobs	-	-	pi	Parent and subagent cost totals
 ofox	extension	extensions-pi/ofox	integration	no	-	-	-	pi	Ofox provider with automatic model discovery

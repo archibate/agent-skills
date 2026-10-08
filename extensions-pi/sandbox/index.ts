@@ -25,6 +25,8 @@ import { homedir } from "node:os";
 import { DynamicBorder, type ExtensionAPI, type ExtensionCommandContext, type ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { Container, SelectList, Spacer, Text } from "@earendil-works/pi-tui";
 import { AUTO_REVIEW_ENTRY, DEFAULT_REVIEWER_MODEL, REVIEWER_MODEL_FLAG } from "./review-config.ts";
+import { PermissionCeilings } from "./ceilings.ts";
+import { sessionScratchpad } from "./scratchpad-path.ts";
 import { ENABLE_SANDBOX_FLAG, sandboxRequested } from "./enable.ts";
 import { isReviewMark, MARK_ENTRY, type ReviewMark, registerReviewMarks } from "./marks.ts";
 import {
@@ -108,8 +110,17 @@ export default function sandboxExtension(pi: ExtensionAPI): void {
 	let cwd = process.cwd();
 	let statusUI: ExtensionContext["ui"] | undefined;
 	let sessionEpoch = 0;
+	let ceilingEpoch = 0;
+	let allowanceRevision = 0;
+	let sessionId: string | undefined;
+	let closed = false;
 	let reviewAbort = new AbortController();
 	const marks = new Map<string, ReviewMark>();
+	const ceilings = new PermissionCeilings(() => {
+		ceilingEpoch++;
+		invalidateReviews();
+		updateStatus();
+	});
 
 	const home = homedir();
 
@@ -120,10 +131,12 @@ export default function sandboxExtension(pi: ExtensionAPI): void {
 		reviewer.reset?.();
 	}
 
-	function restore(ctx: ExtensionContext, reason: "start" | "tree"): void {
+	function restore(ctx: ExtensionContext, applyStartupFlag = false): void {
 		invalidateReviews(true);
 		reviewer.dispose?.();
 		cwd = ctx.cwd;
+		sessionId = ctx.sessionManager.getSessionId();
+		closed = false;
 		statusUI = ctx.mode === "tui" ? ctx.ui : undefined;
 		marks.clear();
 		let stored: Allowance | undefined;
@@ -141,7 +154,7 @@ export default function sandboxExtension(pi: ExtensionAPI): void {
 		const flag = pi.getFlag(PERMISSIONS_FLAG);
 		try {
 			if (restricted !== undefined) allowance = parsePermissions(restricted, cwd, home);
-			else if (typeof flag === "string" && flag !== "" && !flagApplied && reason === "start") {
+			else if (typeof flag === "string" && flag !== "" && !flagApplied && applyStartupFlag) {
 				// The flag replaces stored permissions once, at startup; /permissions edits after that
 				// survive /reload. A fork child given --permissions read-only is read-only.
 				allowance = parsePermissions(flag, cwd, home);
@@ -171,14 +184,22 @@ export default function sandboxExtension(pi: ExtensionAPI): void {
 		if (configError) throw new Error(`sandbox: ${configError}. Calls beyond read-only are denied.`);
 	}
 
+	function effectiveAllowance(): Allowance {
+		return ceilings.effective(configError ? presetAllowance("read-only", cwd, home) : allowance);
+	}
+
+	function ceilingNote(): string {
+		return ceilings.names.length ? ` (limited by ${ceilings.names.join(", ")})` : "";
+	}
+
 	function updateStatus(): void {
 		if (!statusUI) return;
-		const effective = configError ? presetAllowance("read-only", cwd, home) : allowance;
-		const badge = renderAllowanceBadge(effective, statusUI.theme);
+		const badge = renderAllowanceBadge(effectiveAllowance(), statusUI.theme) + statusUI.theme.fg("warning", ceilingNote());
 		statusUI.setStatus("sandbox-permissions", configError ? `${badge} ${statusUI.theme.fg("warning", "(config error)")}` : badge);
 	}
 
 	function setAllowance(next: Allowance): void {
+		allowanceRevision++;
 		invalidateReviews();
 		allowance = next;
 		pi.appendEntry(PERMISSIONS_ENTRY, allowance);
@@ -200,13 +221,34 @@ export default function sandboxExtension(pi: ExtensionAPI): void {
 			: base;
 	});
 
+	// Also guard the launch path used by jobs/btw, not only the earlier tool_call review hook.
+	const prepare: typeof prepareSandbox = async (request, workdir) => {
+		const admitted = reviewAbort.signal;
+		const scratchpad = sessionScratchpad(sessionId);
+		const check = () => {
+			if (admitted.aborted) throw new Error("Sandbox permissions changed before launch; retry the command");
+			const reason = ceilings.denial({ toolName: "bash", input: { sandbox: request }, cwd: workdir, home, scratchpad });
+			if (reason) throw new Error(reason);
+		};
+		check();
+		const prepared = await prepareSandbox(request, workdir, scratchpad);
+		try { check(); }
+		catch (error) { await prepared.dispose(); throw error; }
+		return {
+			...prepared,
+			shell: (base) => { check(); return prepared.shell(base); },
+			env: (base) => { check(); return prepared.env(base); },
+		};
+	};
+
 	const provider: SandboxProvider = {
 		note: SANDBOX_NOTE,
 		parameter: sandboxReferenceSchema,
-		prepare: (request, workdir) => prepareSandbox(request as SandboxRequest | undefined, workdir),
+		prepare: (request, workdir) => prepare(request as SandboxRequest | undefined, workdir),
 		isReadOnly: (request) => isReadOnlyRequest(request as SandboxRequest | undefined),
 		restrict(permissions) {
 			const next = parsePermissions(permissions, cwd, home);
+			allowanceRevision++;
 			invalidateReviews(true);
 			reviewer.dispose?.();
 			allowance = next;
@@ -215,22 +257,43 @@ export default function sandboxExtension(pi: ExtensionAPI): void {
 			configError = undefined;
 			updateStatus();
 		},
+		pushCeiling(name, permissions) {
+			if (!name.trim()) throw new Error("A temporary permission restriction needs a name");
+			return ceilings.add(name, parsePermissions(permissions, cwd, home));
+		},
+		carryPermissions() {
+			const snapshot = structuredClone(allowance);
+			const owner = sessionId;
+			const revision = allowanceRevision;
+			let committed = false;
+			return () => {
+				if (committed) return;
+				if (closed || sessionId !== owner || allowanceRevision !== revision) {
+					throw new Error("Permissions changed during handoff; request approval again");
+				}
+				// Navigation reconstructs historical permissions. An explicit execution handoff
+				// carries the user's current choice instead, without overwriting concurrent edits.
+				if (JSON.stringify(allowance) !== JSON.stringify(snapshot)) setAllowance(snapshot);
+				committed = true;
+			};
+		},
 	};
 	pi.events.on(PROVIDER_CHANNEL, (reply) => {
 		if (typeof reply === "function" && requested()) (reply as (provider: SandboxProvider) => void)(provider);
 	});
 
-	pi.on("session_start", (_event, ctx) => {
+	pi.on("session_start", (event, ctx) => {
 		if (!requested()) return;
 		// Declared here rather than at load so a disabled sandbox leaves pi's built-in bash in place.
-		pi.registerTool(createSandboxBashDefinition(ctx.cwd));
+		pi.registerTool(createSandboxBashDefinition(ctx.cwd, prepare));
 		warmSandbox();
-		restore(ctx, "start");
+		restore(ctx, event.reason === "startup");
 	});
 	pi.on("session_tree", (_event, ctx) => {
-		if (requested()) restore(ctx, "tree");
+		if (requested()) restore(ctx);
 	});
 	pi.on("session_shutdown", () => {
+		closed = true;
 		invalidateReviews(true);
 		reviewer.dispose?.();
 	});
@@ -245,13 +308,18 @@ export default function sandboxExtension(pi: ExtensionAPI): void {
 			input: event.input as Record<string, unknown>,
 			cwd: ctx.cwd,
 			home,
-			scratchpad: process.env.PI_SCRATCHPAD_DIR,
+			scratchpad: sessionScratchpad(sessionId),
 		};
-		const effective = () => (configError ? presetAllowance("read-only", ctx.cwd, home) : allowance);
+		const hardDenial = ceilings.denial(call);
+		if (hardDenial) return { block: true, reason: hardDenial };
+		const effective = effectiveAllowance;
 		if (assessCall(effective(), call).kind === "allow") return undefined;
 		const epoch = sessionEpoch;
+		const limits = ceilingEpoch;
 		const turn = queue.then(async () => {
-			if (ctx.signal?.aborted || epoch !== sessionEpoch) return { block: true, reason: "Review cancelled: the session changed or the turn was aborted." };
+			if (ctx.signal?.aborted || epoch !== sessionEpoch || limits !== ceilingEpoch) return { block: true, reason: "Review cancelled: the session or restrictions changed, or the turn was aborted." };
+			const hardDenial = ceilings.denial(call);
+			if (hardDenial) return { block: true, reason: hardDenial };
 			const assessment = assessCall(effective(), call);
 			if (assessment.kind === "allow") return undefined;
 			if (assessment.kind === "invalid") return { block: true, reason: assessment.message };
@@ -315,7 +383,7 @@ export default function sandboxExtension(pi: ExtensionAPI): void {
 		if (args !== "") {
 			try {
 				setAllowance(parsePermissions(args, ctx.cwd, home));
-				ctx.ui.notify(`Permissions: ${describeAllowance(allowance)}`, "info");
+				ctx.ui.notify(`Permissions: ${describeAllowance(allowance)}${ceilingNote()}`, "info");
 			} catch (error) {
 				ctx.ui.notify(error instanceof Error ? error.message : String(error), "error");
 			}
@@ -345,7 +413,7 @@ export default function sandboxExtension(pi: ExtensionAPI): void {
 			];
 			const choice = await selectPermissionRow(
 				ctx,
-				`Permissions: what runs without review (reviewer: ${reviewer.name})`,
+				`Permissions: what runs without review (reviewer: ${reviewer.name})${ceilingNote()}`,
 				rows.map(([label]) => label),
 				selected,
 			);

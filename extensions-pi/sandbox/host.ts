@@ -115,9 +115,8 @@ export function gitControlPaths(writable: readonly string[]): string[] {
 	return paths;
 }
 
-export async function gatherHostFacts(writable: readonly string[], proxySocket?: string): Promise<HostFacts> {
+export async function gatherHostFacts(writable: readonly string[], proxySocket?: string, scratchpad = process.env.PI_SCRATCHPAD_DIR): Promise<HostFacts> {
 	const runtime = runtimeDir();
-	const scratchpad = process.env.PI_SCRATCHPAD_DIR;
 	return {
 		landlockExec: await landlockExec(),
 		gitControlPaths: gitControlPaths(writable),

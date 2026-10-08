@@ -144,7 +144,7 @@ function textOf(result: AgentToolResult<unknown>): string {
 		.join("\n");
 }
 
-export function createSandboxBashDefinition(cwd: string): ToolDefinition {
+export function createSandboxBashDefinition(cwd: string, prepare = prepareSandbox): ToolDefinition {
 	const base = createBashToolDefinition(cwd);
 	const parameters = Type.Object({ ...base.parameters.properties, sandbox: Type.Optional(sandboxSchema) });
 	const definition: ToolDefinition<typeof parameters> = {
@@ -154,7 +154,7 @@ export function createSandboxBashDefinition(cwd: string): ToolDefinition {
 		async execute(toolCallId, params, signal, onUpdate, ctx) {
 			const { sandbox, ...input } = params;
 			const workdir = ctx?.cwd || cwd;
-			const prepared = await prepareSandbox(sandbox, workdir);
+			const prepared = await prepare(sandbox, workdir);
 			try {
 				const inner = createBashToolDefinition(
 					workdir,

@@ -39,7 +39,8 @@ signalling, full devices, unsandboxed) are highlighted as warnings.
 ## What the default sandbox enforces
 
 - **Filesystem**: the root is bound read-only. Writable: the session scratchpad
-  (`PI_SCRATCHPAD_DIR`), a private 4 GiB tmpfs on `/var/tmp` exported as `TMPDIR`/`TMP`/`TEMP`,
+  (an allocated current-session workspace, otherwise `PI_SCRATCHPAD_DIR`), a private
+  4 GiB tmpfs on `/var/tmp` exported as `TMPDIR`/`TMP`/`TEMP`,
   and declared locations. `/tmp` is the host's, readable but not writable. Inside a writable
   repository root, `.git/hooks` and `.git/config` stay read-only, so a command cannot plant code
   that later runs outside the sandbox.
@@ -116,6 +117,20 @@ validation stays synchronous.
 Invalid permission or reviewer configuration is reported at startup; calls beyond read-only are
 then denied with the error in the reason.
 
+### Temporary ceilings
+
+An extension can impose a runtime-only permission ceiling without changing the
+saved allowance or reviewer. Requests beyond any active ceiling are denied before
+review, even when the base permissions skip review entirely. Calls within the
+ceiling still follow the base permissions; the ceiling grants no extra access.
+The footer and `/permissions` show the active restriction names.
+
+`plan-mode` uses this to cap new calls at read-only plus fetch-only while planning,
+with the session scratchpad writable and planning/question tools available.
+Unsandboxed subagent launches are also denied under this ceiling. Existing jobs
+retain their launch permissions. Permission edits remain saved underneath the
+ceiling, and its removal reveals the current base settings.
+
 ### Automatic review
 
 ```sh
@@ -174,8 +189,8 @@ before relying on unattended automatic approval.
 jobs and btw work without this extension, so they do not import it at run time. They find it on
 the `pi.events` channel `archibate.sandbox:get`, an interface private to these extensions (pi has
 no sandbox API): they emit a reply callback, and this extension answers synchronously with a
-`SandboxProvider` (`sandbox.ts`) holding `prepare`, `isReadOnly`, `restrict`, the reference
-`parameter` schema, and the description `note`. pi.events is per runtime, so after a `/reload` without this extension
+`SandboxProvider` (`sandbox.ts`) holding `prepare`, `isReadOnly`, `restrict`, `pushCeiling`,
+`carryPermissions`, the reference `parameter` schema, and the description `note`. pi.events is per runtime, so after a `/reload` without this extension
 nothing answers.
 
 - jobs declares `job_start` at load, then redeclares it with the `sandbox` parameter at
@@ -185,6 +200,15 @@ nothing answers.
 - btw's side session reloads the main session's extensions, so its `bash` is the same declaration
   (prompt-cache prefix). It calls `restrict("read-only")`, which fixes that runtime's permissions
   with the deny reviewer, and blocks bash when nothing answers.
+
+- `plan-mode` calls `pushCeiling(name, permissions)` on entry and uses the returned
+  idempotent release function on exit. Each handle owns only its own restriction;
+  independently stacked ceilings all apply. Planning restores its ceiling from
+  branch state after reload/navigation. Adding or removing a ceiling invalidates
+  in-flight and queued reviews. Shell preparation and launch check ceilings too.
+  For checkpoint execution, `carryPermissions()` returns a one-shot commit that
+  carries the current base allowance onto the destination branch. It rejects
+  intervening permission edits rather than overwriting them.
 
 ## Requirements
 
@@ -202,6 +226,8 @@ Query failures deny automatic review; there is no unsandboxed search fallback.
 | `policy.ts` | Schema, defaults, path resolution, badge text (pure). |
 | `enable.ts` | The opt-in gate: whether a launch asked for the sandbox (pure). |
 | `permissions.ts` | Permissions: presets, `--permissions` parsing, per-call assessment (pure). |
+| `ceilings.ts` | Scoped hard restrictions layered over saved permissions (pure). |
+| `scratchpad-path.ts` | Locates and validates the retained current-session workspace. |
 | `subagent.ts` | Recognizes a bounded `pi -p --permissions` launch (pure). |
 | `review.ts` | Reviewer interface, synchronous selection, manual fallback, denial reasons. |
 | `review-config.ts` | Reviewer flags, defaults, model-name validation (pure). |

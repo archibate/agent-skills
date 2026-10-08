@@ -49,6 +49,13 @@ export interface SandboxProvider {
 	 * reviewer, overriding flags and stored permissions. Throws if the value is invalid.
 	 */
 	restrict(permissions: string): void;
+	/**
+	 * Add a hard, runtime-only permission ceiling. Calls beyond it are denied before review;
+	 * stored permissions remain unchanged. The idempotent release removes only this ceiling.
+	 */
+	pushCeiling(name: string, permissions: string): () => void;
+	/** Capture base permissions for a same-session branch handoff; commit once after navigation. */
+	carryPermissions(): () => void;
 }
 
 export type SandboxProviderReply = (provider: SandboxProvider) => void;
@@ -121,7 +128,7 @@ function createWritable(paths: string[]): void {
 	}
 }
 
-export async function prepareSandbox(request: SandboxRequest | undefined, cwd: string): Promise<PreparedSandbox> {
+export async function prepareSandbox(request: SandboxRequest | undefined, cwd: string, scratchpad = process.env.PI_SCRATCHPAD_DIR): Promise<PreparedSandbox> {
 	const policy = resolvePolicy(request, cwd, homedir());
 	if (policy.skip) {
 		return {
@@ -149,7 +156,7 @@ export async function prepareSandbox(request: SandboxRequest | undefined, cwd: s
 	const opened = policy.network === "fetch-only" ? await openProxy() : undefined;
 	let command: SandboxCommand;
 	try {
-		command = buildSandboxCommand(policy, await gatherHostFacts(policy.writable, opened?.proxy.socketPath), cwd);
+		command = buildSandboxCommand(policy, await gatherHostFacts(policy.writable, opened?.proxy.socketPath, scratchpad), cwd);
 	} catch (error) {
 		await opened?.proxy.close();
 		if (opened) rmSync(opened.dir, { recursive: true, force: true });
@@ -170,7 +177,7 @@ export async function prepareSandbox(request: SandboxRequest | undefined, cwd: s
 				commandTransport: base.commandTransport,
 			};
 		},
-		env: (base) => sandboxEnv(policy, base),
+		env: (base) => sandboxEnv(policy, scratchpad ? { ...base, PI_SCRATCHPAD_DIR: scratchpad } : base),
 		reapGroup: policy.process !== "signalling",
 		report() {
 			if (!opened) return {};
