@@ -2,8 +2,8 @@
 
 `/context` shows estimated context usage: system prompt, context files, skills,
 tool definitions (including MCP), messages, and free space. Messages expand into
-User, Assistant (Reasoning, Text, Tool calls), Tool results, Other, and Summaries.
-Empty categories are omitted. Overview percentages use the context window size.
+User, Assistant (Reasoning, Text, Tool calls), Tool results, Images, Other, and
+Summaries. Empty categories are omitted. Overview percentages use the context window size.
 
 ## Usage
 
@@ -36,6 +36,8 @@ Esc, Enter, q, or Ctrl+C. Non-TUI output uses the same breakdown.
   context edits determine which messages count.
 - Reasoning counts only recorded thinking text, not hidden/encrypted reasoning,
   signatures, or reasoning usage counters. Calls count names and JSON arguments;
-  results count text/images, including failures. Result metadata and nested
-  execution records do not add context. Historical and qualified tool names are
-  preserved even when the tool is no longer active.
+  results count non-image content, including failures. Images from user messages,
+  tool results, and custom messages count only in Images, using Pi's fixed estimate
+  (currently 1,200 tokens each before scaling), not model-specific image sizing.
+  Result metadata and nested execution records do not add context. Historical and
+  qualified tool names are preserved even when the tool is no longer active.

@@ -3,6 +3,7 @@ import { execFileSync } from "node:child_process";
 import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { stripVTControlCharacters } from "node:util";
 import test, { after } from "node:test";
 
 // Only synthetic transcripts and an in-memory session manager. No Pi process,
@@ -131,8 +132,9 @@ test("tool names, errors, images count once; metadata and hidden reasoning do no
 	hidden.usage.reasoning = 900000;
 	const stats = collectConversation(projection([visible, output, hidden, assistant(), result("empty-tool", [])]));
 	assert.equal(child(stats, "Assistant", "Reasoning").tokens, 2);
-	assert.equal(child(stats, "Tool results").tokens, estimateTokens(output));
-	assert.equal(child(stats, "Tool results").tokens, 1202);
+	assert.equal(child(stats, "Tool results").tokens + child(stats, "Images").tokens, estimateTokens(output));
+	assert.equal(child(stats, "Tool results").tokens, 2);
+	assert.equal(child(stats, "Images").tokens, 1200);
 	assert.equal(child(stats, "Tool results").children.length, 2);
 	assert.equal(child(stats, "Assistant", "Tool calls").children[0].label, "historical.server.tool");
 	assert.equal(stats.tokens, estimateTokens(visible) + estimateTokens(output));
@@ -150,11 +152,68 @@ test("user images, bash/custom messages, and both summary roles retain their cat
 		{ role: "compactionSummary", summary: "compaction summary" },
 	];
 	const stats = collectConversation(projection(input));
-	assert.equal(child(stats, "User").tokens, estimateTokens(input[0]));
+	assert.equal(child(stats, "User").tokens, 2);
+	assert.equal(child(stats, "User").tokens + child(stats, "Images").tokens, estimateTokens(input[0]));
 	assert.equal(child(stats, "Other").tokens, estimateTokens(input[1]) + estimateTokens(input[2]));
 	assert.equal(child(stats, "Summaries").tokens, estimateTokens(input[3]) + estimateTokens(input[4]));
 	assert.equal(child(stats, "Assistant"), undefined);
 	conserved([stats]);
+});
+
+test("images have an exclusive category across roles, with conserved raw and scaled totals", async () => {
+	const image = { type: "image", data: "fixture", mimeType: "image/png" };
+	const input = [
+		user([text("a"), image, image]),
+		result("read", [image, text("bc")]),
+		result("image-only", [image]),
+		{ role: "custom", content: [text("def"), image] },
+	];
+	const raw = collectConversation(projection(input));
+	assert.equal(child(raw, "Images").tokens, 6000);
+	assert.equal(child(raw, "User").tokens, 1);
+	assert.equal(child(raw, "Tool results").tokens, 1);
+	assert.equal(child(raw, "Tool results", "read").tokens, 1);
+	assert.equal(child(raw, "Tool results", "image-only").tokens, 0);
+	assert.equal(child(raw, "Other").tokens, 1);
+	conserved([raw], input.reduce((n, message) => n + estimateTokens(message), 0));
+	for (const total of [null, 0, 1, 7, 3001, 9876]) {
+		const report = await collectReport(context(input, total), pi, false, true);
+		conserved(report.stats, total ?? 6003);
+		assert.ok(child(report.stats.find((stat) => stat.label === "Messages"), "Images"));
+	}
+	for (const message of [user([image]), result("read", [image]), { role: "custom", content: [image] }]) {
+		const stats = collectConversation(projection([message]));
+		assert.deepEqual(stats.children.map((item) => item.label), ["Images"]);
+		conserved([stats], 1200);
+	}
+	assert.equal(child(collectConversation(projection(messages)), "Images"), undefined);
+
+	// Images follow the retained projection, not the unedited session history.
+	const session = SessionManager.inMemory(scratch);
+	const id = session.appendMessage(result("read", [text("x"), image]));
+	assert.equal(child(collectConversation(session.buildSessionProjection()), "Images").tokens, 1200);
+	session.appendContextEdit(id, { content: [text("x")] });
+	assert.equal(child(collectConversation(session.buildSessionProjection()), "Images"), undefined);
+});
+
+test("image row renders in overview and details without duplicating source tokens", async () => {
+	const image = { type: "image", data: "fixture", mimeType: "image/png" };
+	const input = [user([image]), result("read", [text("text"), image])];
+	for (const details of [false, true]) {
+		const report = await collectReport(context(input), pi, false, details);
+		for (const width of [24, 32, 48, 80, 100]) {
+			for (const colors of [palette, ansiPalette]) {
+				const lines = renderLines(report, colors, width);
+				assert.ok(lines.every((line) => visibleWidth(line) <= width));
+				// At 24 columns the label truncates to preserve numeric columns.
+				const label = width === 24 ? "Imag…" : "Images";
+				const plainLines = lines.map(stripVTControlCharacters);
+				assert.equal(plainLines.filter((line) => line.includes(label)).length, 1, plainLines.join("\n"));
+				assert.match(plainLines.find((line) => line.includes(label)), /2\.4k\s+24\.0%/);
+				if (colors === palette) writeFileSync(join(base, `context-images-${width}-${details}.txt`), plainLines.join("\n"));
+			}
+		}
+	}
 });
 
 test("complete independent rankings preserve totals, repeated names, and qualified names", () => {
@@ -335,7 +394,7 @@ test("render matrix: widths, ANSI, wide names, numeric columns, empty states", a
 	}
 	for (const tokens of [0, null]) {
 		const empty = await collectReport(context([], tokens), pi, false, false);
-		assert.doesNotMatch(renderLines(empty, palette, 80).join("\n"), /Tool calls|Tool results|Reasoning/);
+		assert.doesNotMatch(renderLines(empty, palette, 80).join("\n"), /Tool calls|Tool results|Reasoning|Images/);
 	}
 	const noModel = await collectReport(context([], null, { model: undefined, getContextUsage: () => undefined }), pi, false, false);
 	assert.match(renderLines(noModel, palette, 80).join("\n"), /No context window available/);

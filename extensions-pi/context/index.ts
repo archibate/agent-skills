@@ -9,7 +9,8 @@
  * - The used total comes from ctx.getContextUsage(), which can combine provider
  *   usage with estimates, or be unknown after compaction.
  * - Retained messages are split into user, assistant (reasoning/text/tool calls),
- *   tool results, other, and summaries. Counts use pi's chars/4 estimator and
+ *   tool results, images, other, and summaries. Images are counted separately
+ *   from their source roles. Counts use pi's chars/4 estimator and
  *   reconcile recursively with the used total. The split stays approximate;
  *   hidden reasoning and opaque signatures cannot be recovered or counted.
  *
@@ -104,6 +105,7 @@ const COLORS: Record<string, ThemeColor> = {
 	user: "userMessageText",
 	assistant: "mdHeading",
 	toolResults: "toolOutput",
+	images: "mdLink",
 	other: "customMessageLabel",
 	summary: "syntaxString",
 };
@@ -145,6 +147,7 @@ export function collectConversation(projection: Projection): Stat {
 	let user = 0;
 	let reasoning = 0;
 	let text = 0;
+	let images = 0;
 	let other = 0;
 	let summaries = 0;
 	const calls = new Map<string, number>();
@@ -154,7 +157,20 @@ export function collectConversation(projection: Projection): Stat {
 	// nested execution metadata. Historical tool names need not still be active.
 	for (const entry of projection.entries) {
 		for (const message of entry.messages) {
-			const tokens = countMessage(message);
+			let tokens = countMessage(message);
+			if (
+				(message.role === "user" || message.role === "toolResult" || message.role === "custom") &&
+				Array.isArray(message.content)
+			) {
+				const content = message.content.filter((block) => block.type !== "image");
+				if (content.length !== message.content.length) {
+					// Use Pi's own estimate, preserving whole-message rounding and
+					// leaving only non-image content in the source role/tool.
+					const nonImageTokens = countMessage({ ...message, content });
+					images += tokens - nonImageTokens;
+					tokens = nonImageTokens;
+				}
+			}
 			switch (message.role) {
 				case "user": user += tokens; break;
 				case "assistant": {
@@ -198,6 +214,7 @@ export function collectConversation(projection: Projection): Stat {
 		{ label: "User", tokens: user, color: COLORS.user },
 		assistant,
 		group("Tool results", COLORS.toolResults, toolStats(results, COLORS.toolResults), "results"),
+		{ label: "Images", tokens: images, color: COLORS.images },
 		{ label: "Other", tokens: other, color: COLORS.other },
 		{ label: "Summaries", tokens: summaries, color: COLORS.summary },
 	].filter((stat) => stat.tokens > 0));
