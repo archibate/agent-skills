@@ -25,6 +25,12 @@ const URLS = {
 	"openai-responses": `${ORIGIN}/v1`,
 	"openai-completions": `${ORIGIN}/v1`,
 } as const;
+// Ofox's Responses adapter fails history replay for these model families
+// (HTTP 400: unknown field "logprobs"). Keep the policy local to this gateway.
+const RESPONSES_BLOCKED_VENDORS = new Set(["deepseek", "z-ai"]);
+function responsesBlocked(id: string): boolean {
+	return RESPONSES_BLOCKED_VENDORS.has(id.split("/", 1)[0]);
+}
 type OfoxApi = keyof typeof URLS;
 type OfoxModel = Model<OfoxApi>;
 type Row = Record<string, unknown>;
@@ -98,7 +104,7 @@ export function normalizeCatalogs(catalogs: Catalogs): OfoxModel[] {
 		let api: OfoxApi;
 		if (id.startsWith("anthropic/") && anthropic.has(id)) api = "anthropic-messages";
 		else if (id.startsWith("google/") && google.has(id)) api = "google-generative-ai";
-		else if (endpoints.includes("/v1/responses")) api = "openai-responses";
+		else if (!responsesBlocked(id) && endpoints.includes("/v1/responses")) api = "openai-responses";
 		else if (endpoints.includes("/v1/chat/completions")) api = "openai-completions";
 		else continue;
 		const top = object(row.top_provider);
@@ -243,7 +249,12 @@ export function createOfoxProvider(options: {
 		refreshModels: async (context: RefreshModelsContext) => {
 			const stored = context.stored;
 			if (stored && (stored.checkedAt ?? 0) >= checkedAt) {
-				const restored = stored.models.filter(validCachedModel);
+				// Repair pre-workaround snapshots even offline/within TTL; do not rewrite
+				// shared storage or mutate the snapshot, and discard API-specific flags.
+				const restored = stored.models.filter(validCachedModel).map((model): OfoxModel =>
+					model.api === "openai-responses" && responsesBlocked(model.id)
+						? { ...model, api: "openai-completions", compat: undefined }
+						: model);
 				if (restored.length && restored.length <= MAX_MODELS) {
 					if (!await context.publish({ update: () => {
 						models = restored;

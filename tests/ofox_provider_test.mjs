@@ -87,6 +87,29 @@ test("live inventory, prices, capabilities, and native routing", () => {
 	assert.equal(basicModels.find((entry) => entry.id.startsWith("qwen/")).api, "openai-completions");
 });
 
+const responsesBlockedModels = [
+	"deepseek/deepseek-v4.1-flash", "deepseek/deepseek-v3.2", "deepseek/future-model",
+	"z-ai/glm-5.3-flash", "z-ai/glm-5.2", "z-ai/future-model",
+];
+
+test("DeepSeek and Z.ai families never select Responses and require advertised Chat Completions", () => {
+	for (const id of responsesBlockedModels) {
+		for (const endpoints of [["/v1/responses", "/v1/chat/completions"], ["/v1/chat/completions"]]) {
+			const [model] = normalizeCatalogs(catalogs([row(id, { supported_endpoints: endpoints })]));
+			assert.equal(model.api, "openai-completions");
+			assert.equal(model.baseUrl, "https://api.ofox.io/v1");
+		}
+		for (const endpoints of [["/v1/responses"], []]) {
+			const blocked = row(id, { supported_endpoints: endpoints });
+			assert.deepEqual(normalizeCatalogs(catalogs([basicRows[0], blocked])).map((model) => model.id), [basicRows[0].id]);
+			assert.throws(() => normalizeCatalogs(catalogs([blocked])), /no usable chat models/);
+		}
+	}
+	for (const id of ["qwen/qwen-flash", "minimax/minimax-m2", "openai/gpt-6.1-sol", "deepseek-other/model", "z-ai-other/model", "openai/deepseek-model"]) {
+		assert.equal(normalizeCatalogs(catalogs([row(id)]))[0].api, "openai-responses");
+	}
+});
+
 test("exclude unsupported operations, deprecated, duplicate, and malformed rows", () => {
 	const result = normalizeCatalogs(catalogs([
 		...basicRows, basicRows[0], row("retired/model", { is_deprecated: true }),
@@ -208,6 +231,27 @@ test("cold offline startup restores cached state without network or persistence 
 	assert.equal(calls, 0);
 	assert.equal(models.getModels("ofox").length, 4);
 	assert.equal((await store.read("ofox")).checkedAt, 10_000);
+});
+
+test("old Responses cache is repaired offline and within TTL without mutating stored snapshots", async () => {
+	for (const allowNetwork of [false, true]) {
+		const legacy = normalizeCatalogs(catalogs(responsesBlockedModels.map((id) => row(id))))
+			.map((model) => ({ ...model, api: "openai-responses", compat: { supportsDeveloperRole: false } }));
+		const cached = { models: [...legacy, ...basicModels], checkedAt: 10_000 };
+		const { models, store } = await collection(async () => { throw new Error("must not fetch within TTL"); }, () => 10_100);
+		await store.write("ofox", cached);
+		assert.equal((await models.refresh({ allowNetwork })).errors.size, 0);
+		for (const id of responsesBlockedModels) {
+			const model = models.getModels("ofox").find((entry) => entry.id === id);
+			assert.equal(model.api, "openai-completions");
+			assert.equal(model.compat, undefined); // Responses flags must not leak into Chat Completions.
+		}
+		assert.deepEqual(models.getModels("ofox").filter((model) => !responsesBlockedModels.includes(model.id)), basicModels);
+		assert.deepEqual(await store.read("ofox"), cached);
+		await models.refresh({ allowNetwork });
+		assert.ok(models.getModels("ofox").filter((model) => responsesBlockedModels.includes(model.id))
+			.every((model) => model.api === "openai-completions"));
+	}
 });
 
 test("failed and aborted refreshes retain the last successful catalog", async () => {
@@ -365,6 +409,42 @@ test("real native adapters assemble requests with stable public identities, with
 	}
 });
 
+test("Chat Completions replays old Responses text and tool histories without Responses fields", async () => {
+	const originalFetch = globalThis.fetch;
+	globalThis.fetch = async () => { throw new Error("Unexpected HTTP request"); };
+	try {
+		for (const id of responsesBlockedModels) {
+			const [model] = normalizeCatalogs(catalogs([row(id)]));
+			const legacy = assistant({ ...model, api: "openai-responses" }, [
+				{ type: "thinking", thinking: "Look up a value", thinkingSignature: JSON.stringify({ type: "reasoning", id: "rs_old", summary: [] }) },
+				{ type: "toolCall", id: "call_old|fc_old", name: "lookup", arguments: { value: "x" } },
+			]);
+			const context = ai.normalizeContext({ messages: [
+				{ role: "user", content: [{ type: "text", text: "Look up x" }], timestamp: 1 }, legacy,
+				{ role: "toolResult", toolCallId: "call_old|fc_old", toolName: "lookup", isError: false, timestamp: 2, content: [{ type: "text", text: "42" }] },
+				assistant({ ...model, api: "openai-responses" }, [{ type: "text", text: "42", textSignature: JSON.stringify({ v: 1, id: "msg_old" }) }]),
+				{ role: "user", content: [{ type: "text", text: "Repeat your answer" }], timestamp: 3 },
+			] });
+			const before = structuredClone(context);
+			let payload;
+			await createOfoxProvider().streamSimple(model, context, { apiKey: "unit-test-key", onPayload: (assembled) => {
+				payload = assembled; throw new Error("Stop before HTTP");
+			} }).result();
+			assert.ok(Array.isArray(payload?.messages));
+			assert.equal(payload.input, undefined);
+			const toolCall = payload.messages.find((message) => message.tool_calls?.length);
+			const toolResult = payload.messages.find((message) => message.role === "tool");
+			assert.equal(toolCall.tool_calls[0].function.name, "lookup");
+			assert.equal(toolCall.tool_calls[0].id, toolResult.tool_call_id);
+			assert.ok(payload.messages.some((message) => message.role === "assistant" && message.content === "42"));
+			assert.doesNotMatch(JSON.stringify(payload), /logprobs|thinkingSignature|textSignature|rs_old|msg_old/);
+			assert.deepEqual(context, before);
+		}
+	} finally {
+		globalThis.fetch = originalFetch;
+	}
+});
+
 test("real Gemini conversion keeps signed tool calls, result IDs, images, and public identities", async () => {
 	const model = basicModels.find((entry) => entry.api === "google-generative-ai");
 	const history = assistant(model, [{ type: "toolCall", id: "call-test", name: "lookup", arguments: { value: "x" }, thoughtSignature: "b3BhcXVlLXNpZ25hdHVyZQ==" }]);
@@ -433,42 +513,48 @@ test("CLI and SDK factories register without creating a runtime or discovering m
 	}
 });
 
-test("primary runtime restores injected cached models before initial model selection", async () => {
-	const agent = join(scratch, "primary-agent");
-	mkdirSync(agent);
-	const store = new ai.InMemoryModelsStore();
-	const credentials = new ai.InMemoryCredentialStore();
-	await store.write("ofox", { models: basicModels, checkedAt: 10_000 });
-	await credentials.modify("ofox", async () => ({ type: "api_key", key: "unit-test-key" }));
-	const originalWrite = store.write.bind(store);
-	let writes = 0;
-	store.write = async (...args) => { writes++; return originalWrite(...args); };
-	const runtime = await ModelRuntime.create({ credentials, modelsStore: store, modelsPath: null, refreshOnCreate: false });
-	const services = await createAgentSessionServices({
-		cwd: agent, agentDir: agent, modelRuntime: runtime,
-		settingsManager: SettingsManager.inMemory({ defaultProvider: "ofox", defaultModel: basicModels[0].id }),
-		resourceLoaderOptions: {
-			extensionFactories: [extensionFactory], noExtensions: true, noSkills: true,
-			noPromptTemplates: true, noThemes: true, noContextFiles: true,
-		},
+for (const initialModel of [basicModels[0], ...normalizeCatalogs(catalogs(responsesBlockedModels.map((id) => row(id))))
+	.map((model) => ({ ...model, api: "openai-responses" }))]) {
+	test(`primary runtime restores cached routing before selecting ${initialModel.id}`, async () => {
+		const agent = join(scratch, `primary-agent-${initialModel.id.replaceAll("/", "-")}`);
+		mkdirSync(agent);
+		const store = new ai.InMemoryModelsStore();
+		const credentials = new ai.InMemoryCredentialStore();
+		const cachedModels = [initialModel, ...basicModels.filter((model) => model.id !== initialModel.id)];
+		await store.write("ofox", { models: cachedModels, checkedAt: 10_000 });
+		await credentials.modify("ofox", async () => ({ type: "api_key", key: "unit-test-key" }));
+		const originalWrite = store.write.bind(store);
+		let writes = 0;
+		store.write = async (...args) => { writes++; return originalWrite(...args); };
+		const runtime = await ModelRuntime.create({ credentials, modelsStore: store, modelsPath: null, refreshOnCreate: false });
+		const services = await createAgentSessionServices({
+			cwd: agent, agentDir: agent, modelRuntime: runtime,
+			settingsManager: SettingsManager.inMemory({ defaultProvider: "ofox", defaultModel: initialModel.id }),
+			resourceLoaderOptions: {
+				extensionFactories: [extensionFactory], noExtensions: true, noSkills: true,
+				noPromptTemplates: true, noThemes: true, noContextFiles: true,
+			},
+		});
+		assert.equal(services.modelRuntime, runtime);
+		assert.deepEqual(services.diagnostics, []);
+		assert.deepEqual(services.resourceLoader.getExtensions().errors, []);
+		assert.equal((await runtime.getAvailable("ofox")).length, cachedModels.length);
+		const { session } = await createAgentSessionFromServices({
+			services, sessionManager: SessionManager.inMemory(agent), noTools: "all",
+		});
+		try {
+			assert.equal(session.model.provider, "ofox");
+			assert.equal(session.model.id, initialModel.id);
+			assert.equal(session.model.api, responsesBlockedModels.includes(initialModel.id) ? "openai-completions" : initialModel.api);
+			assert.deepEqual((await store.read("ofox")).models, cachedModels);
+			assert.equal(writes, 0);
+			assert.equal((await store.read("ofox")).checkedAt, 10_000);
+			assert.equal(existsSync(join(agent, "models-store.json")), false);
+		} finally {
+			session.dispose();
+		}
 	});
-	assert.equal(services.modelRuntime, runtime);
-	assert.deepEqual(services.diagnostics, []);
-	assert.deepEqual(services.resourceLoader.getExtensions().errors, []);
-	assert.equal((await runtime.getAvailable("ofox")).length, 4);
-	const { session } = await createAgentSessionFromServices({
-		services, sessionManager: SessionManager.inMemory(agent), noTools: "all",
-	});
-	try {
-		assert.equal(session.model.provider, "ofox");
-		assert.equal(session.model.id, basicModels[0].id);
-		assert.equal(writes, 0);
-		assert.equal((await store.read("ofox")).checkedAt, 10_000);
-		assert.equal(existsSync(join(agent, "models-store.json")), false);
-	} finally {
-		session.dispose();
-	}
-});
+}
 
 function cliFixture(name, models) {
 	const agent = join(scratch, name);
@@ -542,7 +628,14 @@ test("SDK loading leaves bootstrap to the host's isolated runtime and stored cre
 		const runtime = await ModelRuntime.create({
 			authPath: join(agent, "auth.json"), modelsPath: join(agent, "models.json"), refreshOnCreate: false,
 		});
+		// Registration starts an unawaited refresh; join it before issuing another
+		// so the host's generation cancellation cannot race this assertion.
+		const refresh = runtime.refresh.bind(runtime);
+		let registrationRefresh;
+		runtime.refresh = (options) => (registrationRefresh = refresh(options));
 		runtime.registerNativeProvider(registered);
+		await registrationRefresh;
+		runtime.refresh = refresh;
 		await runtime.refresh({ allowNetwork: false, providers: ["ofox"] });
 		assert.equal(registered.getModels().length, 4);
 		assert.equal((await runtime.getAvailable("ofox")).length, 4);

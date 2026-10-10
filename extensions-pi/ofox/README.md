@@ -14,6 +14,14 @@ from per-token to Pi's per-million-token rates. Known Pi models supplement
 thinking-level metadata; the live catalog determines inventory, limits, and prices.
 Image generation, video, embeddings, and transcription are not registered.
 
+Responses is blocked for all Ofox `deepseek/*` and `z-ai/*` models to avoid the
+history-replay `logprobs` error. Discovery uses advertised Chat Completions or
+excludes the model if that endpoint is unavailable. Legacy cached Responses
+entries in these families are rerouted to Chat Completions in memory, including
+offline startup. Other models and providers keep their existing routing.
+Restart Pi to activate the fix; `/reload` alone can leave the current model on
+the old endpoint.
+
 CLI startup restores cached models through Pi's main runtime before model
 selection. Interactive Pi refreshes live catalogs in the background; the extension
 factory does not perform discovery. `--list-models` reads the cache, even online.
