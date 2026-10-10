@@ -62,8 +62,10 @@ are appended, never removed from history. Switching modes does not swap the tool
 list or rewrite the system prompt. Checkpoint execution preserves the shared
 prefix and starts a new suffix with the approved plan.
 
-TUI and RPC clients can answer questions and approve plans. Without interactive
-UI, these tools stop for user input rather than approving automatically.
+TUI and RPC clients can answer questions and approve plans. The TUI asks a whole
+question batch in one dialog; RPC clients receive the same questions as plain
+selects. Without interactive UI, these tools stop for user input rather than
+approving automatically.
 
 ## Checks
 
