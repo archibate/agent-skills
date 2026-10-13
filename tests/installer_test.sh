@@ -67,7 +67,7 @@ run_installer --profile core --targets codex,claude --yes --skip-deps >/dev/null
 assert_file "$CASE_HOME/.agents/skills/cpp-oop-style/SKILL.md"
 assert_file "$CASE_HOME/.agents/skills/cpp-hpc-optimization/SKILL.md"
 [ ! -e "$CASE_HOME/.agents/skills/artifact-restraint" ] || fail "non-default skill installed by core profile"
-assert_link_target "$CASE_HOME/.agents/skills/e2e-side-effect-safety" "$ROOT/skills/e2e-side-effect-safety"
+[ ! -e "$CASE_HOME/.agents/skills/e2e-side-effect-safety" ] || fail "non-default skill installed by core profile"
 assert_file "$CASE_HOME/.claude/skills/cpp-oop-style/SKILL.md"
 assert_file "$CASE_HOME/.claude/skills/cpp-hpc-optimization/SKILL.md"
 assert_file "$CASE_HOME/.codex/AGENTS.md"
@@ -83,6 +83,11 @@ run_installer --skills cpp-hpc-optimization --targets codex --yes --skip-deps >/
 assert_dir "$CASE_HOME/.agents/skills/cpp-hpc-optimization"
 assert_dir "$CASE_HOME/.agents/skills/cpp-oop-style"
 [ ! -e "$CASE_HOME/.codex/AGENTS.md" ] || fail "explicit skill selection unexpectedly installed guidance"
+
+new_case closure-computer
+run_installer --skills computer-use --targets codex --yes --skip-deps >/dev/null
+assert_dir "$CASE_HOME/.agents/skills/computer-use"
+assert_dir "$CASE_HOME/.agents/skills/e2e-side-effect-safety"
 
 printf '4. managed guidance merge and idempotency\n'
 new_case guidance
@@ -379,11 +384,11 @@ set -e
 [ "$status" -eq 1 ] || fail "standalone anti-bot skill selection returned $status instead of 1"
 assert_contains "$CASE_ROOT/output" 'unknown skill or guidance item: scrapling'
 
-printf '20. execution safety accompanies global guidance for every target\n'
+printf '20. global guidance installs without dragging the optional safety skill\n'
 new_case execution-safety
 run_installer --skills agent-rules --targets codex,opencode,claude,pi --yes --skip-deps >/dev/null
-assert_link_target "$CASE_HOME/.agents/skills/e2e-side-effect-safety" "$ROOT/skills/e2e-side-effect-safety"
-assert_link_target "$CASE_HOME/.claude/skills/e2e-side-effect-safety" "$ROOT/skills/e2e-side-effect-safety"
+[ ! -e "$CASE_HOME/.agents/skills/e2e-side-effect-safety" ] || fail 'optional safety skill installed by guidance selection'
+[ ! -e "$CASE_HOME/.claude/skills/e2e-side-effect-safety" ] || fail 'optional safety skill installed by guidance selection'
 for guidance in "$CASE_HOME/.codex/AGENTS.md" "$CASE_HOME/.config/opencode/AGENTS.md" \
     "$CASE_HOME/.claude/CLAUDE.md" "$CASE_HOME/.pi/agent/AGENTS.md"; do
     assert_contains "$guidance" 'Before nontrivial execution tests or E2E:'
