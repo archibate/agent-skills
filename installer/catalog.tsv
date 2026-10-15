@@ -29,6 +29,7 @@ rmb-cost	extension	extensions-pi/rmb-cost	integration	no	-	-	-	pi	Session cost i
 subagent-cost	extension	extensions-pi/subagent-cost	integration	no	jobs	-	-	pi	Parent and subagent cost totals
 session-time	extension	extensions-pi/session-time	integration	no	-	-	-	pi	Agent working time in footer; API/tool split in /session
 ofox	extension	extensions-pi/ofox	integration	no	-	-	-	pi	Ofox provider with automatic model discovery
+koozhan	extension	extensions-pi/koozhan	integration	no	-	-	-	pi	Koozhan provider with automatic model discovery
 rewind	extension	extensions-pi/rewind	claudish	no	-	-	-	pi	File checkpoints for code rewind
 pi-subagents	skill	skills-pi/pi-subagents	thinking	no	jobs,sandbox	subagent-cost	-	pi	Subagent orchestration
 fresh-arch	skill	skills/fresh-arch	thinking	no	-	grill-me	-	-	Fresh architecture design

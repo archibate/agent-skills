@@ -158,6 +158,7 @@ curl -fsSL https://raw.githubusercontent.com/archibate/agent-skills/master/insta
 - `subagent-cost` 🧮——把 `pi-subagents` 的成本也算进状态栏，`/session` 里面主和子 agent 分别统计。
 - `session-time` ⏱️——状态栏显示本会话 **agent 干活总时长**和本轮/上一轮用时，运行中实时计时，弹窗等你回答时暂停；`/session` 里拆分出 API 推理、工具执行和其他各花了多久。
 - `ofox` 🦊——从 [Ofox](https://ofox.io) **自动发现模型**，`/ofox-refresh` 更新列表，不用手写 `models.json` 重定向。
+- `koozhan` 🐉——从 [Koozhan](https://api.koozhan.com) **自动发现 Claude 和 GPT 模型**，按 Koozhan 折扣价计费；不想缓存的请求（如压缩摘要）改发 5 分钟缓存，躲开 Koozhan 默认偷塞的 1 小时缓存 💸，`/koozhan-refresh` 更新列表。
 - `pi-subagents` 🦾——建议配合 `jobs` 和 `sandbox` 安装，真正符合**万物皆 bash** 的 Pi 哲学，把 subagent 也作为 bash 后台任务管理，主 agent 自己掌握节奏；可从脚本批量启动，可自由组合，开启您的大并行时代 🦾🦾🦾👋🤖
 
 > 安装器里勾选 Pi 为目标 agent 后，这些扩展按需勾选安装。
