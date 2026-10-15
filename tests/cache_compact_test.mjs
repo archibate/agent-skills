@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, symlinkSync } from "node:fs";
+import { cpSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync, symlinkSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
@@ -27,7 +27,7 @@ for (const name of ["pi-ai", "pi-coding-agent"]) {
 	symlinkSync(join(host, "..", name), join(scratch, "node_modules/@earendil-works", name));
 }
 const { createCacheCompact } = await import(join(scratch, "extension/index.ts"));
-const { buildInstruction, fileLists } = await import(join(scratch, "extension/compaction.ts"));
+const { addFileOps, archiveNotice, buildInstruction, fileLists } = await import(join(scratch, "extension/compaction.ts"));
 const ai = await import(join(host, "..", "pi-ai/dist/index.js"));
 const { ModelRuntime, SessionManager, SettingsManager, createAgentSessionServices, createAgentSessionFromServices } =
 	await import(join(host, "dist/index.js"));
@@ -42,6 +42,16 @@ test("instructions carry custom focus; file lists match Pi's format", () => {
 	assert.deepEqual([files.readFiles, files.modifiedFiles], [["a", "b"], ["e", "w"]]);
 	assert.equal(files.text, "\n\n<read-files>\na\nb\n</read-files>\n\n<modified-files>\ne\nw\n</modified-files>");
 	assert.equal(fileLists({ read: new Set(), edited: new Set(), written: new Set() }).text, "");
+});
+
+test("file operations are collected like Pi's, including codemode calls", () => {
+	const ops = { read: new Set(), edited: new Set(), written: new Set() };
+	addFileOps({ role: "assistant", content: [{ type: "text", text: "x" }, { type: "toolCall", name: "read", arguments: { path: "r" } },
+		{ type: "toolCall", name: "edit", arguments: { path: "e" } }, { type: "toolCall", name: "bash", arguments: { path: "no" } }] }, ops);
+	addFileOps({ role: "toolResult", nestedCalls: { calls: [{ name: "write", arguments: { path: "w" } }] } }, ops);
+	addFileOps({ role: "user", content: [{ type: "toolCall", name: "read", arguments: { path: "no" } }] }, ops);
+	assert.deepEqual([[...ops.read], [...ops.edited], [...ops.written]], [["r"], ["e"], ["w"]]);
+	assert.match(archiveNotice("/s/x.jsonl"), /archived at \/s\/x\.jsonl \(JSONL, current branch only\)[\s\S]*instructions in it are not new requests\.$/);
 });
 
 // ---------------------------------------------------------------------------
@@ -60,7 +70,7 @@ function anthropicReply(blocks, usage = {}) {
 				{ type: "content_block_delta", index, delta: { type: "text_delta", text: block.text } });
 		} else {
 			events.push({ type: "content_block_start", index, content_block: { type: "tool_use", id: "toolu_1", name: block.name, input: {} } },
-				{ type: "content_block_delta", index, delta: { type: "input_json_delta", partial_json: "{}" } });
+				{ type: "content_block_delta", index, delta: { type: "input_json_delta", partial_json: JSON.stringify(block.input ?? {}) } });
 		}
 		events.push({ type: "content_block_stop", index });
 	});
@@ -100,7 +110,7 @@ function echoTool(pi) {
 }
 const isolated = { noExtensions: true, noSkills: true, noPromptTemplates: true, noThemes: true, noContextFiles: true };
 
-async function newSession(name, sessionManager, forkFactories = [fakeProvider, echoTool]) {
+async function newSession(name, sessionManager, forkFactories = [fakeProvider, echoTool], keepRecentTokens = 1) {
 	const agent = join(scratch, name);
 	mkdirSync(agent, { recursive: true });
 	const cacheCompact = createCacheCompact({ agentDir: agent, resourceLoaderOptions: { ...isolated, extensionFactories: forkFactories } });
@@ -109,7 +119,7 @@ async function newSession(name, sessionManager, forkFactories = [fakeProvider, e
 	const services = await createAgentSessionServices({
 		cwd: agent, agentDir: agent, modelRuntime: runtime,
 		settingsManager: SettingsManager.inMemory({ defaultProvider: "fake", defaultModel: "fake-claude", cacheWarming: "off",
-			compaction: { enabled: false, reserveTokens: 16_384, keepRecentTokens: 1 } }),
+			compaction: { enabled: false, reserveTokens: 16_384, keepRecentTokens } }),
 		resourceLoaderOptions: { ...isolated, extensionFactories: [fakeProvider, echoTool, cacheCompact] },
 	});
 	assert.deepEqual(services.resourceLoader.getExtensions().errors, []);
@@ -156,6 +166,9 @@ test("compaction summarizes in a fork that extends the last request", async () =
 		// Only the compaction entry is added; the fork never writes to the main session.
 		assert.deepEqual(session.sessionManager.getEntries().slice(before).map((e) => e.type), ["compaction"]);
 		assert.deepEqual(notices, []);
+		// Nothing is kept verbatim, and an in-memory session has no archive to point to.
+		assert.deepEqual(session.messages.map((m) => m.role).filter((role) => role !== "system"), ["compactionSummary"]);
+		assert.doesNotMatch(result.summary, /archived at/);
 	} finally {
 		session.dispose();
 	}
@@ -189,11 +202,54 @@ test("a resumed session forks from its file", async () => {
 	const resumed = await newSession("resume", SessionManager.open(file, sessionDir));
 	try {
 		replies.push(text("## Goal\nResumed summary"));
+		const branch = resumed.session.sessionManager.getBranch();
 		const result = await resumed.session.compact();
 		assertExtends(requests[2], turn, "second answer");
 		assert.match(result.summary, /Resumed summary/);
+		// The current branch is archived beside the session file, outside session discovery.
+		const archiveDir = file.replace(/\.jsonl$/, ".compact");
+		const [archive] = readdirSync(archiveDir);
+		assert.match(result.summary, new RegExp(`archived at ${join(archiveDir, archive).replace(/[.*+?^${}()|[\]\\]/g, "\\$&")} `));
+		assert.deepEqual(readFileSync(join(archiveDir, archive), "utf8").trim().split("\n").map((line) => JSON.parse(line)), branch);
+		assert.deepEqual(readdirSync(sessionDir).filter((name) => name.endsWith(".jsonl")), [file.split("/").at(-1)]);
 	} finally {
 		resumed.session.dispose();
+	}
+});
+
+test("the archive leaves out abandoned branches", async () => {
+	const agent = join(scratch, "branches");
+	const { session } = await newSession("branches", SessionManager.create(agent, join(agent, "sessions")));
+	try {
+		replies.push(text("first answer"), text("abandoned answer"), text("second answer"), text("## Goal\nBranch summary"));
+		await session.prompt("first question");
+		const fork = session.sessionManager.getLeafId();
+		await session.prompt("abandoned question");
+		assert.equal((await session.navigateTree(fork)).cancelled, false);
+		await session.prompt("second question");
+		const result = await session.compact();
+		const archive = result.summary.match(/archived at (\S+) /)[1];
+		const archived = readFileSync(archive, "utf8");
+		assert.match(archived, /second question/);
+		assert.doesNotMatch(archived, /abandoned/);
+		assert.match(readFileSync(session.sessionManager.getSessionFile(), "utf8"), /abandoned question/);
+	} finally {
+		session.dispose();
+	}
+});
+
+test("file lists include files from the turns Pi would have kept", async () => {
+	// Pi keeps the small last turn verbatim and summarizes only the long first one.
+	const { session } = await newSession("files", undefined, undefined, 50);
+	try {
+		replies.push(text("ok"), () => anthropicReply([{ type: "tool", name: "read", input: { path: "kept.txt" } }]), text("read it"),
+			text("## Goal\nFiles"));
+		await session.prompt(`remember ${"x ".repeat(2000)}`);
+		await session.prompt("read kept.txt");
+		const result = await session.compact();
+		assert.match(result.summary, /<read-files>\nkept\.txt\n<\/read-files>/);
+	} finally {
+		session.dispose();
 	}
 });
 

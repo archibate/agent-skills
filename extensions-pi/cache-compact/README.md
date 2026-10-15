@@ -27,9 +27,16 @@ Measured on a 17k-token session with tools:
   depend on timing. A cold cache costs a full prompt (about 2× Pi's default,
   which drops recent messages, truncates tool results and omits thinking) and
   shows an info notice with the cache-read count.
-- The summary uses Pi's format, covers the whole visible conversation (including
-  messages Pi keeps verbatim), and gets Pi's `<read-files>`/`<modified-files>`
-  lists. `/compact <focus>` instructions are passed on.
+- Like Claude Code, the summary replaces the whole conversation: no recent
+  messages are kept verbatim, so nothing appears twice. It uses Pi's format and
+  gets Pi's `<read-files>`/`<modified-files>` lists. `/compact <focus>`
+  instructions are passed on.
+- The current branch (abandoned `/tree` branches excluded) is archived as JSONL
+  in `<session>.compact/<time>.jsonl` beside the session file, and the summary
+  ends with its path: the next agent can `rg` it for exact details, and is told
+  it is a historical record, not new instructions. Sessions without a file
+  (`--no-session`) get no archive. Each archive holds the whole branch, so later
+  ones repeat earlier history.
 - The fork declares the session's tools (they are part of the cached prefix) but
   blocks every tool call, and has compaction and cache warming off. Nothing is
   written to the main session except the compaction entry; its usage is recorded
