@@ -156,6 +156,7 @@ curl -fsSL https://raw.githubusercontent.com/archibate/agent-skills/master/insta
 - `rewind` ⏪——Claude Code 同款**代码快照**：Pi 的每次 `edit` 和 `write` 都会被快照记录，`/rewind`（`Ctrl+Alt+R`）列出本会话每个用户提问的时间点，选中即可代码和对话一起回滚，也可以单独只回滚对话或代码；Pi 原生的 `/tree`（`Esc Esc`）保持不动。
 - `rmb-cost` 💴——状态栏、`/session`、缓存/压缩提示和 codemode 的美元成本**就地换算成 ¥**，因为中国人能飞。
 - `subagent-cost` 🧮——把 `pi-subagents` 的成本也算进状态栏，`/session` 里面主和子 agent 分别统计。
+- `session-time` ⏱️——状态栏显示本会话 **agent 干活总时长**和本轮/上一轮用时，运行中实时计时，弹窗等你回答时暂停；`/session` 里拆分出 API 推理、工具执行和其他各花了多久。
 - `ofox` 🦊——从 [Ofox](https://ofox.io) **自动发现模型**，`/ofox-refresh` 更新列表，不用手写 `models.json` 重定向。
 - `pi-subagents` 🦾——建议配合 `jobs` 和 `sandbox` 安装，真正符合**万物皆 bash** 的 Pi 哲学，把 subagent 也作为 bash 后台任务管理，主 agent 自己掌握节奏；可从脚本批量启动，可自由组合，开启您的大并行时代 🦾🦾🦾👋🤖
 
