@@ -60,7 +60,7 @@ export class CostPublisher {
 	}
 }
 
-/** Pi 1.0.4 adapter: all accounting-bearing append methods call _appendEntry synchronously.
+/** Pi 1.0.4–1.2.0 adapter: all accounting-bearing append methods call _appendEntry synchronously.
  * Notify only after persistence succeeds. Never turn an accounting failure into a failed turn.
  */
 export function observeAppends(manager: object, appended: (entry: SessionEntry) => void, failed: (error: unknown) => void): () => void {

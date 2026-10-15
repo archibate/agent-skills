@@ -3,6 +3,9 @@ import { CostPublisher, observeAppends, REGISTRATION, registrationIn, type Regis
 import { CostLedger, publish, sessionPath } from "./ledger.ts";
 import { installPresentation, SUMMARY } from "./presentation.ts";
 
+/** Pi versions whose SessionManager routes every append through a synchronous `_appendEntry`. */
+const ADAPTER_VERSIONS = ["1.0.4", "1.1.0", "1.2.0"];
+
 export default function subagentCost(pi: ExtensionAPI): void {
 	installPresentation();
 	let release: (() => void) | undefined;
@@ -76,7 +79,9 @@ function startPublisher(pi: ExtensionAPI, ctx: ExtensionContext, childFile: stri
 	const parent = sessionPath(existing?.registration.parentSessionFile ?? inheritedParent!);
 	if (parent === childFile) return;
 	// No post-append extension event covers cache warming/arbitrary usage in this host version.
-	if (VERSION !== "1.0.4") throw new Error(`Append adapter supports Pi 1.0.4, found ${VERSION}; update subagent-cost`);
+	if (!ADAPTER_VERSIONS.includes(VERSION)) {
+		throw new Error(`Append adapter supports Pi ${ADAPTER_VERSIONS.join(", ")}, found ${VERSION}; update subagent-cost`);
+	}
 	const registration: Registration = existing?.registration ?? {
 		childSessionFile: childFile,
 		childSessionId: ctx.sessionManager.getSessionId(),

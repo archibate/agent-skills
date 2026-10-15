@@ -45,7 +45,7 @@ do not add costs twice. Invalid records retain the last valid in-memory total.
   not fsynced; this is not a power-loss-proof billing ledger.
 - Storage/watch errors warn once per session and never fail a successfully
   persisted agent turn. Fix the reported problem and `/reload`.
-- Pi **1.0.4** is supported. There is no public extension event for every recorded
+- Pi **1.0.4, 1.1.0 and 1.2.0** are supported. There is no public extension event for every recorded
   charge, so a guarded per-instance `_appendEntry` adapter publishes after Pi's
   synchronous append succeeds. Footer statistics and `/session` rendering use
   reload-safe internal adapters too. Review these adapters before upgrading Pi.
@@ -57,7 +57,7 @@ history once; subsequent accounting is O(1) per appended entry.
 
 ## Tests
 
-From the repository root, with `PI_SDK_PATH` pointing to Pi 1.0.4's `dist/index.js`
+From the repository root, with `PI_SDK_PATH` pointing to a supported Pi's `dist/index.js`
 and `PI_SCRATCHPAD_DIR` pointing to a private test workspace:
 
 ```sh
