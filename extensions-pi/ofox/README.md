@@ -19,6 +19,8 @@ history-replay `logprobs` error. Discovery uses advertised Chat Completions or
 excludes the model if that endpoint is unavailable. Legacy cached Responses
 entries in these families are rerouted to Chat Completions in memory, including
 offline startup. Other models and providers keep their existing routing.
+All Ofox Chat Completions models send instructions as `system`, because Ofox
+rejects the `developer` role (HTTP 422); cached entries are repaired on load.
 Restart Pi to activate the fix; `/reload` alone can leave the current model on
 the old endpoint.
 

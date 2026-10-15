@@ -98,6 +98,7 @@ test("DeepSeek and Z.ai families never select Responses and require advertised C
 			const [model] = normalizeCatalogs(catalogs([row(id, { supported_endpoints: endpoints })]));
 			assert.equal(model.api, "openai-completions");
 			assert.equal(model.baseUrl, "https://api.ofox.io/v1");
+			assert.deepEqual(model.compat, { supportsDeveloperRole: false }); // Ofox rejects role "developer" (HTTP 422).
 		}
 		for (const endpoints of [["/v1/responses"], []]) {
 			const blocked = row(id, { supported_endpoints: endpoints });
@@ -236,15 +237,19 @@ test("cold offline startup restores cached state without network or persistence 
 test("old Responses cache is repaired offline and within TTL without mutating stored snapshots", async () => {
 	for (const allowNetwork of [false, true]) {
 		const legacy = normalizeCatalogs(catalogs(responsesBlockedModels.map((id) => row(id))))
-			.map((model) => ({ ...model, api: "openai-responses", compat: { supportsDeveloperRole: false } }));
-		const cached = { models: [...legacy, ...basicModels], checkedAt: 10_000 };
+			.map((model) => ({ ...model, api: "openai-responses", compat: { supportsStrictMode: true } }));
+		// Chat Completions snapshots cached before the developer-role fix carry no compat.
+		const stale = basicModels.map(({ compat, ...model }) => model.api === "openai-completions" ? model : { ...model, compat });
+		for (const model of stale) if (model.compat === undefined) delete model.compat;
+		const cached = { models: [...legacy, ...stale], checkedAt: 10_000 };
 		const { models, store } = await collection(async () => { throw new Error("must not fetch within TTL"); }, () => 10_100);
 		await store.write("ofox", cached);
 		assert.equal((await models.refresh({ allowNetwork })).errors.size, 0);
 		for (const id of responsesBlockedModels) {
 			const model = models.getModels("ofox").find((entry) => entry.id === id);
 			assert.equal(model.api, "openai-completions");
-			assert.equal(model.compat, undefined); // Responses flags must not leak into Chat Completions.
+			// Responses flags must not leak into Chat Completions.
+			assert.deepEqual(model.compat, { supportsDeveloperRole: false });
 		}
 		assert.deepEqual(models.getModels("ofox").filter((model) => !responsesBlockedModels.includes(model.id)), basicModels);
 		assert.deepEqual(await store.read("ofox"), cached);

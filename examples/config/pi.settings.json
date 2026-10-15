@@ -1,4 +1,5 @@
 {
+  "theme": "lavender-lace",
   "showCacheMissNotices": true,
   "defaultProjectTrust": "always",
   "quietStartup": false,
@@ -7,18 +8,17 @@
     "showTerminalProgress": true
   },
   "enabledModels": [
-    "openai-codex/gpt-6.1-sol",
-    "openai-codex/gpt-6-luna",
-    "ofox/deepseek/deepseek-v4.1-flash",
-    "ofox/z-ai/glm-4.7-flashx",
-    "ofox/anthropic/claude-opus-5.5",
-    "ofox/google/gemini-3.8-flash",
-    "ofox/google/gemini-3.5-flash-lite",
-    "deepseek/deepseek-flash"
+    "koozhan/claude-opus-5-5",
+    "ofox/google/gemini-4-argon",
+    "koozhan/gpt-6-astra",
+    "ofox/deepseek/deepseek-v4.1-flash"
   ],
-  "defaultProvider": "openai-codex",
-  "defaultModel": "gpt-6.1-sol",
-  "packages": [],
+  "defaultProvider": "ofox",
+  "defaultModel": "deepseek/deepseek-v4.1-flash",
+  "packages": [
+    "npm:@tmustier/pi-usage-extension"
+  ],
   "defaultThinkingLevel": "high",
-  "hideThinkingBlock": true
+  "hideThinkingBlock": false,
+  "cacheWarming": "idle"
 }

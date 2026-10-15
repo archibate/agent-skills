@@ -31,6 +31,9 @@ const RESPONSES_BLOCKED_VENDORS = new Set(["deepseek", "z-ai"]);
 function responsesBlocked(id: string): boolean {
 	return RESPONSES_BLOCKED_VENDORS.has(id.split("/", 1)[0]);
 }
+// Ofox's Chat Completions endpoint rejects the `developer` role (HTTP 422), which
+// pi-ai otherwise sends for reasoning models on unrecognized OpenAI-compatible URLs.
+const COMPLETIONS_COMPAT = { supportsDeveloperRole: false } as const;
 type OfoxApi = keyof typeof URLS;
 type OfoxModel = Model<OfoxApi>;
 type Row = Record<string, unknown>;
@@ -141,6 +144,7 @@ export function normalizeCatalogs(catalogs: Catalogs): OfoxModel[] {
 				supportsMidConvoToolChanges: false,
 			};
 		}
+		if (api === "openai-completions") model.compat = { ...COMPLETIONS_COMPAT };
 		// No speculative gateway compatibility flags or idle cache-warming lifetimes.
 		seen.add(id);
 		models.push(model);
@@ -251,10 +255,10 @@ export function createOfoxProvider(options: {
 			if (stored && (stored.checkedAt ?? 0) >= checkedAt) {
 				// Repair pre-workaround snapshots even offline/within TTL; do not rewrite
 				// shared storage or mutate the snapshot, and discard API-specific flags.
-				const restored = stored.models.filter(validCachedModel).map((model): OfoxModel =>
-					model.api === "openai-responses" && responsesBlocked(model.id)
-						? { ...model, api: "openai-completions", compat: undefined }
-						: model);
+				const restored = stored.models.filter(validCachedModel).map((model): OfoxModel => {
+					if (model.api === "openai-responses" && responsesBlocked(model.id)) model = { ...model, api: "openai-completions" };
+					return model.api === "openai-completions" ? { ...model, compat: { ...COMPLETIONS_COMPAT } } : model;
+				});
 				if (restored.length && restored.length <= MAX_MODELS) {
 					if (!await context.publish({ update: () => {
 						models = restored;
