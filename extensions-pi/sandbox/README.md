@@ -81,7 +81,7 @@ exactly what it declares, and the agent's prompt does not mention either.
 |---|---|---|
 | `--permissions`, `/permissions` | `default`, `read-only`, or a JSON sandbox object plus optional `"tools": [...]` | `default`: the git work tree is writable, network `fetch-only`, other tools run |
 | `--reviewer` | `deny`, `manual`, `auto`, `auto-manual`; manual modes need the TUI | `auto-manual` in the TUI, `deny` otherwise |
-| `--reviewer-model` | Chat model as `provider/model` | `openai-codex/gpt-6-luna`, low reasoning |
+| `--reviewer-model` | Chat model as `provider/model` | `openai/gpt-6-luna`, low reasoning |
 
 A call needs review when:
 

@@ -79,6 +79,9 @@ cannot return images from that call, use a separate image read; this adds overhe
 but does not block computer use. Printing a PNG path or base64 as text does not
 give the model an image. Keep dependent steps ordered; parallel capture may precede
 the action. Parallelize only independent work with independently owned resources.
+Crop to the region in question and stack related frames, such as before and after,
+into one image so a single read covers them. To detect a change or wait for a
+transition, compare pixels in the script and read an image only when it matters.
 
 ## Finish
 

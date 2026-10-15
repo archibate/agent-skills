@@ -1,6 +1,6 @@
 /** Automatic-review configuration available without loading the reviewer agent. */
 export const REVIEWER_MODEL_FLAG = "reviewer-model";
-export const DEFAULT_REVIEWER_MODEL = "openai-codex/gpt-6-luna";
+export const DEFAULT_REVIEWER_MODEL = "openai/gpt-6-luna";
 export const AUTO_REVIEW_ENTRY = "sandbox-auto-review";
 export const REVIEW_LIMITS = { timeoutMs: 60_000, requests: 4, tools: 8, contextBytes: 256 * 1024, outputTokens: 2048 };
 
