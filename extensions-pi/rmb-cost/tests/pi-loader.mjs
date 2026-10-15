@@ -5,12 +5,17 @@ import { pathToFileURL } from "node:url";
 if (process.env.PI_SDK_PATH) {
 	const sdkUrl = pathToFileURL(process.env.PI_SDK_PATH);
 	const require = createRequire(sdkUrl);
-	const tuiUrl = pathToFileURL(require.resolve("@earendil-works/pi-tui")).href;
+	const resolved = (id) => pathToFileURL(require.resolve(id)).href;
+	// Pi's extension loader aliases these to its own copies; mirror that for tests.
+	const aliases = new Map([
+		["@earendil-works/pi-coding-agent", sdkUrl.href],
+		["@earendil-works/pi-tui", resolved("@earendil-works/pi-tui")],
+		...["typebox", "typebox/compile", "typebox/value"].map((id) => [id, resolved(id)]),
+	]);
 	registerHooks({
 		resolve(specifier, context, nextResolve) {
-			if (specifier === "@earendil-works/pi-coding-agent") return { url: sdkUrl.href, shortCircuit: true };
-			if (specifier === "@earendil-works/pi-tui") return { url: tuiUrl, shortCircuit: true };
-			return nextResolve(specifier, context);
+			const url = aliases.get(specifier);
+			return url ? { url, shortCircuit: true } : nextResolve(specifier, context);
 		},
 	});
 }
