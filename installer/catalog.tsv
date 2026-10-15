@@ -30,7 +30,6 @@ subagent-cost	extension	extensions-pi/subagent-cost	integration	no	jobs	-	-	pi	P
 session-time	extension	extensions-pi/session-time	integration	no	-	-	-	pi	Agent working time in footer; API/tool split in /session
 ofox	extension	extensions-pi/ofox	integration	no	-	-	-	pi	Ofox provider with automatic model discovery
 koozhan	extension	extensions-pi/koozhan	integration	no	-	-	-	pi	Koozhan provider with automatic model discovery
-cache-compact	extension	extensions-pi/cache-compact	integration	no	-	-	-	pi	Compaction that reuses the prompt cache
 rewind	extension	extensions-pi/rewind	claudish	no	-	-	-	pi	File checkpoints for code rewind
 pi-subagents	skill	skills-pi/pi-subagents	thinking	no	jobs,sandbox	subagent-cost	-	pi	Subagent orchestration
 fresh-arch	skill	skills/fresh-arch	thinking	no	-	grill-me	-	-	Fresh architecture design
