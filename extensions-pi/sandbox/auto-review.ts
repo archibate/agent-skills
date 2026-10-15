@@ -6,10 +6,10 @@ import { cleanupSessionResources, type AssistantMessage } from "@earendil-works/
 import { buildSessionContext, type ExtensionContext } from "@earendil-works/pi-coding-agent";
 import type { ReviewRequest, Reviewer, Verdict } from "./review.ts";
 import { createReviewTools, REVIEW_TOOL_NAMES } from "./review-tools.ts";
-import { DEFAULT_REVIEWER_MODEL, REVIEW_LIMITS, validateReviewerModel } from "./review-config.ts";
+import { DEFAULT_REVIEWER_THINKING, REVIEW_LIMITS, validateReviewerModel, type ReviewerThinking } from "./review-config.ts";
 import type { ReviewFailurePhase } from "./lazy-reviewer.ts";
 
-export { AUTO_REVIEW_ENTRY, DEFAULT_REVIEWER_MODEL, REVIEWER_MODEL_FLAG, REVIEW_LIMITS } from "./review-config.ts";
+export { AUTO_REVIEW_ENTRY, REVIEWER_MODEL_FLAG, REVIEW_LIMITS } from "./review-config.ts";
 
 const PROMPT = `You review proposed tool calls before execution, not perform the main task.
 Approve only when the exact action and requested access follow the user's intent and instructions, with proportionate scope and consequences. Consider destructive changes, external effects, privacy, money, scope creep, and prior human denials. Access declarations describe capability, not authorization.
@@ -30,7 +30,8 @@ export interface AutoReviewRecord {
 	failure?: ReviewFailurePhase;
 }
 export interface AutoReviewerOptions {
-	model?: string;
+	model: string;
+	thinking?: ReviewerThinking;
 	record?: (record: AutoReviewRecord) => void;
 	/** Internal test seams, not CLI settings. */
 	limits?: Partial<typeof REVIEW_LIMITS>;
@@ -94,9 +95,9 @@ export class AutoReviewer implements Reviewer {
 	private cleanupFailed = false;
 	private budget: { requests: number; tools: number; usage: ReviewUsage } | undefined;
 
-	constructor(options: AutoReviewerOptions = {}) {
+	constructor(options: AutoReviewerOptions) {
 		this.options = options;
-		this.modelName = options.model ?? DEFAULT_REVIEWER_MODEL;
+		this.modelName = options.model;
 		validateReviewerModel(this.modelName);
 		this.limits = { ...REVIEW_LIMITS, ...options.limits };
 	}
@@ -207,7 +208,7 @@ export class AutoReviewer implements Reviewer {
 
 	private makeAgent(ctx: ExtensionContext, model: NonNullable<ExtensionContext["model"]>, maxBytes: number): Agent {
 		const agent = new Agent({
-			initialState: { systemPrompt: PROMPT, model, thinkingLevel: "low", tools: (this.options.createTools ?? createReviewTools)(ctx.cwd) },
+			initialState: { systemPrompt: PROMPT, model, thinkingLevel: this.options.thinking ?? DEFAULT_REVIEWER_THINKING, tools: (this.options.createTools ?? createReviewTools)(ctx.cwd) },
 			sessionId: `${ctx.sessionManager.getSessionId()}.sandbox-review.${randomUUID()}`,
 			streamFn: (selected, context, options) => {
 				const budget = this.budget;

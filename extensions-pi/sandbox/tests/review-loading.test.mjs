@@ -26,14 +26,14 @@ test("registration stays cold and first use loads only the selected reviewer", (
 			events: { on() {} },
 		});
 		for (const name of ["deny", "manual", "auto", "auto-manual"]) {
-			const reviewer = createReviewer(name, "tui");
+			const reviewer = createReviewer(name, "tui", { model: "openai-codex/gpt-6-luna" });
 			assert.equal(reviewer.name, name);
 			reviewer.dispose?.();
 		}
 		assert.deepEqual([...loaded], [], "registration must not import reviewer implementations");
 		assert.throws(() => createReviewer("auto", "print", { model: "invalid" }), /provider\\/model/);
 		assert.deepEqual([...loaded], [], "invalid configuration must fail without loading");
-		const auto = createReviewer("auto", "print");
+		const auto = createReviewer("auto", "print", { model: "openai-codex/gpt-6-luna" });
 		const result = await auto.review({}, { modelRegistry: { find: () => undefined } });
 		assert.equal(result.kind, "deny");
 		assert.match(result.feedback, /Model or credentials unavailable/);

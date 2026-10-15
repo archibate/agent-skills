@@ -91,7 +91,8 @@ test("reviewer selection and denial reasons", async () => {
 	assert.equal(createReviewer("deny", "print").name, "deny");
 	assert.equal(createReviewer("manual", "tui").name, "manual");
 	assert.throws(() => createReviewer("manual", "print"), /manual needs the interactive TUI/);
-	assert.equal(createReviewer("auto", "tui").name, "auto");
+	assert.equal(createReviewer("auto", "tui", { model: "openai-codex/gpt-6-luna" }).name, "auto");
+	assert.throws(() => createReviewer("auto", "tui"), /needs a reviewer model/);
 	assert.throws(() => createReviewer("auto", "tui", { model: "bad" }), /provider\/model/);
 	assert.throws(() => createReviewer("auto-manual", "print"), /needs the interactive TUI/);
 	assert.throws(() => createReviewer("nope", "tui"), /must be one of deny, manual, auto, auto-manual/);

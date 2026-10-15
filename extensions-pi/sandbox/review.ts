@@ -9,7 +9,7 @@
 import type { ExtensionContext } from "@earendil-works/pi-coding-agent";
 import type { AutoReviewerOptions } from "./auto-review.ts";
 import { lazyReviewer } from "./lazy-reviewer.ts";
-import { DEFAULT_REVIEWER_MODEL, validateReviewerModel } from "./review-config.ts";
+import { REVIEWER_MODEL_FLAG, validateReviewerModel } from "./review-config.ts";
 import type { SandboxPolicy } from "./policy.ts";
 
 export const REVIEWER_FLAG = "reviewer";
@@ -49,9 +49,14 @@ const denyReviewer: Reviewer = {
 	review: async () => ({ kind: "deny" }),
 };
 
-function createAutomaticReviewer(options: AutoReviewerOptions): Reviewer {
-	const selected = { ...options, model: options.model ?? DEFAULT_REVIEWER_MODEL };
-	validateReviewerModel(selected.model);
+/** The model is resolved by the caller (review-config.ts); automatic review has no default. */
+export type ReviewerOptions = Omit<AutoReviewerOptions, "model"> & { model?: string };
+
+function createAutomaticReviewer(options: ReviewerOptions): Reviewer {
+	const { model } = options;
+	if (model === undefined) throw new Error(`automatic review needs a reviewer model (--${REVIEWER_MODEL_FLAG} provider/model)`);
+	validateReviewerModel(model);
+	const selected: AutoReviewerOptions = { ...options, model };
 	return lazyReviewer("auto", async () => {
 		const { AutoReviewer } = await import("./auto-review.ts");
 		return () => new AutoReviewer(selected);
@@ -77,7 +82,7 @@ function createManualReviewer(): Reviewer {
 }
 
 /** Selection and configuration validation are synchronous; implementations load on first review. */
-export function createReviewer(name: string, mode: ExtensionContext["mode"], options: AutoReviewerOptions = {}): Reviewer {
+export function createReviewer(name: string, mode: ExtensionContext["mode"], options: ReviewerOptions = {}): Reviewer {
 	if (name === "deny") return denyReviewer;
 	if (name === "manual") {
 		if (mode !== "tui") throw new Error(`--${REVIEWER_FLAG} manual needs the interactive TUI; use deny`);

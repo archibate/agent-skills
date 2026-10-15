@@ -14,6 +14,7 @@ test("Pi loader and session startup stay cold; loading failures are audited befo
 	});
 	mkdirSync(join(scratch, "project"));
 	mkdirSync(join(scratch, "agent"));
+	writeFileSync(join(scratch, "agent", "sandbox.json"), JSON.stringify({ reviewerModel: "openai-codex/gpt-6-luna" }));
 	mkdirSync(join(scratch, ".cache"));
 	// Guards execute through Pi's real Jiti loader, not native ESM import hooks.
 	writeFileSync(join(extension, "auto-review.ts"), 'globalThis.__reviewerLoads.push("auto"); throw new Error("secret loader detail"); export class AutoReviewer {}');

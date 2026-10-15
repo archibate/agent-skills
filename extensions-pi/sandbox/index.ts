@@ -22,9 +22,19 @@
  */
 
 import { homedir } from "node:os";
-import { DynamicBorder, type ExtensionAPI, type ExtensionCommandContext, type ExtensionContext } from "@earendil-works/pi-coding-agent";
+import { join } from "node:path";
+import { DynamicBorder, getAgentDir, type ExtensionAPI, type ExtensionCommandContext, type ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { Container, SelectList, Spacer, Text } from "@earendil-works/pi-tui";
-import { AUTO_REVIEW_ENTRY, DEFAULT_REVIEWER_MODEL, REVIEWER_MODEL_FLAG } from "./review-config.ts";
+import {
+	AUTO_REVIEW_ENTRY,
+	DEFAULT_REVIEWER_THINKING,
+	REVIEWER_MODEL_FLAG,
+	REVIEWER_THINKING_FLAG,
+	REVIEWER_THINKING_LEVELS,
+	resolveReviewerModel,
+	resolveReviewerThinking,
+	SANDBOX_CONFIG_FILE,
+} from "./review-config.ts";
 import { PermissionCeilings } from "./ceilings.ts";
 import { sessionScratchpad } from "./scratchpad-path.ts";
 import { ENABLE_SANDBOX_FLAG, sandboxRequested } from "./enable.ts";
@@ -71,7 +81,9 @@ import { createSandboxBashDefinition, renderAllowanceBadge, withSandboxBadge } f
 
 const PERMISSIONS_ENTRY = "sandbox-permissions";
 
-export default function sandboxExtension(pi: ExtensionAPI): void {
+/** SDK hosts with an explicit agentDir can inject that same directory via an inline factory. */
+export default function sandboxExtension(pi: ExtensionAPI, agentDir = getAgentDir()): void {
+	const configPath = join(agentDir, SANDBOX_CONFIG_FILE);
 	/** Read live: pi sets runtime flag values after loading, and a /btw side session has its own. */
 	const requested = (): boolean =>
 		sandboxRequested(
@@ -97,7 +109,11 @@ export default function sandboxExtension(pi: ExtensionAPI): void {
 	});
 	pi.registerFlag(REVIEWER_MODEL_FLAG, {
 		type: "string",
-		description: `Model for automatic review, as provider/model. Default: ${DEFAULT_REVIEWER_MODEL}.`,
+		description: `Model for automatic review, as provider/model. Default: "reviewerModel" in ${configPath}; required by auto and auto-manual.`,
+	});
+	pi.registerFlag(REVIEWER_THINKING_FLAG, {
+		type: "string",
+		description: `Automatic reviewer reasoning effort: ${REVIEWER_THINKING_LEVELS.join(", ")}. Default: ${DEFAULT_REVIEWER_THINKING}.`,
 	});
 
 	let allowance: Allowance = NO_ACCESS;
@@ -169,10 +185,12 @@ export default function sandboxExtension(pi: ExtensionAPI): void {
 		}
 		const name = restricted !== undefined ? "deny" : pi.getFlag(REVIEWER_FLAG);
 		try {
-			const model = pi.getFlag(REVIEWER_MODEL_FLAG);
+			const selected = typeof name === "string" && name !== "" ? name : defaultReviewerName(ctx.mode);
+			const automatic = selected === "auto" || selected === "auto-manual";
 			const epoch = sessionEpoch;
-			reviewer = createReviewer(typeof name === "string" && name !== "" ? name : defaultReviewerName(ctx.mode), ctx.mode, {
-				model: typeof model === "string" && model !== "" ? model : DEFAULT_REVIEWER_MODEL,
+			reviewer = createReviewer(selected, ctx.mode, {
+				model: automatic ? resolveReviewerModel(pi.getFlag(REVIEWER_MODEL_FLAG), configPath) : undefined,
+				thinking: automatic ? resolveReviewerThinking(pi.getFlag(REVIEWER_THINKING_FLAG)) : undefined,
 				record: (record) => { if (epoch === sessionEpoch) pi.appendEntry(AUTO_REVIEW_ENTRY, record); },
 			});
 		} catch (error) {

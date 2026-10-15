@@ -25,8 +25,10 @@ async function setup(t) {
 	writeFileSync(join(cwd, ".git", "HEAD"), "ref: refs/heads/main\n");
 	mkdirSync(join(base, "agent"));
 	mkdirSync(join(base, "scratch"));
-	const saved = Object.fromEntries(["XDG_CACHE_HOME", "PI_SCRATCHPAD_DIR"].map((k) => [k, process.env[k]]));
-	Object.assign(process.env, { XDG_CACHE_HOME: join(base, "cache"), PI_SCRATCHPAD_DIR: join(base, "scratch") });
+	const config = join(base, "agent", "sandbox.json");
+	writeFileSync(config, JSON.stringify({ reviewerModel: "openai-codex/gpt-6-luna" }));
+	const saved = Object.fromEntries(["XDG_CACHE_HOME", "PI_SCRATCHPAD_DIR", "PI_CODING_AGENT_DIR"].map((k) => [k, process.env[k]]));
+	Object.assign(process.env, { XDG_CACHE_HOME: join(base, "cache"), PI_SCRATCHPAD_DIR: join(base, "scratch"), PI_CODING_AGENT_DIR: join(base, "agent") });
 	const sessions = [];
 	t.after(() => {
 		for (const session of sessions) session.dispose?.();
@@ -111,7 +113,7 @@ async function setup(t) {
 			session.sessionManager.getBranch().filter((e) => e.type === "custom" && e.customType === type).map((e) => e.data);
 		return { session, call, shown, errors, customs, eventBus, statuses, reviewCalls };
 	}
-	return { base, cwd, open };
+	return { base, cwd, config, open };
 }
 
 test("print mode: the default permissions run, the rest is denied", { skip: !sdkPath }, async (t) => {
@@ -226,6 +228,28 @@ test("footer shows the effective fail-closed permissions on configuration errors
 	assert.equal(statuses.get("sandbox-permissions"), "⛶ read-only (config error)");
 });
 
+test("automatic review has no built-in model: missing or malformed sandbox.json fails closed", { skip: !sdkPath }, async (t) => {
+	const { config, open } = await setup(t);
+	unlinkSync(config);
+	const missing = await open({ mode: "tui", flags: { "enable-sandbox": true } });
+	assert.match(missing.errors.join("\n"), /needs a reviewer model: set "reviewerModel" in .*sandbox\.json or pass --reviewer-model/);
+	assert.equal(missing.statuses.get("sandbox-permissions"), "⛶ read-only (config error)");
+	assert.deepEqual((await open({ mode: "tui", flags: { reviewer: "manual" } })).errors, [], "manual review needs no model");
+	writeFileSync(config, JSON.stringify({ reviewerModel: "openai-codex/gpt-6-luna", extra: 1 }));
+	assert.match((await open({ flags: { reviewer: "auto" } })).errors.join("\n"), /only "reviewerModel"/);
+	assert.deepEqual((await open({ flags: { reviewer: "manual" } })).errors.filter((e) => /reviewerModel/.test(e)), [], "the file is read only for automatic review");
+	assert.match((await open({ flags: { reviewer: "auto", "reviewer-model": "openai-codex/gpt-6-luna", "reviewer-thinking": "huge" } })).errors.join("\n"), /--reviewer-thinking must be one of/);
+});
+
+test("--reviewer-model overrides sandbox.json and --reviewer-thinking sets the effort", { skip: !sdkPath }, async (t) => {
+	const { config, open } = await setup(t);
+	writeFileSync(config, JSON.stringify({ reviewerModel: "elsewhere/other" }));
+	const { call, reviewCalls, errors } = await open({ flags: { reviewer: "auto", "reviewer-model": "openai-codex/gpt-6-luna", "reviewer-thinking": "high" }, autoPlans: [{ decision: "approve", reason: "User authorized this action." }] });
+	assert.deepEqual(errors, []);
+	assert.equal(await call("bash", { command: "fetch", sandbox: { networkAccess: "full" } }), undefined);
+	assert.equal(reviewCalls[0].options.reasoning, "high");
+});
+
 test("restrict() fixes read-only with the deny reviewer, even in the TUI", { skip: !sdkPath }, async (t) => {
 	const { cwd, open } = await setup(t);
 	const { call, shown, eventBus, statuses } = await open({ mode: "tui", flags: { "enable-sandbox": true }, answers: ["y"] });
@@ -256,6 +280,7 @@ test("auto uses Luna only beyond permissions, records one-shot decisions and res
 	assert.equal(await call("bash", grant), undefined);
 	assert.match((await call("bash", grant)).reason, /^Blocked by automatic review:.*Keep this action local/);
 	assert.equal(reviewCalls.length, 2, "automatic approval never widens permissions");
+	assert.equal(reviewCalls[0].options.reasoning, "low");
 	assert.equal(customs("sandbox-permissions").length, 0);
 	assert.equal(customs("sandbox-auto-review").length, 2);
 	assert.deepEqual(customs("sandbox-review").map((r) => r.mark), ["auto-approved", "auto-denied"]);

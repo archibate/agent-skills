@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { test } from "node:test";
 import { createAssistantMessageEventStream, registerSessionResourceCleanup } from "@earendil-works/pi-ai";
 import { SessionManager } from "@earendil-works/pi-coding-agent";
-import { AutoReviewer, DEFAULT_REVIEWER_MODEL, REVIEW_LIMITS, parseAutoVerdict, reviewJson } from "../auto-review.ts";
+import { AutoReviewer, REVIEW_LIMITS, parseAutoVerdict, reviewJson } from "../auto-review.ts";
 import { createReviewer } from "../review.ts";
 import { createReviewTools, readReviewFile } from "../review-tools.ts";
 
@@ -13,6 +13,7 @@ const usage = { input: 10, output: 2, cacheRead: 3, cacheWrite: 0, totalTokens: 
 const request = { toolCallId: "main-call", toolName: "bash", input: { command: "inspect", sandbox: { networkAccess: "full" } }, cwd: "/work", subject: "bash", excess: ['networkAccess "full"'], permissions: "read-only" };
 const approve = { decision: "approve", reason: "Within the user's explicitly requested scope." };
 const deny = { decision: "deny", reason: "Use the project-local cache instead." };
+const reviewerModel = "openai-codex/gpt-6-luna";
 const paint = { fg: (_color, text) => text, bold: (text) => text };
 
 function reply(value, extra = {}) {
@@ -55,7 +56,7 @@ function fixture(t, plans = [approve]) {
 			},
 		},
 	};
-	const reviewer = new AutoReviewer({ record: (record) => records.push(record), createTools: (cwd) => createReviewTools(cwd, fixtureSandbox) });
+	const reviewer = new AutoReviewer({ model: reviewerModel, record: (record) => records.push(record), createTools: (cwd) => createReviewTools(cwd, fixtureSandbox) });
 	t.after(() => { reviewer.dispose(); rmSync(cwd, { recursive: true, force: true }); });
 	return { ctx, cwd, manager, calls, selected, records, reviewer, noAuth: () => { authenticated = false; } };
 }
@@ -76,7 +77,7 @@ test("Luna is lazy, receives exact quoted evidence, and reuses its own prefix wi
 	assert.equal(calls.length, 0);
 	manager.appendMessage(reply("proposing a main action", { content: [{ type: "toolCall", id: "unresolved-main", name: "write", arguments: { path: "x", content: "x" } }], stopReason: "toolUse" }));
 	assert.equal((await reviewer.review(request, ctx)).kind, "approve");
-	assert.equal(selected[0], DEFAULT_REVIEWER_MODEL);
+	assert.equal(selected[0], reviewerModel);
 	assert.equal(calls[0].options.reasoning, "low");
 	assert.equal(calls[0].options.maxTokens, 2048);
 	assert.ok(calls[0].options.sessionId.includes(".sandbox-review."));
@@ -145,6 +146,7 @@ for (const fail of [false, true]) {
 		let release;
 		const bothStarted = new Promise((resolve) => { release = resolve; });
 		const reviewer = new AutoReviewer({
+			model: reviewerModel,
 			limits: { timeoutMs: 1000 },
 			createTools: (cwd) => createReviewTools(cwd, fixtureSandbox).map((tool) => ({
 				...tool,
@@ -215,7 +217,7 @@ test("context and request budgets stop requests before the provider", async (t) 
 	const { ctx, calls, reviewer } = fixture(t);
 	assert.equal((await reviewer.review({ ...request, input: { content: "x".repeat(REVIEW_LIMITS.contextBytes + 1) } }, ctx)).kind, "deny");
 	assert.equal(calls.length, 0);
-	const zero = new AutoReviewer({ limits: { requests: 0 } });
+	const zero = new AutoReviewer({ model: reviewerModel, limits: { requests: 0 } });
 	t.after(() => zero.dispose());
 	assert.equal((await zero.review(request, ctx)).kind, "deny");
 	assert.equal(calls.length, 0);
@@ -235,7 +237,7 @@ test("timeouts and cancellation discard late approvals and prevent overlapping r
 	assert.equal(calls.length, 1, "an uncooperative previous request blocks new ones");
 	finish(reply(approve));
 	await new Promise((resolve) => setTimeout(resolve, 5));
-	const timed = new AutoReviewer({ limits: { timeoutMs: 5 } });
+	const timed = new AutoReviewer({ model: reviewerModel, limits: { timeoutMs: 5 } });
 	t.after(() => timed.dispose());
 	let late;
 	const old = ctx.modelRegistry.streamSimple;
@@ -262,7 +264,7 @@ test("auto-manual escalates only denials/failures and identifies human decisions
 			setTimeout(() => modal.handleInput("y"), 320);
 		}),
 	};
-	const hybrid = createReviewer("auto-manual", "tui");
+	const hybrid = createReviewer("auto-manual", "tui", { model: reviewerModel });
 	t.after(() => hybrid.dispose());
 	assert.equal((await hybrid.review(request, ctx)).source, "auto");
 	assert.equal(frames.length, 0);
@@ -289,7 +291,7 @@ for (const action of ["reset", "dispose"]) {
 				ready();
 			}),
 		};
-		const hybrid = createReviewer("auto-manual", "tui");
+		const hybrid = createReviewer("auto-manual", "tui", { model: reviewerModel });
 		t.after(() => hybrid.dispose());
 		const pending = hybrid.review(request, ctx);
 		await opened;
@@ -311,6 +313,7 @@ test("hybrid does not escalate or invent usage when recording the automatic verd
 	ctx.ui = { custom: () => { throw new Error("must not escalate an unaudited verdict"); } };
 	const records = [];
 	const hybrid = createReviewer("auto-manual", "tui", {
+		model: reviewerModel,
 		record: (record) => { records.push(record); throw new Error("secret storage detail"); },
 	});
 	t.after(() => hybrid.dispose());

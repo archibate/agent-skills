@@ -6,7 +6,7 @@ the command, so a reviewer sees what every call asked for, and plain read-only c
 
 Calls that need more than the session's permissions go to a reviewer: by default automatic review
 with human fallback in the TUI (`auto-manual`), a denial in headless runs. Automatic reviewers use
-GPT-6 Luna. See [Permissions and review](#permissions-and-review).
+the model configured in `sandbox.json`. See [Permissions and review](#permissions-and-review).
 
 ## Opt-in
 
@@ -81,7 +81,8 @@ exactly what it declares, and the agent's prompt does not mention either.
 |---|---|---|
 | `--permissions`, `/permissions` | `default`, `read-only`, or a JSON sandbox object plus optional `"tools": [...]` | `default`: the git work tree is writable, network `fetch-only`, other tools run |
 | `--reviewer` | `deny`, `manual`, `auto`, `auto-manual`; manual modes need the TUI | `auto-manual` in the TUI, `deny` otherwise |
-| `--reviewer-model` | Chat model as `provider/model` | `openai/gpt-6-luna`, low reasoning |
+| `--reviewer-model` | Chat model as exact `provider/model` | `reviewerModel` in `sandbox.json`; required by `auto` and `auto-manual` |
+| `--reviewer-thinking` | `off`, `minimal`, `low`, `medium`, `high`, `xhigh`, `max` | `low` |
 
 A call needs review when:
 
@@ -137,12 +138,26 @@ ceiling, and its removal reveals the current base settings.
 pi --reviewer auto-manual
 ```
 
-This opts into the sandbox and uses Luna through the configured Codex credentials; it changes
-neither the main model nor the default reviewer for other launches. Review context and queried
+This opts into the sandbox and uses the configured reviewer model; it changes neither the main
+model nor the default reviewer for other launches. Review context and queried
 text are sent to the selected model provider and consume its quota. `auto` approves or denies
 without a modal. `auto-manual` lets automatic approvals proceed and sends denials or reviewer
 failures to the human modal with an explanation. Cancellation never opens a fallback modal.
 Automatic approval is for the exact call once; only a human can choose "always".
+
+There is no built-in reviewer model. Set one in the user-level `~/.pi/agent/sandbox.json`, or
+`$PI_CODING_AGENT_DIR/sandbox.json` when that directory is configured:
+
+```json
+{ "reviewerModel": "ofox/openai/gpt-6-luna" }
+```
+
+`--reviewer-model` overrides the file for one process. The model is used whatever the main model
+is; load its provider and configure its credentials. The file is read at session start and
+`/reload`, only when `auto` or `auto-manual` is selected; project-local files are not read. It
+must contain only `reviewerModel` and fit within 64 KiB. A missing model or malformed file is a
+startup configuration error. Because `auto-manual` is the TUI default, an enabled sandbox without
+a reviewer model needs `--reviewer manual` or `deny`.
 
 The reviewer is a private in-memory SDK agent, not a reloaded set of user/project extensions. It
 receives the effective main conversation as quoted evidence, current project instructions,
@@ -172,7 +187,7 @@ also bounded. Session/permission changes cancel in-flight work, and changed inst
 inputs or resolved access invalidate an approval before execution.
 
 Model decisions are probabilistic: `auto-manual` does not ask a human about automatic approvals.
-Offline tests verify the control flow, not Luna's judgment quality; live evaluation remains necessary
+Offline tests verify the control flow, not the reviewer model's judgment quality; live evaluation remains necessary
 before relying on unattended automatic approval.
 
 ## Limits
@@ -230,10 +245,10 @@ Query failures deny automatic review; there is no unsandboxed search fallback.
 | `scratchpad-path.ts` | Locates and validates the retained current-session workspace. |
 | `subagent.ts` | Recognizes a bounded `pi -p --permissions` launch (pure). |
 | `review.ts` | Reviewer interface, synchronous selection, manual fallback, denial reasons. |
-| `review-config.ts` | Reviewer flags, defaults, model-name validation (pure). |
+| `review-config.ts` | Reviewer flags, `sandbox.json` reading, model-name and thinking validation. |
 | `lazy-reviewer.ts` | Deferred loading, persistent implementation, cancellation and disposal. |
 | `manual-review.ts` | Manual-review flow and feedback collection. |
-| `auto-review.ts` | Luna reviewer lifecycle, quoted evidence/deltas, budgets, verdict validation and audit records. |
+| `auto-review.ts` | Automatic reviewer lifecycle, quoted evidence/deltas, budgets, verdict validation and audit records. |
 | `review-tools.ts` | Bounded reviewer-only filesystem queries. |
 | `modal.ts` | The manual reviewer's modal. |
 | `marks.ts` | Review marks under reviewed calls. |
