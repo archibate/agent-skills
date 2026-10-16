@@ -25,6 +25,11 @@ Koozhan adds a 1h cache breakpoint (2× input) to Anthropic requests without
 as compaction and branch summaries, therefore send an explicit 5m marker (1.25×)
 instead. Other cache settings pass through unchanged.
 
+Koozhan's relay reports Anthropic 400s with `error.type` `"<nil>"`. The provider
+restores `invalid_request_error`, so Pi's strict-tool fallback still runs: when a
+backend rejects strict schemas ("compiled grammar is too large"), the request is
+resent once without the optional strict tools.
+
 Catalog refresh, caching and offline behavior match the `ofox` extension:
 interactive Pi refreshes in the background, catalogs are cached in Pi's
 `models-store.json` for one hour, `/koozhan-refresh` forces an update, failures

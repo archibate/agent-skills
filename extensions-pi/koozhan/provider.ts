@@ -178,6 +178,45 @@ export function shortCacheFloor(delegate: ProviderStreams): ProviderStreams {
 	};
 }
 
+/**
+ * Koozhan's Go relay reports Anthropic 400s as `{"error":{"type":"<nil>"}}`. Pi only
+ * retries without preferred strict tools ("compiled grammar is too large", etc.) on
+ * `invalid_request_error`, so restore the type Anthropic itself would send.
+ */
+export function anthropicErrorTypes(fetcher: typeof fetch = fetch): typeof fetch {
+	return async (input, init) => {
+		const response = await fetcher(input, init);
+		if (response.status !== 400) return response;
+		let body: Row;
+		try {
+			body = object(JSON.parse(await response.clone().text()));
+		} catch {
+			return response;
+		}
+		const error = object(body.error);
+		if (error.type !== "<nil>") return response;
+		const headers = new Headers(response.headers);
+		// The body is re-encoded, so the original framing no longer applies.
+		headers.delete("content-length");
+		headers.delete("content-encoding");
+		return new Response(JSON.stringify({ ...body, error: { ...error, type: "invalid_request_error" } }), {
+			status: response.status, statusText: response.statusText, headers,
+		});
+	};
+}
+
+/** Anthropic route: short cache floor plus Koozhan error-type repair. */
+export function koozhanAnthropic(delegate: ProviderStreams): ProviderStreams {
+	const floored = shortCacheFloor(delegate);
+	const repair = <T extends StreamOptions>(options?: T): T =>
+		({ ...options, fetch: anthropicErrorTypes(options?.fetch ?? fetch) }) as T;
+	return {
+		...floored,
+		stream: (model, context, options) => floored.stream(model, context, repair(options)),
+		streamSimple: (model, context, options) => floored.streamSimple(model, context, repair(options)),
+	};
+}
+
 function validCachedModel(value: unknown): value is KoozhanModel {
 	const row = object(value);
 	return row.provider === PROVIDER_ID && row.type === "chat" && typeof row.id === "string" &&
@@ -199,7 +238,7 @@ export function createKoozhanProvider(options: {
 		id: PROVIDER_ID, name: "Koozhan", auth: { apiKey: envApiKeyAuth("Koozhan API key", ["KOOZHAN_API_KEY"]) },
 		models: [],
 		api: {
-			"anthropic-messages": shortCacheFloor(anthropicMessagesApi()),
+			"anthropic-messages": koozhanAnthropic(anthropicMessagesApi()),
 			"openai-responses": openAIResponsesApi(),
 		},
 	});

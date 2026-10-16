@@ -16,3 +16,6 @@ dist/
 build/
 coverage/
 *.log
+*~
+*.swp
+*.swo
