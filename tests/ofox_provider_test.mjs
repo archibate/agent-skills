@@ -33,6 +33,7 @@ const ai = await import(join(host, "..", "pi-ai/dist/index.js"));
 const { default: extensionFactory } = await import(join(scratch, "extension/index.ts"));
 const { ModelRuntime, createAgentSessionServices, createAgentSessionFromServices, SessionManager, SettingsManager } =
 	await import(join(host, "dist/index.js"));
+const { getPromptCacheTtlMs } = await import(join(host, "dist/core/cache-warmer.js"));
 const cli = join(host, JSON.parse(readFileSync(join(host, "package.json"), "utf8")).bin.pi);
 
 function row(id, overrides = {}) {
@@ -81,7 +82,8 @@ test("live inventory, prices, capabilities, and native routing", () => {
 	assert.equal(claude.compat.supportsMidConvoSystemMessages, false);
 	assert.equal(claude.thinkingLevelMap.off, null);
 	assert.equal(normalizeCatalogs(catalogs([row("anthropic/claude-opus-5.5")]))[0].compat.forceAdaptiveThinking, true);
-	assert.equal(claude.promptCache, undefined);
+	assert.deepEqual(claude.promptCache, { short: 300, long: 3600 });
+	assert.ok(basicModels.filter((entry) => entry.api !== "anthropic-messages").every((entry) => entry.promptCache === undefined));
 	assert.equal(basicModels.find((entry) => entry.id.startsWith("google/")).api, "google-generative-ai");
 	assert.equal(basicModels.find((entry) => entry.id.startsWith("openai/")).api, "openai-responses");
 	assert.equal(basicModels.find((entry) => entry.id.startsWith("qwen/")).api, "openai-completions");
@@ -238,8 +240,9 @@ test("old Responses cache is repaired offline and within TTL without mutating st
 	for (const allowNetwork of [false, true]) {
 		const legacy = normalizeCatalogs(catalogs(responsesBlockedModels.map((id) => row(id))))
 			.map((model) => ({ ...model, api: "openai-responses", compat: { supportsStrictMode: true } }));
-		// Chat Completions snapshots cached before the developer-role fix carry no compat.
-		const stale = basicModels.map(({ compat, ...model }) => model.api === "openai-completions" ? model : { ...model, compat });
+		// Chat Completions snapshots cached before the developer-role fix carry no compat;
+		// Claude snapshots cached before the prompt-cache fix carry no lifetimes.
+		const stale = basicModels.map(({ compat, promptCache, ...model }) => model.api === "openai-completions" ? model : { ...model, compat });
 		for (const model of stale) if (model.compat === undefined) delete model.compat;
 		const cached = { models: [...legacy, ...stale], checkedAt: 10_000 };
 		const { models, store } = await collection(async () => { throw new Error("must not fetch within TTL"); }, () => 10_100);
@@ -525,7 +528,8 @@ for (const initialModel of [basicModels[0], ...normalizeCatalogs(catalogs(respon
 		mkdirSync(agent);
 		const store = new ai.InMemoryModelsStore();
 		const credentials = new ai.InMemoryCredentialStore();
-		const cachedModels = [initialModel, ...basicModels.filter((model) => model.id !== initialModel.id)];
+		const cachedModels = [initialModel, ...basicModels.filter((model) => model.id !== initialModel.id)]
+			.map(({ promptCache, ...model }) => model); // Snapshots cached before the prompt-cache fix.
 		await store.write("ofox", { models: cachedModels, checkedAt: 10_000 });
 		await credentials.modify("ofox", async () => ({ type: "api_key", key: "unit-test-key" }));
 		const originalWrite = store.write.bind(store);
@@ -551,6 +555,10 @@ for (const initialModel of [basicModels[0], ...normalizeCatalogs(catalogs(respon
 			assert.equal(session.model.provider, "ofox");
 			assert.equal(session.model.id, initialModel.id);
 			assert.equal(session.model.api, responsesBlockedModels.includes(initialModel.id) ? "openai-completions" : initialModel.api);
+			assert.equal(getPromptCacheTtlMs(session.model, { cacheRetention: "short" }),
+				session.model.api === "anthropic-messages" ? 300_000 : undefined);
+			assert.equal(getPromptCacheTtlMs(session.model, { cacheRetention: "long" }),
+				session.model.api === "anthropic-messages" ? 3_600_000 : undefined);
 			assert.deepEqual((await store.read("ofox")).models, cachedModels);
 			assert.equal(writes, 0);
 			assert.equal((await store.read("ofox")).checkedAt, 10_000);

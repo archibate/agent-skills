@@ -34,6 +34,9 @@ function responsesBlocked(id: string): boolean {
 // Ofox's Chat Completions endpoint rejects the `developer` role (HTTP 422), which
 // pi-ai otherwise sends for reasoning models on unrecognized OpenAI-compatible URLs.
 const COMPLETIONS_COMPAT = { supportsDeveloperRole: false } as const;
+// Ofox's /anthropic endpoint passes cache_control through: live probes read back
+// 5m entries after 270s and 1h entries after 420s (when 5m entries had expired).
+const ANTHROPIC_PROMPT_CACHE = { short: 300, long: 3600 } as const;
 type OfoxApi = keyof typeof URLS;
 type OfoxModel = Model<OfoxApi>;
 type Row = Record<string, unknown>;
@@ -143,9 +146,10 @@ export function normalizeCatalogs(catalogs: Catalogs): OfoxModel[] {
 				supportsMidConvoSystemMessages: false,
 				supportsMidConvoToolChanges: false,
 			};
+			model.promptCache = { ...ANTHROPIC_PROMPT_CACHE };
 		}
 		if (api === "openai-completions") model.compat = { ...COMPLETIONS_COMPAT };
-		// No speculative gateway compatibility flags or idle cache-warming lifetimes.
+		// No speculative gateway compatibility flags; cache lifetimes only where verified.
 		seen.add(id);
 		models.push(model);
 	}
@@ -257,6 +261,7 @@ export function createOfoxProvider(options: {
 				// shared storage or mutate the snapshot, and discard API-specific flags.
 				const restored = stored.models.filter(validCachedModel).map((model): OfoxModel => {
 					if (model.api === "openai-responses" && responsesBlocked(model.id)) model = { ...model, api: "openai-completions" };
+					if (model.api === "anthropic-messages") return { ...model, promptCache: { ...ANTHROPIC_PROMPT_CACHE } };
 					return model.api === "openai-completions" ? { ...model, compat: { ...COMPLETIONS_COMPAT } } : model;
 				});
 				if (restored.length && restored.length <= MAX_MODELS) {
