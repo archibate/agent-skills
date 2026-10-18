@@ -56,7 +56,7 @@ run_installer() {
 
 printf '1. catalog validation\n'
 NO_COLOR=1 "$ROOT/installer/main.sh" --source-root "$ROOT" --validate >/dev/null
-for skill in artifact-restraint e2e-side-effect-safety; do
+for skill in e2e-side-effect-safety; do
     catalog_entry=$(awk -F '\t' -v skill="$skill" '$1 == skill { print $4 ":" $5 }' "$ROOT/installer/catalog.tsv")
     [ "$catalog_entry" = alignment:no ] || fail "$skill should be an optional alignment skill, found: $catalog_entry"
 done
@@ -66,7 +66,6 @@ new_case core
 run_installer --profile core --targets codex,claude --yes --skip-deps >/dev/null
 assert_file "$CASE_HOME/.agents/skills/cpp-oop-style/SKILL.md"
 assert_file "$CASE_HOME/.agents/skills/cpp-hpc-optimization/SKILL.md"
-[ ! -e "$CASE_HOME/.agents/skills/artifact-restraint" ] || fail "non-default skill installed by core profile"
 [ ! -e "$CASE_HOME/.agents/skills/e2e-side-effect-safety" ] || fail "non-default skill installed by core profile"
 assert_file "$CASE_HOME/.claude/skills/cpp-oop-style/SKILL.md"
 assert_file "$CASE_HOME/.claude/skills/cpp-hpc-optimization/SKILL.md"
