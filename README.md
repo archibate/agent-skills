@@ -70,6 +70,7 @@ git clone --depth 1 https://github.com/archibate/agent-skills.git && cd agent-sk
 - 架构设计不史山🧠——`grill-me`, `fresh-arch`
 - 系统软件安全审计🛡️——`system-software-audit`
 - 后台测试时不得干扰用户🔇——`e2e-side-effect-safety`
+- 被纠正过的错误不再犯📝——`apply-feedback`
 - 让 Codex 也能后台监控唤醒🖥️——`monitor-wakeup`（模仿 Claude Code 的 Monitor）
 - 让 Pi 也并行多智能体🤖——`pi-subagents`（模仿 Claude Code 的 ultracode）
 - 面向现代模型的提示词规范✍️——`writing-prompt`

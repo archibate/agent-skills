@@ -8,6 +8,7 @@ computer-use	skill	skills/computer-use	browser	no	e2e-side-effect-safety	-	-	-	S
 chrome-cdp	skill	skills/chrome-cdp	browser	no	-	-	node22,chrome-browser,chrome-debug	-	Visible Chrome automation
 visual-qa	skill	skills/visual-qa	browser	no	-	agent-browser	-	-	Visual quality assurance
 e2e-side-effect-safety	skill	skills/e2e-side-effect-safety	alignment	no	-	-	-	-	Non-disturbing execution tests and E2E
+apply-feedback	skill	skills/apply-feedback	alignment	no	-	-	-	-	Persist user feedback as lessons
 context7	skill	skills/context7	web	no	-	-	uv,context7-key	-	Current library documentation
 grep-app	skill	skills/grep-app	web	no	-	-	uv	-	Public GitHub code search
 web-search	skill	skills/web-search	web	no	-	web-fetch	uv,jina-cli,jina-key	-	Web and academic search
