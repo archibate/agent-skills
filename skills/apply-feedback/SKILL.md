@@ -74,6 +74,6 @@ Do not fabricate conversations. Do not add narrative. Do not explain.
 
 Range from the first involved user message before assistant mistake, to the user feedback message. Deliberately drop the assistant response to user feedback (low-information self-reflection or apology).
 
-Only trim lesson if longer than 100 lines by cutting off early context or omitting unimportant content.
+Only trim lesson if longer than 50 lines by cutting off early context or omitting unimportant tool results.
 
 If an existing lesson covers the same pattern, replace it with the new one instead of appending a duplicate.

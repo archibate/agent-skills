@@ -3,7 +3,7 @@
 /skills/local/
 /.agents/
 /.codex/
-/.remember/
+.remember/
 /.ruff_cache/
 **/__pycache__/
 *.py[cod]
