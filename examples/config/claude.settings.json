@@ -1,3 +1,4 @@
+
 {
   "cleanupPeriodDays": 3650,
   "skillListingBudgetFraction": 0.05,
@@ -32,12 +33,19 @@
   "skillOverrides": {
     "init": "user-invocable-only",
     "schedule": "user-invocable-only",
-    "anthropic-skills:security-review": "user-invocable-only",
-    "anthropic-skills:fewer-permission-prompts": "user-invocable-only",
-    "anthropic-skills:claude-api": "user-invocable-only",
-    "anthropic-skills:keybindings-help": "user-invocable-only",
-    "anthropic-skills:schedule": "user-invocable-only",
-    "anthropic-skills:design": "user-invocable-only",
+    "code-review": "user-invocable-only",
+    "simplify": "user-invocable-only",
+    "security-review": "user-invocable-only",
+    "fewer-permission-prompts": "user-invocable-only",
+    "claude-api": "user-invocable-only",
+    "keybindings-help": "user-invocable-only",
+    "loop": "on",
+    "run": "on",
+    "update-config": "on",
+    "plugin-authoring": "user-invocable-only",
+    "schedule": "user-invocable-only",
+    "dataviz": "user-invocable-only",
+    "claude-api": "user-invocable-only",
     "anthropic-skills:morning": "user-invocable-only",
     "anthropic-skills:import-memory": "user-invocable-only",
     "anthropic-skills:computer-use": "user-invocable-only",
@@ -48,12 +56,14 @@
     "anthropic-skills:xlsx": "user-invocable-only",
     "anthropic-skills:pdf": "user-invocable-only",
     "anthropic-skills:pptx": "user-invocable-only",
+    "anthropic-skills:docx": "user-invocable-only",
     "anthropic-skills:skill-creator": "user-invocable-only",
     "anthropic-skills:chrome-browser": "user-invocable-only"
   },
   "worktree": {
     "baseRef": "head"
   },
+  "enableArtifact": false,
   "viewMode": "default",
   "tui": "fullscreen",
   "model": "opus",
