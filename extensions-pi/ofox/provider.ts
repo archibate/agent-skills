@@ -91,15 +91,20 @@ function knownModel(row: Row): Model<Api> | undefined {
 	return models.find((model) => aliases.has(model.id));
 }
 
-/** The live catalog controls inventory, limits, and prices. Pi only supplements known model capabilities. */
+/** The live catalogs control inventory, limits, and prices. Pi only supplements known model capabilities. */
 export function normalizeCatalogs(catalogs: Catalogs): OfoxModel[] {
-	const anthropic = new Set(rows(catalogs.anthropic, "data").map((row) => row.id));
+	const anthropicRows = rows(catalogs.anthropic, "data");
+	const anthropic = new Set(anthropicRows.map((row) => row.id));
 	const google = new Set(rows(catalogs.google, "models")
 		.filter((row) => strings(row.supportedGenerationMethods).includes("generateContent"))
 		.map((row) => typeof row.name === "string" ? row.name.replace(/^models\//u, "") : ""));
 	const seen = new Set<string>();
 	const models: OfoxModel[] = [];
-	for (const row of rows(catalogs.main, "data")) {
+	// Ofox's /v1/models omits families it still serves: /anthropic/v1/models keeps
+	// listing Claude with limits and prices. Union both inventories, /v1/models first
+	// so its row wins for models listed twice. Rows only in the Anthropic catalog
+	// lack `supported_endpoints`, so non-Anthropic IDs there stay unregistered.
+	for (const row of [...rows(catalogs.main, "data"), ...anthropicRows]) {
 		const id = row.id;
 		if (typeof id !== "string" || !/^[\w./-]+$/u.test(id) || row.is_deprecated === true || seen.has(id)) continue;
 		const architecture = object(row.architecture);

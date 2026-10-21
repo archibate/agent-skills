@@ -136,6 +136,46 @@ test("unlisted native models use only advertised OpenAI-compatible endpoints", (
 	assert.ok(normalizeCatalogs(input).every((entry) => entry.api === "openai-responses"));
 });
 
+test("Anthropic catalog supplies models missing from /v1/models", () => {
+	// Ofox's /v1/models omits Claude; /anthropic/v1/models still lists it, without
+	// `supported_endpoints` but with limits and prices.
+	const claude = row("anthropic/claude-opus-5.5", {
+		canonical_slug: "claude-opus-5-5", aliases: ["claude-opus-5-5", "claude-opus-5.5"],
+		context_length: 1_000_000, top_provider: { context_length: 1_000_000, max_completion_tokens: 128_000 },
+		supported_endpoints: undefined,
+	});
+	const nativeOnly = row("openai/gpt-6.1-sol", { supported_endpoints: undefined });
+	const retired = row("anthropic/claude-opus-4.6", { is_deprecated: true });
+	const models = normalizeCatalogs({
+		main: { data: [] },
+		anthropic: { data: [claude, nativeOnly, retired], has_more: false },
+		google: { models: [] },
+	});
+	assert.deepEqual(models.map((model) => model.id), ["anthropic/claude-opus-5.5"]);
+	const [model] = models;
+	assert.equal(model.api, "anthropic-messages");
+	assert.equal(model.baseUrl, "https://api.ofox.io/anthropic");
+	assert.equal(model.contextWindow, 1_000_000);
+	assert.equal(model.maxTokens, 128_000);
+	assert.equal(model.cost.input, 4);
+	assert.equal(model.cost.output, 20);
+	assert.deepEqual(model.promptCache, { short: 300, long: 3600 });
+	assert.equal(model.compat.forceAdaptiveThinking, true);
+});
+
+test("models listed by both catalogs register once, keeping the /v1/models row", () => {
+	const inMain = row("anthropic/claude-opus-5", { pricing: { prompt: "0.000003", completion: "0.000015" } });
+	const inAnthropic = row("anthropic/claude-opus-5", { pricing: { prompt: "0.000009", completion: "0.000045" } });
+	const models = normalizeCatalogs({
+		main: { data: [inMain] },
+		anthropic: { data: [inAnthropic], has_more: false },
+		google: { models: [] },
+	});
+	assert.deepEqual(models.map((model) => model.id), ["anthropic/claude-opus-5"]);
+	assert.equal(models[0].cost.input, 3);
+	assert.equal(models[0].cost.output, 15);
+});
+
 test("unknown models do not require a static inventory; output is bounded by context", () => {
 	const input = catalogs([row("new-vendor/new-model", {
 		architecture: { input_modalities: ["text"], output_modalities: ["text"] },

@@ -11,7 +11,12 @@ pi --model ofox/anthropic/claude-opus-5.5
 Claude uses `/anthropic`, Gemini uses `/gemini/v1beta`, and other models use
 advertised Responses or Chat Completions endpoints. Catalog prices are converted
 from per-token to Pi's per-million-token rates. Known Pi models supplement
-thinking-level metadata; the live catalog determines inventory, limits, and prices.
+thinking-level metadata; the live catalogs determine inventory, limits, and prices.
+Inventory is the union of `/v1/models` and `/anthropic/v1/models`, the latter
+currently carrying Claude models that `/v1/models` omits; an ID listed by both is
+registered once with the `/v1/models` row. `supported_endpoints` exists only in
+`/v1/models`, so non-Anthropic IDs listed solely under `/anthropic` are not
+registered.
 Image generation, video, embeddings, and transcription are not registered.
 
 Responses is blocked for all Ofox `deepseek/*` and `z-ai/*` models to avoid the
