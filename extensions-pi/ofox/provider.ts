@@ -34,6 +34,8 @@ function responsesBlocked(id: string): boolean {
 // Ofox's Chat Completions endpoint rejects the `developer` role (HTTP 422), which
 // pi-ai otherwise sends for reasoning models on unrecognized OpenAI-compatible URLs.
 const COMPLETIONS_COMPAT = { supportsDeveloperRole: false } as const;
+// GLM 5.3 always thinks and rejects other effort values with HTTP 400.
+const GLM53_THINKING = { off: "low", minimal: "low", low: "low", medium: "high", high: "high", xhigh: "max", max: "max" } as const;
 // Ofox's /anthropic endpoint passes cache_control through: live probes read back
 // 5m entries after 270s and 1h entries after 420s (when 5m entries had expired).
 const ANTHROPIC_PROMPT_CACHE = { short: 300, long: 3600 } as const;
@@ -154,6 +156,7 @@ export function normalizeCatalogs(catalogs: Catalogs): OfoxModel[] {
 			model.promptCache = { ...ANTHROPIC_PROMPT_CACHE };
 		}
 		if (api === "openai-completions") model.compat = { ...COMPLETIONS_COMPAT };
+		if (id.startsWith("z-ai/glm-5.3")) model.thinkingLevelMap = { ...GLM53_THINKING };
 		// No speculative gateway compatibility flags; cache lifetimes only where verified.
 		seen.add(id);
 		models.push(model);
@@ -266,6 +269,7 @@ export function createOfoxProvider(options: {
 				// shared storage or mutate the snapshot, and discard API-specific flags.
 				const restored = stored.models.filter(validCachedModel).map((model): OfoxModel => {
 					if (model.api === "openai-responses" && responsesBlocked(model.id)) model = { ...model, api: "openai-completions" };
+					if (model.id.startsWith("z-ai/glm-5.3")) model = { ...model, thinkingLevelMap: { ...GLM53_THINKING } };
 					if (model.api === "anthropic-messages") return { ...model, promptCache: { ...ANTHROPIC_PROMPT_CACHE } };
 					return model.api === "openai-completions" ? { ...model, compat: { ...COMPLETIONS_COMPAT } } : model;
 				});

@@ -17,38 +17,48 @@ export function googleIdentityApi(delegate: ProviderStreams): ProviderStreams {
 		run: ProviderStreams["stream"],
 	) {
 		const nativeModel = { ...model, id: model.id.replace(/^google\//u, "") };
-		const foreignCalls = new Set<string>();
+		// Preserve native toolCall and toolResult structures.
+		// Older versions eagerly downgraded toolCalls to plain text if message.model !== model.id,
+		// which polluted the assistant context and caused models to mimic raw "Tool call" text.
+		// Pi's built-in convertMessages already safely handles Thought Signatures across models.
 		const nativeContext: TranscriptContext = {
 			...context,
 			messages: context.messages.map((message) => {
 				if (message.role === "assistant") {
-					const sameModel = message.provider === model.provider && message.api === model.api && message.model === model.id;
-					if (sameModel) {
-						for (const block of message.content) if (block.type === "toolCall") foreignCalls.delete(block.id);
-						return { ...message, model: nativeModel.id };
-					}
-					if (!message.content.some((block) => block.type === "toolCall")) return message;
-					// Foreign signatures are not valid for this model. Preserve tool
-					// history as text, rather than emitting unsigned Gemini calls.
-					return { ...message, content: message.content.map((block) => {
-						if (block.type !== "toolCall") return block;
-						foreignCalls.add(block.id);
-						return { type: "text" as const, text: `Tool call ${block.name}: ${JSON.stringify(block.arguments)}` };
-					}) };
-				}
-				if (message.role === "toolResult" && foreignCalls.delete(message.toolCallId)) {
-					return { role: "user" as const, timestamp: message.timestamp, content: [
-						{ type: "text" as const, text: `Tool ${message.isError ? "error" : "result"} ${message.toolName}:` },
-						...message.content,
-					] };
+					return { ...message, model: nativeModel.id };
 				}
 				return message;
 			}),
 		};
-		const nativeOptions = options && {
+		// The short ID is only for Pi's capability parser; ofox routes Gemini by the full catalog ID
+		// and hangs on the short one, so restore it in the outgoing request.
+		// Also normalize thinkingConfig for Gemini 4/argon models on Pi SDK versions that lack major-version regex.
+		const restoreRequestModel = async (payload: unknown) => {
+			const next = (await options?.onPayload?.(payload, model)) ?? payload;
+			const params = next as {
+				model?: unknown;
+				config?: { thinkingConfig?: { thinkingBudget?: unknown; thinkingLevel?: unknown } };
+			};
+			if (!params) return next;
+			if (params.model === nativeModel.id) {
+				params.model = model.id;
+			}
+			const isArgonOrGemini4 = /argon|gemini-(?:[4-9]|[1-9]\d)/i.test(String(model.id));
+			if (isArgonOrGemini4 && params.config?.thinkingConfig) {
+				const tc = params.config.thinkingConfig;
+				if (tc.thinkingBudget !== undefined) {
+					delete tc.thinkingBudget;
+					if (tc.thinkingLevel === undefined) {
+						tc.thinkingLevel = "high";
+					}
+				}
+			}
+			return params;
+		};
+		const nativeOptions = {
 			...options,
-			onPayload: options.onPayload && ((payload: unknown) => options.onPayload!(payload, model)),
-			onProviderStreamEvent: options.onProviderStreamEvent &&
+			onPayload: restoreRequestModel,
+			onProviderStreamEvent: options?.onProviderStreamEvent &&
 				((data: unknown) => options.onProviderStreamEvent!(data, model)),
 		};
 		const stream = createAssistantMessageEventStream();
