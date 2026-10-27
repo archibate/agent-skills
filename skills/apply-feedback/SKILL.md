@@ -38,7 +38,7 @@ Create or update the `## User feedback` section, in this format:
 ```markdown
 ## User feedback
 
-These are real conversation snippets cited from history sessions between user and assistant. Each lesson is a pattern corrected by user feedback. Manage with `$apply-feedback` skill.
+These are real conversation snippets cited from history sessions between user and assistant. Each lesson is a pattern corrected by user feedback. The lessons are negative examples to criticize, not to imitate. Manage with `$apply-feedback` skill.
 
 **IMPORTANT:** BEFORE your next response matches ANY of the assistant trajectory below, apply the corresponding user feedback (last message in each lesson) IMMEDIATELY.
 

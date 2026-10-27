@@ -1,8 +1,10 @@
-
 {
   "cleanupPeriodDays": 3650,
   "skillListingBudgetFraction": 0.05,
   "env": {
+    "ANTHROPIC_BASE_URL": "",
+    "ANTHROPIC_API_KEY": "",
+    "ANTHROPIC_AUTH_TOKEN": "",
     "IS_DEMO": "1",
     "ENABLE_CLAUDEAI_MCP_SERVERS": "false",
     "ENABLE_TOOL_SEARCH": "true",
@@ -11,6 +13,12 @@
     "CLAUDE_CODE_ENABLE_PROMPT_SUGGESTION": "1",
     "CLAUDE_CODE_BASH_SANDBOX_SHOW_INDICATOR": "1",
     "CLAUDE_CODE_TMUX_TRUECOLOR": "1",
+    "CLAUDE_CODE_TOTAL_TOKENS_REMINDER": "off",
+    "CLAUDE_CODE_TODO_REMINDER_MODE": "off",
+    "CLAUDE_CODE_SILENT_TURN_REMINDER": "0",
+    "CLAUDE_CODE_ACT_DONT_REDERIVE": "0",
+    "CLAUDE_CODE_THRIFTY_SONIC": "0",
+    "CLAUDE_CODE_COZY_TEAPOT": "relaxed",
     "BASH_MAX_OUTPUT_LENGTH": "10000",
     "BASH_MAX_TIMEOUT_MS": "240000",
     "CLAUDE_AUTO_BACKGROUND_TASKS": "1",
@@ -18,7 +26,9 @@
     "CLAUDE_CODE_DISABLE_FEEDBACK_SURVEY": "1",
     "CLAUDE_CODE_DISABLE_ARTIFACT": "1",
     "CLAUDE_CODE_SEND_FEEDBACK": "0",
-    "DISABLE_FEEDBACK_COMMAND": "1"
+    "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC": "1",
+    "DISABLE_FEEDBACK_COMMAND": "1",
+    "DISABLE_INSTALL_GITHUB_APP_COMMAND": "1"
   },
   "attribution": {
     "sessionUrl": false
@@ -39,10 +49,11 @@
     "fewer-permission-prompts": "user-invocable-only",
     "claude-api": "user-invocable-only",
     "keybindings-help": "user-invocable-only",
-    "loop": "on",
-    "run": "on",
-    "update-config": "on",
+    "loop": "user-invocable-only",
+    "run": "user-invocable-only",
+    "update-config": "user-invocable-only",
     "plugin-authoring": "user-invocable-only",
+    "update-config": "user-invocable-only",
     "schedule": "user-invocable-only",
     "dataviz": "user-invocable-only",
     "claude-api": "user-invocable-only",
@@ -66,7 +77,6 @@
   "enableArtifact": false,
   "viewMode": "default",
   "tui": "fullscreen",
-  "model": "opus",
   "effortLevel": "high",
   "advisorModel": "opus",
   "awaySummaryEnabled": true,
@@ -84,5 +94,6 @@
   "agentPushNotifEnabled": true,
   "voiceEnabled": false,
   "enableArtifact": false,
-  "feedbackDrafts": "off"
+  "feedbackDrafts": "off",
+  "totalTokensReminder": "off"
 }
