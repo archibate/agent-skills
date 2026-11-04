@@ -476,7 +476,11 @@ export default function jobsExtension(pi: ExtensionAPI): void {
 		parameters: Type.Object({
 			id: Type.String({ description: "Job id from job_start." }),
 			pattern: Type.Optional(
-				Type.String({ description: "Case-insensitive regular expression; only matching lines are delivered." }),
+				Type.String({
+					description:
+						"Case-insensitive JavaScript regex source, compiled as new RegExp(pattern, 'i') — so write it " +
+						"already case-insensitive; only matching lines are delivered.",
+				}),
 			),
 			timeout: Type.Optional(
 				Type.Number({ description: `Seconds until the watch stops (default ${WATCH_DEFAULT_SECONDS}).` }),

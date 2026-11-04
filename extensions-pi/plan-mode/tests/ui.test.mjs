@@ -177,3 +177,66 @@ test("cancellation retains only answers actually submitted and abort closes a qu
 	assert.deepEqual(await askQuestions(ctx, [{ question: "Three" }], controller.signal), { cancelled: true, answers: [] });
 	assert.equal(calls, 2);
 });
+
+test("left arrow steps back to re-answer a question, restoring its recorded choice and keeping later answers", () => {
+	const { dialog, result } = open([
+		{ question: "First", options: ["A", "B"] },
+		{ question: "Second", options: ["C", "D"] },
+	]);
+	dialog.handleInput("\r");
+	const second = dialog.render(80).map(tui.stripTerminalSequences);
+	assert.match(second.join("\n"), /Ask question · 2 of 2/);
+	assert.match(second.at(-2), /← prev/, "the footer advertises the way back");
+	dialog.handleInput("\u001b[D");
+	const rows = dialog.render(80).map(tui.stripTerminalSequences);
+	assert.match(rows.join("\n"), /Ask question · 1 of 2/);
+	assert.equal(rows.find((row) => row.startsWith(" → ")).trimEnd(), " → 1. A", "the recorded answer is preselected");
+	assert.doesNotMatch(rows.at(-2), /← prev/, "the first question has nowhere to go back to");
+	dialog.handleInput("\u001b[B");
+	dialog.handleInput("\r");
+	assert.match(plain(dialog.render(80)), /Ask question · 2 of 2/, "re-answering advances again");
+	dialog.handleInput("\r");
+	assert.deepEqual(result(), {
+		cancelled: false,
+		answers: [{ question: "First", answer: "B" }, { question: "Second", answer: "C" }],
+	});
+});
+
+test("left arrow keeps a submitted free-text answer, leaves the cursor alone once typing, and does nothing on the first question", () => {
+	const { dialog, result } = open([
+		{ question: "Pick", options: ["A"] },
+		{ question: "Note" },
+		{ question: "Last", options: ["Z"] },
+	]);
+	dialog.handleInput("\u001b[D");
+	assert.match(plain(dialog.render(80)), /Ask question · 1 of 3/, "the first question has nowhere to go back to");
+	dialog.handleInput("\r");
+	for (const character of "keep me") dialog.handleInput(character);
+	dialog.handleInput("\r");
+	assert.match(plain(dialog.render(80)), /Ask question · 3 of 3/);
+	dialog.handleInput("\u001b[D");
+	dialog.handleInput("\u001b[D");
+	const back = dialog.render(80).map(tui.stripTerminalSequences).join("\n");
+	assert.match(back, /Ask question · 2 of 3/);
+	assert.match(back, /❯ keep me/, "the submitted text returns to the input");
+	dialog.handleInput("\u001b[D");
+	assert.match(plain(dialog.render(80)), /Ask question · 2 of 3/, "left moves the cursor while the input holds text");
+	dialog.handleInput("\r");
+	assert.match(plain(dialog.render(80)), /Ask question · 3 of 3/);
+	dialog.handleInput("\r");
+	assert.deepEqual(result(), {
+		cancelled: false,
+		answers: [{ question: "Pick", answer: "A" }, { question: "Note", answer: "keep me" }, { question: "Last", answer: "Z" }],
+	});
+});
+
+test("a batch footer with a way back stays inside the dialog width", () => {
+	const { dialog } = open([{ question: "First", options: ["A"] }, { question: "Second", options: ["B"] }]);
+	dialog.handleInput("\r");
+	for (const width of [24, 40, 80]) {
+		dialog.invalidate();
+		const rows = dialog.render(width).map(tui.stripTerminalSequences);
+		assert.ok(rows.every((row) => tui.visibleWidth(row) <= width), `width ${width}`);
+		assert.match(rows.at(-2), /←/);
+	}
+});

@@ -1,6 +1,6 @@
 import { getMarkdownTheme, type AgentToolResult, type ExtensionContext, type Theme } from "@earendil-works/pi-coding-agent";
 import {
-	Container, Input, Markdown, Text, truncateToWidth, visibleWidth, wrapTextWithAnsi,
+	Container, Input, Key, Markdown, Text, matchesKey, truncateToWidth, visibleWidth, wrapTextWithAnsi,
 	type Component, type Focusable, type Keybinding, type KeybindingsManager,
 } from "@earendil-works/pi-tui";
 import type { PlanSnapshot } from "./store.ts";
@@ -32,6 +32,11 @@ export interface ToolDetails {
 export const APPROVAL_CHOICES = ["Execute from checkpoint", "Continue here", "Request changes", "Keep planning"];
 
 const OTHER_ANSWER = "Type an answer…";
+
+/** Drop the hint slots that do not apply at this step. */
+function defined<T>(value: T | undefined | false): value is T {
+	return Boolean(value);
+}
 
 export function toolResult(details: ToolDetails, options: { terminate?: boolean; isError?: boolean } = {}, text = details.message): AgentToolResult<ToolDetails> {
 	return {
@@ -139,6 +144,8 @@ export class QuestionDialog implements Component, Focusable {
 	handleInput(data: string): void {
 		if (this.closed) return;
 		if (this.editing) {
+			// Left belongs to the cursor; it only steps back on an untouched input, where there is no cursor to move.
+			if (this.canGoBack() && !this.input.getValue() && matchesKey(data, Key.left) && this.back()) return;
 			this.input.handleInput(data);
 			this.refresh();
 			return;
@@ -146,12 +153,12 @@ export class QuestionDialog implements Component, Focusable {
 		const choices = this.choices();
 		if (this.keybindings.matches(data, "tui.select.up")) { this.selected = (this.selected + choices.length - 1) % choices.length; this.refresh(); return; }
 		if (this.keybindings.matches(data, "tui.select.down")) { this.selected = (this.selected + 1) % choices.length; this.refresh(); return; }
+		if (matchesKey(data, Key.left)) { this.back(); return; }
 		if (this.keybindings.matches(data, "tui.select.cancel")) { this.complete({ cancelled: true, answers: [...this.answers] }); return; }
 		if (!this.keybindings.matches(data, "tui.select.confirm")) return;
 		const choice = choices[this.selected];
 		if (choice.other) {
 			this.editing = true;
-			this.input.setValue("");
 			this.refresh();
 			return;
 		}
@@ -196,14 +203,43 @@ export class QuestionDialog implements Component, Focusable {
 		];
 	}
 
+	/** Everything after the first question can be revisited. */
+	private canGoBack(): boolean {
+		return this.current > 0;
+	}
+
+	/** Step back one question: its answer returns so it can be re-confirmed or replaced; later answers stay recorded. */
+	private back(): boolean {
+		if (!this.canGoBack()) return false;
+		this.goTo(this.current - 1);
+		return true;
+	}
+
+	/** The choice row to preselect for a question: its recorded option, its free-text row, or the first row. */
+	private selectionFor(index: number): number {
+		const question = this.questions[index];
+		const recorded = this.answers[index]?.answer;
+		if (recorded === undefined) return 0;
+		const option = question.options.indexOf(recorded);
+		if (option >= 0) return option;
+		return question.options.length;
+	}
+
+	/** Move to a question, restoring the answer it already carries so re-answering starts from it. */
+	private goTo(index: number): void {
+		const question = this.questions[index];
+		const recorded = this.answers[index]?.answer;
+		this.current = index;
+		this.selected = this.selectionFor(index);
+		this.editing = question.options.length === 0;
+		this.input.setValue(recorded !== undefined && !question.options.includes(recorded) ? recorded : "");
+		this.refresh();
+	}
+
 	private record(answer: string): void {
 		this.answers[this.current] = { question: this.currentQuestion().question, answer };
 		if (this.current + 1 < this.questions.length) {
-			this.current += 1;
-			this.selected = 0;
-			this.input.setValue("");
-			this.editing = this.currentQuestion().options.length === 0;
-			this.refresh();
+			this.goTo(this.current + 1);
 			return;
 		}
 		this.complete({ cancelled: false, answers: [...this.answers] });
@@ -253,10 +289,13 @@ export class QuestionDialog implements Component, Focusable {
 		const submit = keys("tui.input.submit");
 		const confirm = keys("tui.select.confirm");
 		const cancel = keys("tui.select.cancel");
-		const described = this.editing
-			? [hint(submit, "submit"), hint(cancel, withOptions ? "back" : "cancel")]
-			: [hint("↑↓", "navigate"), hint(confirm, "select"), hint(cancel, "cancel")];
-		const terse = this.editing ? [hint(submit), hint(cancel)] : [hint("↑↓"), hint(confirm), hint(cancel)];
+		const back = this.canGoBack() && (!this.editing || !this.input.getValue()) ? hint("←", "prev") : undefined;
+		const described = (this.editing
+			? [hint(submit, "submit"), back, hint(cancel, withOptions ? "choices" : "cancel")]
+			: [hint("↑↓", "navigate"), hint(confirm, "select"), back, hint(cancel, "cancel")]).filter(defined);
+		const terse = (this.editing
+			? [hint(submit), back && hint("←"), hint(cancel)]
+			: [hint("↑↓"), hint(confirm), back && hint("←"), hint(cancel)]).filter(defined);
 		const full = described.join("  ");
 		return visibleWidth(full) + 1 <= width ? full : terse.join("  ");
 	}

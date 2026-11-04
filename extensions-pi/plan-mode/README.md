@@ -9,7 +9,8 @@ ceiling enforces planning access; otherwise read-only planning is guidance.
 - `enter_plan_mode()` enters planning and returns the Markdown file path. Repeated
   entry keeps the same file and checkpoint.
 - `ask_question({ questions })` asks up to four questions, with optional choices
-  and a free-text alternative. Available in any mode.
+  and a free-text alternative. Left arrow returns to the previous question, whose
+  answer is restored for re-answering. Available in any mode.
 - `exit_plan_mode({ plan_path })` renders the completed file as Markdown in the
   transcript and asks for approval. Call entry and exit tools without sibling calls.
 
