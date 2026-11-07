@@ -1,7 +1,9 @@
 {
   "cleanupPeriodDays": 3650,
   "skillListingBudgetFraction": 0.05,
+  "$comment": "CLAUDE_ENV_FILE content: `if [ -S /dev/stdin ]; then exec </dev/null; fi`",
   "env": {
+    "CLAUDE_ENV_FILE": "/home/bate/.claude/stdin-guard.sh",
     "ANTHROPIC_BASE_URL": "",
     "ANTHROPIC_API_KEY": "",
     "ANTHROPIC_AUTH_TOKEN": "",
@@ -25,9 +27,10 @@
     "CLAUDE_CODE_NEW_INIT": "1",
     "CLAUDE_CODE_DISABLE_FEEDBACK_SURVEY": "1",
     "CLAUDE_CODE_DISABLE_ARTIFACT": "1",
+    "CLAUDE_CODE_SYNC_SKILLS": "0",
     "CLAUDE_CODE_SEND_FEEDBACK": "0",
-    "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC": "1",
     "DISABLE_FEEDBACK_COMMAND": "1",
+    "DISABLE_AUTOUPDATE": "1",
     "DISABLE_INSTALL_GITHUB_APP_COMMAND": "1"
   },
   "attribution": {
@@ -53,10 +56,7 @@
     "run": "user-invocable-only",
     "update-config": "user-invocable-only",
     "plugin-authoring": "user-invocable-only",
-    "update-config": "user-invocable-only",
-    "schedule": "user-invocable-only",
     "dataviz": "user-invocable-only",
-    "claude-api": "user-invocable-only",
     "anthropic-skills:morning": "user-invocable-only",
     "anthropic-skills:import-memory": "user-invocable-only",
     "anthropic-skills:computer-use": "user-invocable-only",
@@ -75,25 +75,40 @@
     "baseRef": "head"
   },
   "enableArtifact": false,
+  "statusLine": {
+    "type": "command",
+    "command": "~/.claude/statusline.sh",
+    "refreshInterval": 5
+  },
   "viewMode": "default",
-  "tui": "fullscreen",
+  "feedbackDrafts": "off",
   "effortLevel": "high",
+  "modelSettings": {
+    "claude-opus-5-5": {
+      "effortLevel": "high"
+    }
+  },
   "advisorModel": "opus",
   "awaySummaryEnabled": true,
   "showClearContextOnPlanAccept": true,
-  "autoMemoryEnabled": true,
-  "autoDreamEnabled": true,
+  "askUserQuestionTimeout": "10m",
+  "tui": "fullscreen",
+  "totalTokensReminder": "off",
+  "syncClaudeAiSkills": false,
+  "autoMemoryEnabled": false,
+  "autoDreamEnabled": false,
   "showThinkingSummaries": true,
   "skipDangerousModePermissionPrompt": true,
   "theme": "dark",
+  "editorMode": "normal",
   "preferredNotifChannel": "notifications_disabled",
   "autoScrollEnabled": true,
   "fileCheckpointingEnabled": true,
   "remoteControlAtStartup": true,
+  "crossSessionInbound": "accept",
   "inputNeededNotifEnabled": true,
   "agentPushNotifEnabled": true,
   "voiceEnabled": false,
-  "enableArtifact": false,
-  "feedbackDrafts": "off",
-  "totalTokensReminder": "off"
+  "autoContinueAtUsageLimit": true,
+  "idleCompaction": true
 }
