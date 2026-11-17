@@ -32,6 +32,7 @@ ofox	extension	extensions-pi/ofox	integration	no	-	-	-	pi	Ofox provider with aut
 koozhan	extension	extensions-pi/koozhan	integration	no	-	-	-	pi	Koozhan provider with automatic model discovery
 rewind	extension	extensions-pi/rewind	claudish	no	-	-	-	pi	File checkpoints for code rewind
 pi-subagents	skill	skills-pi/pi-subagents	thinking	no	jobs,sandbox	subagent-cost	-	pi	Subagent orchestration
+herdr-team	skill	skills/herdr-team	thinking	no	-	-	herdr-cli	-	Cost-saving agent teams in Herdr
 fresh-arch	skill	skills/fresh-arch	thinking	no	-	grill-me	-	-	Fresh architecture design
 grill-me	skill	skills/grill-me	thinking	no	-	fresh-arch	-	-	Design interview
 writing-prompt	skill	skills/writing-prompt	writing	no	-	-	-	-	Modern prompt engineering

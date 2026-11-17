@@ -73,6 +73,7 @@ git clone --depth 1 https://github.com/archibate/agent-skills.git && cd agent-sk
 - 被纠正过的错误不再犯📝——`apply-feedback`
 - 让 Codex 也能后台监控唤醒🖥️——`monitor-wakeup`（模仿 Claude Code 的 Monitor）
 - 让 Pi 也并行多智能体🤖——`pi-subagents`（模仿 Claude Code 的 ultracode）
+- Herdr 里组建省钱智能体团队💸——`herdr-team`（贵模型只管派活和验收，便宜模型干重活；配合 herdr 自带的 `herdr --skill`）
 - 面向现代模型的提示词规范✍️——`writing-prompt`
 - Codex App 同款 GUI 自动化👁️——`computer-use`（纯技能，无需 MCP）
 - 汇报别写小作文✂️——`minimalist`（唠叨得受不了时念咒语 `/minimalist`）

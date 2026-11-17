@@ -151,7 +151,7 @@ target_index() {
 
 runtime_known() {
     case "$1" in
-        curl|uv|node-npx|node22|chrome-browser|chrome-debug|context7-key|jina-cli|jina-key|agent-browser-cli|agent-browser-runtime|lark-auth) return 0 ;;
+        curl|uv|node-npx|node22|chrome-browser|chrome-debug|context7-key|jina-cli|jina-key|agent-browser-cli|agent-browser-runtime|lark-auth|herdr-cli) return 0 ;;
         *) return 1 ;;
     esac
 }
@@ -775,6 +775,10 @@ runtime_probe() {
             ;;
         lark-auth)
             RUNTIME_PROBE_MESSAGE="Lark authentication must be completed manually"
+            ;;
+        herdr-cli)
+            command -v herdr >/dev/null 2>&1 && return 0
+            RUNTIME_PROBE_MESSAGE="Herdr is missing (see https://herdr.dev)"
             ;;
     esac
     return 1

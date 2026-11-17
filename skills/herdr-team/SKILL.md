@@ -5,7 +5,7 @@ description: "Orchestrate helper coding agents in Herdr panes so that delegation
 
 # Herdr team
 
-A top-up to Herdr's own skill. Run `herdr --skill` first for the CLI; this file adds what makes delegation pay.
+A top-up to Herdr's own skill. Run `herdr --skill` first for the CLI; this file adds what makes delegation pay. If `references/lessons.md` exists beside this file, read it too: the user's corrections of past mistakes with Herdr teams.
 
 ## When to delegate
 
