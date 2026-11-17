@@ -1,6 +1,6 @@
 ---
 name: herdr-team
-description: "Orchestrate helper coding agents in Herdr panes so that delegation saves cost: the main agent briefs, steers and reviews, and cheaper models do the scans and long edits. Use with Herdr's own skill (`herdr --skill`) before starting, briefing, steering, waiting on or resuming a helper agent. Requires HERDR_ENV=1."
+description: "Orchestrate helper coding agents in Herdr panes so that delegation saves cost: the main agent briefs, steers and reviews, and cheaper models do the scans and long edits. Use with Herdr's own skill (`herdr --skill`) when deciding whether to delegate a task, and before starting, briefing, steering, waiting on or resuming a helper agent. Requires HERDR_ENV=1."
 ---
 
 # Herdr team
@@ -9,8 +9,9 @@ A top-up to Herdr's own skill. Run `herdr --skill` first for the CLI; this file 
 
 ## When to delegate
 
-- Delegate a self-contained task once its direction is set: a scan or reproduction across many files, a long edit, a test harness. Keep decisions, review and the talk with the user in the main agent.
-- Do a task of a few tool calls yourself: a brief and a review cost more.
+- Delegate a self-contained task once its direction is set: a scan or reproduction across many files, a long edit, a test harness, a search across many sources that ends in a short summary. Keep decisions, review and the talk with the user in the main agent.
+- Do a task of a few tool calls yourself: a brief and a review cost more. Judge the size again when a probe fails: a lookup that meets a redirect or an empty page has become a search, so delegate it.
+- Match the helper to the task: pi with DeepSeek for a web search and its summary; Kimi for a task on Kimi itself, such as a summary of its own usage, as its grade fits and it knows its own tools and logs.
 - For a one-shot task with a file result, run the helper without a pane, as a background command (`kimi -p "<prompt>"`). It ends when the task ends, and that end is the notification. Use a pane for long or steered work, or work the user wants to watch.
 
 ## Before the first helper of a kind
@@ -39,7 +40,7 @@ A top-up to Herdr's own skill. Run `herdr --skill` first for the CLI; this file 
 ## Costly resources
 
 - A build costs more than a worktree: build each target once, and check out the other commits in that tree for before-and-after tests.
-- Each turn sends the helper's whole context. The provider caches it for a short time (Kimi: less than an hour), and a cached read costs little. The first turn after the cache expires pays for the whole context: one such turn of 410k tokens took 9% of Kimi Code's 5-hour window. Before a helper with a large context waits on a long job, compact it while the cache is warm (Kimi: `/compact <what to keep>`).
+- Each turn sends the helper's whole context. The provider caches it for a short time (Kimi & Claude: less than an hour), and a cached read costs little. The first turn after the cache expires pays for the whole context: one such turn of 410k tokens took 9% of Kimi Code's 5-hour window. Before a helper with a large context waits on a long job, compact it while the cache is warm (Kimi & Claude: `/compact <what to keep>`).
 - Close the helpers you started when their work is done; keep a pane only while its context is worth more turns.
 
 ## User feedback
@@ -215,6 +216,50 @@ These are real conversation snippets cited from history sessions between user an
     </message>
     <message role="user">
       ok, keep learning herdr orchestration lesson, to save cost without ineffciency.
+    </message>
+  </lesson>
+  <lesson name="delegate-a-lookup-that-grows-into-a-search">
+    <message role="user">
+      so you can still estimate by extrapolate, based on the prior kimi 5h on 199 plan, tokens. and I guess to use kimi official api price, as a metric, is better than an unstable plan credit or quota. it worth to measure how much a 5h/1m window in 199/699 plan worth, you can convert to that language when required, from api price metric.
+    </message>
+    <message role="assistant">
+      <tool_calls>
+        <tool_call name="WebFetch" tool_call_id="1">{"url":"https://platform.moonshot.ai/docs/pricing/chat","prompt":"List the official prices of kimi-k3.1-pro (...)"}</tool_call>
+      </tool_calls>
+    </message>
+    <message role="assistant">
+      <tool_calls>
+        <tool_call name="WebFetch" tool_call_id="2">{"url":"https://platform.kimi.ai/docs/pricing/chat","prompt":"List the official prices of kimi-k3.1-pro (...)"}</tool_call>
+      </tool_calls>
+    </message>
+    <message role="assistant">
+      <tool_calls>
+        <tool_call name="Bash" tool_call_id="3">{"command":"curl -sL https://platform.kimi.ai/docs/pricing/chat.md | rg -n -i -B2 -A14 'k3.1' | head -60","description":"Read the raw Kimi API price page for K3.1 Pro"}</tool_call>
+      </tool_calls>
+    </message>
+    <message role="assistant">
+      <tool_calls>
+        <tool_call name="Bash" tool_call_id="4">{"command":"jina search \"kimi-k3.1-pro API pricing per million tokens cache hit cache miss output\" 2>&1 | head -60","description":"Search the web for the Kimi K3.1 Pro API price"}</tool_call>
+      </tool_calls>
+    </message>
+    <message role="assistant">
+      <tool_calls>
+        <tool_call name="Bash" tool_call_id="5">{"command":"for u in https://www.yottalabs.ai/post/kimi-k3-1-pro-pricing-api-cost https://benchlm.ai/moonshot/api-pricing; do (...) done","description":"Read the cache-write price from two price pages"}</tool_call>
+      </tool_calls>
+    </message>
+    <message role="assistant">
+      <tool_calls>
+        <tool_call name="Bash" tool_call_id="6">{"command":"rg -h -o '\"usageScope\":\"[a-z]+\"' ~/.kimi-code/sessions/*/*/agents/*/wire.jsonl | sort | uniq -c; (...)","description":"Find every Kimi usage log on the machine"}</tool_call>
+      </tool_calls>
+    </message>
+    <message role="assistant">
+      (...)
+      **The rates for K3.1 Pro**, per 1M tokens: (...) Moonshot's own price table does not load outside a browser, so these rates come from two price sites that quote it.
+      (...)
+      **How much the 199 plan is worth.** I compared today's meter log from 12:13 to 14:42 (9 exam runs and the helpers, 346 requests) with the tokens in the session logs.
+    </message>
+    <message role="user">
+      fyi, next time, for searching pricing, find usage and summarize, such vast fan but small retrivial task, you can delegate kimi or pi too. at the first 301, you should realize it was not a small task, fits into pi deepseek nicely, and kimi usage summary might be not only a suitable intellegence grade but also self-introvise for kimi.
     </message>
   </lesson>
 </lessons>
