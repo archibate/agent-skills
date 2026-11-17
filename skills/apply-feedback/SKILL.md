@@ -28,6 +28,7 @@ Global: update every one of these that exists, so the lesson reaches all agents:
 - `~/.config/opencode/AGENTS.md`
 - `${KIMI_CODE_HOME:-~/.kimi-code}/AGENTS.md`
 - `${PI_CODING_AGENT_DIR:-~/.pi/agent}/AGENTS.md`
+- You are on a niche harness? the rule file of it
 
 Project: update `<project>/AGENTS.md` and `<project>/CLAUDE.md` where they exist; if one is a symlink to or imports the other, write once.
 
