@@ -39,6 +39,7 @@ A top-up to Herdr's own skill. Run `herdr --skill` first for the CLI; this file 
 ## Costly resources
 
 - A build costs more than a worktree: build each target once, and check out the other commits in that tree for before-and-after tests.
+- Each turn sends the helper's whole context. The provider caches it for a short time (Kimi: less than an hour), and a cached read costs little. The first turn after the cache expires pays for the whole context: one such turn of 410k tokens took 9% of Kimi Code's 5-hour window. Before a helper with a large context waits on a long job, compact it while the cache is warm (Kimi: `/compact <what to keep>`).
 - Close the helpers you started when their work is done; keep a pane only while its context is worth more turns.
 
 ## User feedback
