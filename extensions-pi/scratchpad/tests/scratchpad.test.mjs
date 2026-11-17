@@ -47,8 +47,8 @@ function harness(sessionId = "session-a") {
 		registerCommand(name, command) { commands.set(name, command); },
 	});
 	return {
-		ctx, commands, notices,
-		emit(name, event = {}) { return handlers.get(name)(event, ctx); },
+		ctx, commands, handlers, notices,
+		emit(name, event = {}) { return handlers.get(name)?.(event, ctx); },
 		setSession(id) { sessionId = id; },
 	};
 }
@@ -168,12 +168,14 @@ test("cache-home symlink resolves to a trusted directory", (t) => {
 });
 
 for (const id of ["../escape", ".", "..", "a/b", "", "-lead", "trail-", ".lead", "trail."]) {
-	test(`rejects session id outside Pi's grammar ${JSON.stringify(id)}`, (t) => {
+	test(`skips session id outside Pi's grammar ${JSON.stringify(id)}`, (t) => {
 		fixture(t);
 		const h = harness(id);
-		assert.throws(() => h.emit("session_start"), /Invalid scratchpad session ID/);
+		h.emit("session_start");
 		assert.equal(process.env.PI_SCRATCHPAD_DIR, undefined);
 		assert.equal(existsSync(process.env.XDG_CACHE_HOME), false);
+		assert.match(h.notices[0][0], /Invalid scratchpad session ID/);
+		assert.equal(h.notices[0][1], "warning");
 	});
 }
 
@@ -189,7 +191,7 @@ for (const id of ["a", "session-a", "01a0fffc-fed5-7136-b8c2-0c256308a5b9.review
 }
 
 for (const component of ["pi", "scratchpad", "session-a"]) {
-	test(`rejects symlink at ${component} without creating target children`, (t) => {
+	test(`skips symlink at ${component} without creating target children`, (t) => {
 		const base = fixture(t);
 		const target = join(base, "target");
 		mkdirSync(target, { mode: 0o700 });
@@ -198,52 +200,54 @@ for (const component of ["pi", "scratchpad", "session-a"]) {
 		mkdirSync(dirname(path), { recursive: true, mode: 0o700 });
 		symlinkSync(target, path);
 		const h = harness();
-		assert.throws(() => h.emit("session_start"), /not a file or symlink/);
+		h.emit("session_start");
 		assert.equal(process.env.PI_SCRATCHPAD_DIR, undefined);
 		assert.equal(existsSync(join(target, "scratchpad")), false);
 		assert.equal(existsSync(join(target, "session-a")), false);
+		assert.match(h.notices[0][0], /not a file or symlink/);
+		assert.equal(h.notices[0][1], "warning");
 	});
 }
 
 for (const mode of [0o755, 0o777, 0o500]) {
-	test(`rejects insecure or unwritable session permissions ${mode.toString(8)}`, (t) => {
+	test(`skips insecure or unwritable session permissions ${mode.toString(8)}`, (t) => {
 		fixture(t);
 		const path = join(process.env.XDG_CACHE_HOME, "pi", "scratchpad", "session-a");
 		mkdirSync(path, { recursive: true, mode: 0o700 });
 		chmodSync(path, mode);
 		const h = harness();
-		assert.throws(() => h.emit("session_start"), /permissions|EACCES/);
+		h.emit("session_start");
 		assert.equal(process.env.PI_SCRATCHPAD_DIR, undefined);
+		assert.match(h.notices[0][0], /permissions|EACCES/);
+		assert.equal(h.notices[0][1], "warning");
 	});
 }
 
-test("initialization failure blocks shell tools, reports recovery and leaves file tools usable", async (t) => {
+test("initialization failure skips scratchpad gracefully without blocking tools", async (t) => {
 	fixture(t);
 	mkdirSync(process.env.XDG_CACHE_HOME, { mode: 0o700 });
 	writeFileSync(join(process.env.XDG_CACHE_HOME, "pi"), "not a directory");
 	process.env.PI_SCRATCHPAD_DIR = "/original-scratch";
 	const h = harness();
-	assert.throws(() => h.emit("session_start"), /Scratchpad initialization failed/);
+	h.emit("session_start");
 	assert.equal(process.env.PI_SCRATCHPAD_DIR, "/original-scratch");
-	for (const toolName of ["bash", "powershell", "monitor"]) {
-		assert.equal(h.emit("tool_call", { toolName }).block, true);
-		assert.match(h.emit("tool_call", { toolName }).reason, /\/reload/);
-	}
-	assert.equal(h.emit("tool_call", { toolName: "read" }), undefined);
-	assert.throws(() => h.emit("user_bash"), /Scratchpad initialization failed/);
-	const event = { systemPromptOptions: { promptGuidelines: [] } };
+	assert.equal(h.handlers.has("tool_call"), false);
+	assert.equal(h.handlers.has("user_bash"), false);
+	assert.equal(h.notices[0][1], "warning");
+	const event = { systemPromptOptions: { promptGuidelines: ["Existing rule"] } };
 	h.emit("before_agent_start", event);
-	assert.match(event.systemPromptOptions.promptGuidelines[0], /unavailable/);
+	assert.deepEqual(event.systemPromptOptions.promptGuidelines, ["Existing rule"]);
 	await h.commands.get("scratchpad").handler("", h.ctx);
-	assert.equal(h.notices[0][1], "error");
+	assert.match(h.notices[1][0], /Scratchpad disabled:/);
+	assert.equal(h.notices[1][1], "warning");
 });
 
 test("successful setup passes user bash through and /scratchpad shows PI_SCRATCHPAD_DIR", async (t) => {
 	fixture(t);
 	const h = harness();
 	h.emit("session_start");
-	assert.equal(h.emit("user_bash"), undefined);
-	assert.equal(h.emit("tool_call", { toolName: "bash" }), undefined);
+	assert.equal(h.handlers.has("user_bash"), false);
+	assert.equal(h.handlers.has("tool_call"), false);
 	await h.commands.get("scratchpad").handler("", h.ctx);
 	assert.deepEqual(h.notices, [[`PI_SCRATCHPAD_DIR=${process.env.PI_SCRATCHPAD_DIR}`, "info"]]);
 	h.emit("session_shutdown");

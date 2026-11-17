@@ -1,0 +1,2 @@
+default_model = "kimi-code/k3.1-pro"
+default_permission_mode = "yolo"

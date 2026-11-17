@@ -79,29 +79,16 @@ export default function scratchpadExtension(pi: ExtensionAPI): void {
 			process.env.PI_SCRATCHPAD_DIR = path;
 			failure = undefined;
 		} catch (error) {
-			failure = `Scratchpad initialization failed: ${error instanceof Error ? error.message : String(error)}. Fix the directory/configuration and run /reload.`;
-			throw new Error(failure, { cause: error });
+			failure = `Scratchpad disabled: ${error instanceof Error ? error.message : String(error)}`;
+			if (ctx.hasUI) ctx.ui.notify(failure, "warning");
 		}
 	});
 
 	pi.on("before_agent_start", (event) => {
-		const guideline = failure
-			? "The session scratchpad is unavailable. Fix the reported initialization error and run /reload before running analytical commands."
-			: `Session scratchpad: ${JSON.stringify(active!.path)}. ${GUIDELINE}`;
+		if (failure || !active) return;
+		const guideline = `Session scratchpad: ${JSON.stringify(active.path)}. ${GUIDELINE}`;
 		const guidelines = event.systemPromptOptions.promptGuidelines;
 		if (!guidelines.includes(guideline)) guidelines.push(guideline);
-	});
-
-	// Pi reports session_start errors but continues. Don't silently execute shells without a scratchpad.
-	pi.on("tool_call", (event) => {
-		if (failure && ["bash", "powershell", "monitor"].includes(event.toolName)) {
-			return { block: true, reason: failure };
-		}
-	});
-
-	pi.on("user_bash", () => {
-		if (failure) throw new Error(failure);
-		// Successful setup passes through to other extensions and Pi's default executor.
 	});
 
 	pi.on("session_shutdown", () => {
@@ -113,7 +100,7 @@ export default function scratchpadExtension(pi: ExtensionAPI): void {
 		description: "Show the session scratchpad (PI_SCRATCHPAD_DIR)",
 		handler: async (_args, ctx) => {
 			const text = failure ?? `PI_SCRATCHPAD_DIR=${active!.path}`;
-			if (ctx.hasUI) ctx.ui.notify(text, failure ? "error" : "info");
+			if (ctx.hasUI) ctx.ui.notify(text, failure ? "warning" : "info");
 			else console.log(text);
 		},
 	});

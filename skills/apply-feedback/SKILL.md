@@ -1,6 +1,7 @@
 ---
 name: apply-feedback
 description: Apply a user feedback to future sessions, changing agent default behavior. Use this skill when user wants to permanently apply a feedback, save a preference, remember a lesson, or asked "next time", "remember this", "always do", "in future sessions", "never again". Offer this skill after agent mistake was corrected by user.
+context: fork
 ---
 
 # Apply user feedback
@@ -25,6 +26,7 @@ Global: update every one of these that exists, so the lesson reaches all agents:
 - `~/.claude/CLAUDE.md`
 - `~/.codex/AGENTS.md`
 - `~/.config/opencode/AGENTS.md`
+- `${KIMI_CODE_HOME:-~/.kimi-code}/AGENTS.md`
 - `${PI_CODING_AGENT_DIR:-~/.pi/agent}/AGENTS.md`
 
 Project: update `<project>/AGENTS.md` and `<project>/CLAUDE.md` where they exist; if one is a symlink to or imports the other, write once.
@@ -52,12 +54,6 @@ These are real conversation snippets cited from history sessions between user an
         <tool_call name="bash" tool_call_id="1">{"command":"pip install requests"}</tool_call>
       </tool_calls>
     </message>
-    <message role="tool" tool_call_id="1">
-      Successfully installed requests-2.32.3
-    </message>
-    <message role="assistant">
-      Installed `requests`.
-    </message>
     <message role="user">
       Never use pip in my projects, always `uv add`.
     </message>
@@ -68,12 +64,12 @@ These are real conversation snippets cited from history sessions between user an
 </lessons>
 ```
 
-Transcribe the real conversation from your context into this schema, keeping message text verbatim. Redact secrets, tokens, personal data, and exact UUIDs.
+Transcribe the real conversation from your context into this schema. Redact secrets, tokens, personal data, and exact UUIDs.
 
 Do not fabricate conversations. Do not add narrative. Do not explain.
 
 Range from the first involved user message before assistant mistake, to the user feedback message. Deliberately drop the assistant response to user feedback (low-information self-reflection or apology).
 
-Only trim lesson if longer than 50 lines by cutting off early context or omitting unimportant tool results.
+Keep only what a reader needs to recognize the mistaken trajectory and to understand the feedback. Cut other turns, tool results, and sentences; mark a cut inside a message with `(...)`. Copy the kept text verbatim, so the scenario stays concrete.
 
 If an existing lesson covers the same pattern, replace it with the new one instead of appending a duplicate.
