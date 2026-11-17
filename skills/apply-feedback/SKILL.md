@@ -14,11 +14,10 @@ Given the user feedback, resolve two questions (infer from context or ask user):
   - Apply permanently (affects future sessions) → use this skill
   - Ephemeral in-session constraint (forget on exit) → skip this skill
 - **Which workspace**:
-  - Feedback applies globally (affects all other projects) → global rule files
-  - Only matters in current project (session in current workspace) → project rule files
-- **Which trigger**:
-  - Matters only when one tool or harness is in use (Herdr, a CLI, an SDK) → that tool's skill, so the lesson loads only with the tool (progressive disclosure), not in the rule files that every session loads
-  - Otherwise → the workspace's rule files
+  - Matters only when one tool or harness is in use (a CLI, an SDK) → that tool's skill page or reference page, so the lesson loads only with the tool (progressive disclosure), not in the rule files that every session loads
+  - Otherwise:
+    - Feedback applies globally (affects all other projects) → global rule files
+    - Only matters in current project (session in current workspace) → project rule files
 
 In Claude Code, this skill replaces the built-in memory for feedback; do not also save a feedback memory.
 
@@ -35,7 +34,12 @@ Global: update every one of these that exists, so the lesson reaches all agents:
 
 Project: update `<project>/AGENTS.md` and `<project>/CLAUDE.md` where they exist; if one is a symlink to or imports the other, write once.
 
-Tool: write the lessons to `references/lessons.md` in the skill for that tool, and make sure its `SKILL.md` tells the agent to read that file. With no skill for the tool, create an optional one under `~/.agents/skills/<name>/`: a description that triggers when the tool is used, the tool's own know-how in `SKILL.md`, the pointer to `references/lessons.md`, and a row in `~/.agents/installer/catalog.tsv` and the skill list of `~/.agents/README.md`. `~/.agents` is a public repo and ignores `skills/*/references/lessons.md`: keep the lessons there, and keep conversation text out of `SKILL.md`.
+Tool: put the lesson in the narrowest page of the tool's skill whose load condition matches the lesson's trigger, so that it loads only when it can apply:
+
+- It can apply whenever the skill is in use, or the skill is one page → the skill's `SKILL.md`.
+- It applies only under the condition on which `SKILL.md` sends the agent to `references/<page>.md` → that page.
+
+With no skill for the tool, create an optional one under `~/.agents/skills/<name>/`, with a description that triggers when the tool is used and the tool's own know-how beside the lessons.
 
 These files may contain an installer-managed block between `<!-- archibate/agent-skills:begin -->` and `<!-- archibate/agent-skills:end -->`; reinstall overwrites it. Place the section after the end marker. Do not edit `~/.agents/AGENTS.md`: it is the installer source, committed to a public repo.
 
